@@ -1,0 +1,2 @@
+Django>=6.0,<7
+PyMySQL>=1.1

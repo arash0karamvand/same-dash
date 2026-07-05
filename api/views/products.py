@@ -1,0 +1,178 @@
+"""API کاتالوگ محصولات — دسته‌بندی، محصول و رنگ‌بندی."""
+
+from decimal import Decimal, InvalidOperation
+
+from django.db.models import Q
+
+from api.helpers import api_view, fail, parse_json, success
+from auth.permissions import MANAGE_PRODUCTS, VIEW_PRODUCTS, has_permission
+from backend.models import Product, ProductCategory
+from logic.audit import log_action
+from logic.products import (
+    category_to_dict,
+    create_category,
+    create_product,
+    filter_products,
+    product_to_dict,
+    update_category,
+    update_product,
+)
+
+
+def _can_view(user):
+    return has_permission(user, VIEW_PRODUCTS)
+
+
+def _can_manage(user):
+    return has_permission(user, MANAGE_PRODUCTS)
+
+
+@api_view("GET", "POST")
+def category_list(request):
+    if not _can_view(request.user):
+        return fail("Permission denied", status=403)
+
+    if request.method == "GET":
+        qs = ProductCategory.objects.filter(is_deleted=False).order_by("sort_order", "name")
+        active = request.GET.get("active")
+        if active == "1":
+            qs = qs.filter(is_active=True)
+        return success({"results": [category_to_dict(c) for c in qs]})
+
+    if not _can_manage(request.user):
+        return fail("Permission denied", status=403)
+
+    try:
+        category = create_category(parse_json(request))
+    except ValueError as exc:
+        return fail(str(exc), status=400)
+
+    log_action(request.user, "create", f"دسته محصول: {category.name}", entity_type="ProductCategory", entity_id=category.id)
+    return success(category_to_dict(category), status=201)
+
+
+@api_view("GET", "PUT", "DELETE")
+def category_detail(request, pk):
+    try:
+        category = ProductCategory.objects.get(pk=pk, is_deleted=False)
+    except ProductCategory.DoesNotExist:
+        return fail("Category not found", status=404)
+
+    if not _can_view(request.user):
+        return fail("Permission denied", status=403)
+
+    if request.method == "GET":
+        return success(category_to_dict(category))
+
+    if not _can_manage(request.user):
+        return fail("Permission denied", status=403)
+
+    if request.method == "DELETE":
+        if category.products.filter(is_deleted=False).exists():
+            return fail("این دسته محصول دارد و قابل حذف نیست. ابتدا محصولات را جابجا یا حذف کنید.", status=400)
+        category.soft_delete()
+        log_action(request.user, "delete", f"حذف دسته: {category.name}", entity_type="ProductCategory", entity_id=category.id)
+        return success({"deleted": True})
+
+    try:
+        category = update_category(category, parse_json(request))
+    except ValueError as exc:
+        return fail(str(exc), status=400)
+
+    log_action(request.user, "update", f"ویرایش دسته: {category.name}", entity_type="ProductCategory", entity_id=category.id)
+    return success(category_to_dict(category))
+
+
+@api_view("GET", "POST")
+def product_list(request):
+    can_view = _can_view(request.user)
+    if not can_view:
+        return fail("Permission denied", status=403)
+
+    if request.method == "GET":
+        search = (request.GET.get("search") or "").strip()
+        category_id = request.GET.get("category_id")
+        active_only = request.GET.get("include_inactive") != "1" or not _can_manage(request.user)
+        if request.GET.get("include_inactive") == "1" and _can_manage(request.user):
+            qs = Product.objects.filter(is_deleted=False).select_related("category").prefetch_related("variants")
+            if search:
+                q = Q(name__icontains=search) | Q(sku__icontains=search) | Q(brand__icontains=search)
+                qs = qs.filter(q).distinct()
+            if category_id:
+                qs = qs.filter(category_id=category_id)
+        else:
+            qs = filter_products(Product.objects.all(), search=search, category_id=category_id, active_only=True)
+        limit = min(int(request.GET.get("limit") or 50), 200)
+        return success({"results": [product_to_dict(p) for p in qs[:limit]]})
+
+    if not _can_manage(request.user):
+        return fail("Permission denied", status=403)
+
+    try:
+        product = create_product(parse_json(request))
+    except ValueError as exc:
+        return fail(str(exc), status=400)
+
+    log_action(request.user, "create", f"محصول: {product.name}", entity_type="Product", entity_id=product.id)
+    return success(product_to_dict(product), status=201)
+
+
+@api_view("GET", "PUT", "DELETE")
+def product_detail(request, pk):
+    try:
+        product = Product.objects.select_related("category").prefetch_related("variants").get(pk=pk, is_deleted=False)
+    except Product.DoesNotExist:
+        return fail("Product not found", status=404)
+
+    if not _can_view(request.user):
+        return fail("Permission denied", status=403)
+
+    if request.method == "GET":
+        return success(product_to_dict(product))
+
+    if not _can_manage(request.user):
+        return fail("Permission denied", status=403)
+
+    if request.method == "DELETE":
+        product.soft_delete()
+        log_action(request.user, "delete", f"حذف محصول: {product.name}", entity_type="Product", entity_id=product.id)
+        return success({"deleted": True})
+
+    try:
+        product = update_product(product, parse_json(request))
+    except ValueError as exc:
+        return fail(str(exc), status=400)
+
+    log_action(request.user, "update", f"ویرایش محصول: {product.name}", entity_type="Product", entity_id=product.id)
+    return success(product_to_dict(product))
+
+
+# سازگاری با endpoint قبلی — POST سریع از فروش
+@api_view("POST")
+def product_quick_create(request):
+    if not has_permission(request.user, MANAGE_PRODUCTS) and not has_permission(request.user, VIEW_PRODUCTS):
+        return fail("Permission denied", status=403)
+
+    data = parse_json(request)
+    name = (data.get("name") or "").strip()
+    if not name:
+        return fail("name is required", status=400)
+    try:
+        price = Decimal(str(data.get("default_price") or 0))
+    except (InvalidOperation, TypeError):
+        return fail("Invalid price", status=400)
+
+    product, created = Product.objects.get_or_create(
+        name=name,
+        defaults={"default_price": price, "is_active": True},
+    )
+    if not created and price:
+        product.default_price = price
+        product.is_active = True
+        product.save()
+    if not product.variants.exists() and price:
+        from backend.models import ProductVariant
+
+        ProductVariant.objects.create(product=product, color_name="پیش‌فرض", color_hex="#94a3b8", price=price)
+    log_action(request.user, "create", f"محصول: {name}", entity_type="Product", entity_id=product.id)
+    return success(product_to_dict(product), status=201 if created else 200)

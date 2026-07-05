@@ -1,0 +1,19 @@
+# Python / Django
+__pycache__/
+*.py[cod]
+db.sqlite3
+db.sqlite3-journal
+.env
+staticfiles/
+
+# خروجی‌های بکاپ (نباید در ریپازیتوری باشند)
+backup/exports/
+
+# فرانت‌اند
+ui/node_modules/
+ui/dist/
+
+# ابزارها و IDE
+.vscode/
+.idea/
+*.log
