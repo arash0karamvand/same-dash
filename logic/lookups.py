@@ -1,0 +1,69 @@
+"""گزینه‌های سیستم — از MySQL."""
+
+from django.core.cache import cache
+
+from backend.models import LookupOption
+
+CACHE_KEY = "lookup_options_v1"
+CACHE_TTL = 60
+
+
+def _invalidate_cache():
+    cache.delete(CACHE_KEY)
+
+
+def get_all_lookups(force_refresh=False):
+    if not force_refresh:
+        cached = cache.get(CACHE_KEY)
+        if cached is not None:
+            return cached
+
+    grouped = {}
+    for opt in LookupOption.objects.filter(is_active=True).order_by("category", "sort_order", "label"):
+        grouped.setdefault(opt.category, []).append(lookup_to_dict(opt))
+
+    cache.set(CACHE_KEY, grouped, CACHE_TTL)
+    return grouped
+
+
+def get_lookup_choices(category):
+    return get_all_lookups().get(category, [])
+
+
+def lookup_label(category, code):
+    for item in get_lookup_choices(category):
+        if item["code"] == code:
+            return item["label"]
+    return code or "—"
+
+
+def valid_codes(category):
+    return {item["code"] for item in get_lookup_choices(category)}
+
+
+def normalize_code(category, code, default=None):
+    code = (code or "").strip()
+    valid = valid_codes(category)
+    if code in valid:
+        return code
+    if default and default in valid:
+        return default
+    if valid:
+        return sorted(valid)[0]
+    return code
+
+
+def lookup_to_dict(opt):
+    return {
+        "id": opt.id,
+        "category": opt.category,
+        "code": opt.code,
+        "label": opt.label,
+        "sort_order": opt.sort_order,
+        "is_active": opt.is_active,
+        "meta": opt.meta or {},
+    }
+
+
+def invalidate_lookup_cache():
+    _invalidate_cache()

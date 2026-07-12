@@ -7,6 +7,8 @@ import { useEffect, useState } from 'react'
 import { salesApi } from '../api/client'
 
 import { useAuth } from '../context/AuthContext'
+import { useConfig } from '../context/ConfigContext'
+import { useConfirm } from '../context/ConfirmContext'
 
 import CustomerSearch from '../components/CustomerSearch'
 import InstallmentLines, { EMPTY_INSTALLMENT } from '../components/InstallmentLines'
@@ -18,8 +20,9 @@ import SaleDiscountFields, { saleBalanceDue } from '../components/SaleDiscountFi
 import Select from '../components/Select'
 import { Badge, Button, Card, EmptyState, Field, FilterBar, Modal } from '../components/ui'
 import PersonalSalesPanel from '../components/PersonalSalesPanel'
+import PersianMonthPicker from '../components/PersianMonthPicker'
 import { formatDate, formatMoney } from '../utils/format'
-import { hasAnyPermission, hasPermission, isSystemAdmin } from '../utils/permissions'
+import { hasAnyPermission, hasPermission, isBranchSupervisor, isExecutiveUser, isSystemAdmin, canApproveSaleBranch } from '../utils/permissions'
 
 import { currentJalali, formatJalali, jalaliToIso, PERSIAN_MONTHS, todayIso, toPersianDigits } from '../utils/jalali'
 
@@ -30,10 +33,6 @@ const PAYMENT_METHODS = [
   { value: 'cash', label: 'نقدی' },
 
   { value: 'card', label: 'کارت‌خوان' },
-
-  { value: 'online', label: 'آنلاین' },
-
-  { value: 'credit', label: 'اعتباری' },
 
   { value: 'check', label: 'چک' },
 
@@ -55,11 +54,25 @@ const PAYMENT_STATUSES = [
 
 const STATUS_COLORS = { paid: '#10b981', unpaid: '#ef4444', installment: '#f59e0b', partial: '#f59e0b' }
 
+const ORDER_KINDS = [
+  { value: 'normal', label: 'فروش عادی' },
+  { value: 'pre_invoice', label: 'پیش‌فاکتور (بیعانه + تایید/لغو)' },
+  { value: 'deposit', label: 'بیعانیه (پرداخت روز قبل تحویل)' },
+]
+
+const ORDER_STATUS_COLORS = {
+  pending: '#f59e0b',
+  confirmed: '#10b981',
+  cancelled: '#94a3b8',
+}
+
 
 
 const EMPTY_FORM = {
 
   customer_id: '',
+
+  branch: '',
 
   amount: '',
 
@@ -74,13 +87,15 @@ const EMPTY_FORM = {
 
   payment_status: 'paid',
 
+  order_kind: 'normal',
+
+  delivery_date: '',
+
   invoice_number: '',
 
   installments: [],
 
   line_items: [],
-
-  new_customer_phone: '',
 
 }
 
@@ -97,27 +112,161 @@ const EMPTY_EDIT = {
 }
 
 function showInstallmentSection(form) {
+  if (form.order_kind !== 'normal') return false
   return form.payment_status === 'installment' || form.payment_method === 'check'
 }
 
+function isPreInvoice(form) {
+  return form.order_kind === 'pre_invoice'
+}
+
+function isDeposit(form) {
+  return form.order_kind === 'deposit'
+}
+
+function ShopDailyBreakdownSection({ data, loading, breakdownMonth, onMonthChange }) {
+  const monthLabel = `${PERSIAN_MONTHS[breakdownMonth.month - 1]} ${toPersianDigits(breakdownMonth.year)}`
+  return (
+    <div className="shop-daily-breakdown">
+      <div className="shop-daily-breakdown-head">
+        <h3 className="shop-daily-breakdown-title">خلاصه فروش روزانه</h3>
+        <Field label="ماه">
+          <PersianMonthPicker
+            year={breakdownMonth.year}
+            month={breakdownMonth.month}
+            onChange={onMonthChange}
+          />
+        </Field>
+      </div>
+      {loading && !data ? (
+        <div className="loading">در حال بارگذاری…</div>
+      ) : (
+        <>
+          {data && (
+            <p className="muted shop-daily-breakdown-total">
+              جمع {monthLabel}: <strong>{formatMoney(data.total_final || 0)}</strong>
+              {' — '}{toPersianDigits(data.count || 0)} سفارش
+            </p>
+          )}
+          {!data?.days?.length ? (
+            <EmptyState text="در این ماه فروشی ثبت نشده." />
+          ) : (
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>تاریخ</th>
+                    <th>تعداد</th>
+                    <th>مبلغ فروش</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.days.map((d) => (
+                    <tr key={`${d.jalali_year}-${d.jalali_month}-${d.jalali_day}`}>
+                      <td>{formatJalali(jalaliToIso(d.jalali_year, d.jalali_month, d.jalali_day))}</td>
+                      <td>{toPersianDigits(d.count)}</td>
+                      <td>{formatMoney(d.total_final)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
 
 
-export default function Sales() {
+export default function Sales({ portal = 'sales' }) {
+  const isShop = portal === 'shop'
 
   const { user } = useAuth()
+  const confirm = useConfirm()
+  const { choices, branchOptions } = useConfig()
+  const paymentMethods = choices('payment_method').length ? choices('payment_method') : PAYMENT_METHODS
+  const paymentStatuses = choices('payment_status').length ? choices('payment_status') : PAYMENT_STATUSES
+  const orderKinds = choices('order_kind').length ? choices('order_kind') : ORDER_KINDS
+  const orderStatusColors = Object.fromEntries(
+    (choices('order_status').length ? choices('order_status') : []).map((o) => [o.value, o.meta?.color || '#6366f1'])
+  )
+  const statusColors = Object.fromEntries(
+    paymentStatuses.map((o) => [o.value, o.meta?.color || STATUS_COLORS[o.value] || '#6366f1'])
+  )
+  const resolvedOrderStatusColors = Object.keys(orderStatusColors).length ? orderStatusColors : ORDER_STATUS_COLORS
 
   const canEdit = hasAnyPermission(user, ['edit_sale', 'create_sale', 'delete_sale'])
   const viewAllSales = hasPermission(user, 'view_sales')
   const viewOwnSales = hasPermission(user, 'view_own_sales')
-  const [personalCollapsed, setPersonalCollapsed] = useState(true)
+  const viewSalesSummary = hasPermission(user, 'view_sales_summary')
+  const summaryOnly = viewSalesSummary && !viewAllSales && !viewOwnSales
+  const canViewList = !summaryOnly
+  const canCreateSale = hasPermission(user, 'create_sale')
+  const pickBranchOnSale = isExecutiveUser(user) && canCreateSale
+  const canApproveBranch = canApproveSaleBranch(user)
+  const canApproveAccounting = hasPermission(user, 'approve_sale_accounting')
+  const branchQueueOnly = canApproveBranch && !viewAllSales
+  const branchQueueView = branchQueueOnly || (isShop && canApproveBranch && isExecutiveUser(user))
+  const shopBranchSupervisor = isShop && (branchQueueOnly || isBranchSupervisor(user))
+  const accountingQueueOnly = canApproveAccounting && !viewAllSales && !viewOwnSales
+  const workflowColors = Object.fromEntries(
+    (choices('workflow_stage').length ? choices('workflow_stage') : []).map((o) => [o.value, o.meta?.color || '#6366f1'])
+  )
+  const [personalCollapsed, setPersonalCollapsed] = useState(summaryOnly ? false : true)
+
+  const salesPageTitle = () => {
+    if (isShop && summaryOnly) return 'فروشگاه — ثبت سفارش'
+    if (isShop && branchQueueView && canCreateSale) return 'فروشگاه — ارسال به اداری'
+    if (isShop && branchQueueView) return 'فروشگاه — صف ارسال به اداری'
+    if (summaryOnly) return 'ثبت سفارش'
+    if (accountingQueueOnly) return 'سفارش‌های منتظر تایید حسابداری'
+    if (branchQueueOnly && canCreateSale) return 'فروش و تایید شعبه'
+    if (branchQueueOnly) return 'سفارش‌های منتظر تایید شعبه'
+    if (viewOwnSales && !viewAllSales) return 'فروش‌های من'
+    return 'فروش‌ها'
+  }
+
+  const hideWorkflowStage = isShop && branchQueueView
+
+  const canEditSale = (sale) => {
+    if (!sale) return canEdit
+    // سرپرست شعبه: فقط قبل از تایید خودش
+    if (canApproveBranch && !viewAllSales) {
+      return sale.workflow_stage === 'pending_branch'
+    }
+    // حسابداری: فقط قبل از تایید خودش — بعد از تایید شعبه دیگر دسترسی ندارد
+    if (canApproveAccounting && !viewAllSales) {
+      return sale.workflow_stage === 'branch_approved'
+    }
+    if (canApproveBranch && sale.workflow_stage === 'pending_branch') return true
+    if (canApproveAccounting && sale.workflow_stage === 'branch_approved') return true
+    return canEdit && viewAllSales
+  }
+
+  const canActOnSale = (sale) =>
+    canEditSale(sale)
+    || (canApproveBranch && sale.workflow_stage === 'pending_branch')
+    || (canApproveAccounting && sale.workflow_stage === 'branch_approved')
+
+  const showActionsColumn = canEdit || canApproveBranch || canApproveAccounting
 
   const [sales, setSales] = useState([])
 
   const [summary, setSummary] = useState(null)
 
+  const [monthly, setMonthly] = useState(null)
+
+  const [yearly, setYearly] = useState(null)
+
   const [daily, setDaily] = useState(null)
 
-  const [monthly, setMonthly] = useState(null)
+  const [dailyBreakdown, setDailyBreakdown] = useState(null)
+  const [breakdownMonth, setBreakdownMonth] = useState(() => {
+    const j = currentJalali()
+    return { year: j.year, month: j.month }
+  })
+  const [breakdownLoading, setBreakdownLoading] = useState(false)
 
   const [customers, setCustomers] = useState([])
   const [selectedCustomer, setSelectedCustomer] = useState(null)
@@ -142,8 +291,9 @@ export default function Sales() {
   const [filters, setFilters] = useState({ payment_status: '', payment_method: '', date_from: '', date_to: '', search: '' })
 
   useEffect(() => {
-    setPersonalCollapsed(isSystemAdmin(user))
-  }, [user?.id, user?.role])
+    if (summaryOnly) setPersonalCollapsed(false)
+    else setPersonalCollapsed(isSystemAdmin(user))
+  }, [user?.id, user?.role, summaryOnly])
 
   const buildParams = (source = filters) => {
 
@@ -158,56 +308,118 @@ export default function Sales() {
 
 
   const load = async (nextFilters = filters) => {
-
     setLoading(true)
-
     try {
+      const jNow = currentJalali()
+      if (summaryOnly) {
+        const bm = breakdownMonth
+        const tasks = [salesApi.monthlyReport(jNow.year, jNow.month)]
+        if (isShop) tasks.push(salesApi.dailyBreakdown(bm.year, bm.month))
+        const results = await Promise.all(tasks)
+        const monthlyData = results[0]
+        const breakdownData = isShop ? results[1] : null
+        setSales([])
+        setSummary({ total_final: monthlyData.total_final, count: monthlyData.count })
+        setMonthly(monthlyData)
+        setDaily(null)
+        setDailyBreakdown(breakdownData)
+        setCustomers([])
+        setError('')
+        return
+      }
+      if (!canViewList) {
+        setSales([])
+        setSummary(null)
+        setError('')
+        return
+      }
 
       const params = buildParams(nextFilters)
-
-      const jNow = currentJalali()
+      if (branchQueueView) {
+        const q = new URLSearchParams(params)
+        q.set('queue', 'branch')
+        const bm = breakdownMonth
+        const reportTasks = [
+          salesApi.monthlyReport(jNow.year, jNow.month),
+          salesApi.yearlyReport(jNow.year),
+        ]
+        if (isShop) {
+          reportTasks.push(salesApi.dailyBreakdown(bm.year, bm.month))
+        }
+        if (viewAllSales) {
+          reportTasks.push(salesApi.dailyReport(todayIso()))
+        }
+        const allResults = await Promise.all([
+          salesApi.list(q.toString()),
+          ...reportTasks,
+        ])
+        const listData = allResults[0]
+        const monthlyData = allResults[1]
+        const yearlyData = allResults[2]
+        let nextIdx = 3
+        const breakdownData = isShop ? allResults[nextIdx++] : null
+        const dailyData = viewAllSales ? allResults[nextIdx] : null
+        setSales(listData.results)
+        setSummary(null)
+        setMonthly(monthlyData)
+        setYearly(yearlyData)
+        setDaily(viewAllSales ? dailyData : null)
+        setDailyBreakdown(breakdownData)
+        setCustomers([])
+        setError('')
+        return
+      }
 
       const tasks = [salesApi.list(params)]
       if (viewAllSales) {
         tasks.push(salesApi.dailyReport(todayIso()))
         tasks.push(salesApi.monthlyReport(jNow.year, jNow.month))
+        tasks.push(salesApi.yearlyReport(jNow.year))
       }
 
-      const [salesData, dailyData, monthlyData] = await Promise.all(tasks)
+      const results = await Promise.all(tasks)
+      const salesData = results[0]
+      const dailyData = viewAllSales ? results[1] : null
+      const monthlyData = viewAllSales ? results[2] : null
+      const yearlyData = viewAllSales ? results[3] : null
 
       setSales(salesData.results)
-
       setSummary(salesData.summary)
-
       setCustomers([])
-
       if (viewAllSales) {
         setDaily(dailyData)
         setMonthly(monthlyData)
+        setYearly(yearlyData)
       } else {
         setDaily(null)
         setMonthly(null)
+        setYearly(null)
       }
-
       setError('')
-
     } catch (e) {
-
       setError(e.message)
-
     } finally {
-
       setLoading(false)
-
     }
-
   }
 
 
 
   useEffect(() => { load() }, [])
 
-
+  const onBreakdownMonthChange = async (year, month) => {
+    setBreakdownMonth({ year, month })
+    setBreakdownLoading(true)
+    try {
+      const data = await salesApi.dailyBreakdown(year, month)
+      setDailyBreakdown(data)
+      setError('')
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setBreakdownLoading(false)
+    }
+  }
 
   const applyPersonalFilter = (range) => {
     const next = { ...filters, ...range }
@@ -304,6 +516,88 @@ export default function Sales() {
 
 
 
+  const confirmOrder = async (sale) => {
+    if (!await confirm({
+      title: 'تایید پیش‌فاکتور',
+      message: `پیش‌فاکتور «${sale.customer_name}» تایید شود؟`,
+      confirmText: 'بله، تایید شود',
+      variant: 'warning',
+    })) return
+    try {
+      await salesApi.confirm(sale.id)
+      load()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const cancelOrder = async (sale) => {
+    const msg = sale.paid_amount > 0
+      ? `سفارش «${sale.customer_name}» لغو شود؟ بیعانه ${formatMoney(sale.paid_amount)} در حسابداری برگشت داده می‌شود.`
+      : `سفارش «${sale.customer_name}» لغو شود؟`
+    if (!await confirm({
+      title: 'لغو سفارش',
+      message: msg,
+      confirmText: 'بله، لغو شود',
+      variant: 'danger',
+    })) return
+    try {
+      await salesApi.cancel(sale.id)
+      load()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const approveBranch = async (sale) => {
+    if (!await confirm({
+      title: 'ارسال به اداری',
+      message: `سفارش «${sale.customer_name}» به اداری ارسال شود؟`,
+      confirmText: 'بله، ارسال شود',
+      variant: 'warning',
+    })) return
+    try {
+      await salesApi.approveBranch(sale.id)
+      load()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const approveAccounting = async (sale) => {
+    if (!await confirm({
+      title: 'تایید حسابداری',
+      message: `سفارش «${sale.customer_name}» تایید حسابداری و ارسال به کارخانه شود؟`,
+      confirmText: 'بله، ارسال شود',
+      variant: 'warning',
+    })) return
+    try {
+      await salesApi.approveAccounting(sale.id)
+      load()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const setOrderKind = (value) => {
+    setForm((f) => {
+      const next = { ...f, order_kind: value }
+      if (value === 'pre_invoice') {
+        next.payment_status = 'unpaid'
+        next.installments = []
+      }
+      if (value === 'deposit') {
+        next.payment_status = 'unpaid'
+        next.installments = []
+        if (next.paid_amount === '') next.paid_amount = '0'
+      }
+      if (value === 'normal') {
+        next.delivery_date = ''
+      }
+      return next
+    })
+  }
+
   const save = async (e) => {
 
     e.preventDefault()
@@ -329,29 +623,58 @@ export default function Sales() {
           discount_type: form.discount_type || 'amount',
           discount_value: Number(form.discount_value) || 0,
           payment_method: form.payment_method,
-
+          order_kind: form.order_kind || 'normal',
           payment_status: form.payment_status,
-
           invoice_number: form.invoice_number,
-
           description: form.description,
+        }
 
+        if (pickBranchOnSale && !editing) {
+          if (!form.branch) {
+            setError('انتخاب شعبه الزامی است.')
+            return
+          }
+          payload.branch = form.branch
+        }
+
+        if (isDeposit(form)) {
+          if (!form.delivery_date) {
+            setError('برای بیعانیه، تاریخ تحویل الزامی است.')
+            return
+          }
+          payload.delivery_date = form.delivery_date
+          payload.paid_amount = Number(form.paid_amount || 0)
+          payload.payment_status = 'unpaid'
+        }
+
+        if (isPreInvoice(form)) {
+          payload.paid_amount = Number(form.paid_amount || 0)
+          payload.payment_status = 'unpaid'
         }
 
         if (form.line_items?.length) {
-
+          const invalid = form.line_items.some((i) => !i.product_id || !Number(i.unit_price))
+          if (invalid) {
+            setError('هر ردیف باید محصول با قیمت تعریف‌شده در کاتالوگ داشته باشد.')
+            return
+          }
           payload.line_items = form.line_items.map((i) => ({
-            product_id: i.product_id || null,
+            product_id: i.product_id,
             variant_id: i.variant_id || null,
-            product_name: i.product_name,
-            color_name: i.color_name || '',
-            color_hex: i.color_hex || '',
             quantity: Number(i.quantity || 1),
-            unit_price: Number(i.unit_price),
           }))
 
-          payload.amount = payload.line_items.reduce((s, i) => s + i.quantity * i.unit_price, 0)
-
+          payload.amount = form.line_items.reduce(
+            (s, i) => s + Number(i.unit_price || 0) * Number(i.quantity || 1),
+            0,
+          )
+          if (payload.amount <= 0) {
+            setError('مبلغ فروش باید بیشتر از صفر باشد — قیمت محصول را در کاتالوگ بررسی کنید.')
+            return
+          }
+        } else if (!Number(form.amount)) {
+          setError('محصول انتخاب کنید یا مبلغ فروش را وارد کنید.')
+          return
         }
 
         if (selectedCustomer?.id) payload.customer_id = selectedCustomer.id
@@ -362,14 +685,28 @@ export default function Sales() {
 
             full_name: selectedCustomer.full_name,
 
-            phone: form.new_customer_phone || `09${String(Date.now()).slice(-9)}`,
+            phone: selectedCustomer.phone,
+
+            address: selectedCustomer.address || '',
+
+            birthday: selectedCustomer.birthday || '',
 
           }
 
         }
 
-        if (form.payment_status === 'installment') {
-          payload.paid_amount = Number(form.paid_amount)
+        if (!selectedCustomer?.id && !selectedCustomer?.full_name) {
+          setError('مشتری را انتخاب یا ثبت کنید.')
+          return
+        }
+
+        if (!selectedCustomer?.id && (!selectedCustomer?.phone || !selectedCustomer?.address)) {
+          setError('برای مشتری جدید، شماره تماس و آدرس الزامی است.')
+          return
+        }
+
+        if (form.payment_status === 'installment' && !isPreInvoice(form) && !isDeposit(form)) {
+          payload.paid_amount = Number(form.paid_amount || 0)
         }
 
         if (showInstallmentSection(form) && form.installments.length) {
@@ -385,9 +722,13 @@ export default function Sales() {
             }))
         }
 
-        if (form.payment_status === 'installment' && form.paid_amount === '') {
+        if (form.payment_status === 'installment' && !isPreInvoice(form) && !isDeposit(form) && form.paid_amount === '') {
           setError('برای فروش قسطی، پرداخت اولیه را وارد کنید (۰ اگر پرداختی نبود).')
           return
+        }
+
+        if (!isDeposit(form) && form.delivery_date) {
+          payload.delivery_date = form.delivery_date
         }
 
         await salesApi.create(payload)
@@ -399,6 +740,8 @@ export default function Sales() {
       setForm(EMPTY_FORM)
 
       setEditing(null)
+
+      setSelectedCustomer(null)
 
       load()
 
@@ -436,7 +779,12 @@ export default function Sales() {
 
   const remove = async (id) => {
 
-    if (!confirm('حذف نرم این فروش؟')) return
+    if (!await confirm({
+      title: 'حذف فروش',
+      message: 'حذف نرم این فروش؟',
+      confirmText: 'بله، حذف شود',
+      variant: 'danger',
+    })) return
 
     try {
 
@@ -459,6 +807,8 @@ export default function Sales() {
   const customerSelected = Boolean(selectedCustomer?.id || editing?.customer_id)
 
   const monthLabel = `${PERSIAN_MONTHS[jNow.month - 1]} ${toPersianDigits(jNow.year)}`
+  const yearLabel = toPersianDigits(jNow.year)
+  const branchStatsTitle = isExecutiveUser(user) ? 'همه شعب' : (user?.branch_label || 'شعبه من')
 
 
 
@@ -466,11 +816,12 @@ export default function Sales() {
 
     <div className="page sales-page">
 
-      {viewOwnSales && (
+      {(summaryOnly || (viewOwnSales && !branchQueueOnly)) && (
         <PersonalSalesPanel
           collapsed={personalCollapsed}
           onToggleCollapse={() => setPersonalCollapsed((v) => !v)}
-          onApplyListFilter={applyPersonalFilter}
+          onApplyListFilter={summaryOnly ? undefined : applyPersonalFilter}
+          monthOnly={summaryOnly}
         />
       )}
 
@@ -488,24 +839,63 @@ export default function Sales() {
           <p className="muted">{daily?.count || 0} فقره — فقط همین روز</p>
         </Card>
 
-        <Card title={`فروش ${monthLabel}`}><p className="stat-value">{formatMoney(monthly?.total_final || 0)}</p><p className="muted">{monthly?.count || 0} فقره</p></Card>
+        <Card title={`فروش ${monthLabel}`}><p className="stat-value">{formatMoney(monthly?.total_final || 0)}</p><p className="muted">{monthly?.count || 0} فقره — همه شعب</p></Card>
 
-        <Card title="فیلتر فعلی"><p className="stat-value">{formatMoney(summary?.total_final || 0)}</p><p className="muted">{summary?.count || 0} فقره</p></Card>
+        <Card title={`فروش سال ${yearLabel}`}><p className="stat-value">{formatMoney(yearly?.total_final || 0)}</p><p className="muted">{yearly?.count || 0} فقره — سال جاری</p></Card>
 
       </div>
       )}
 
-      <Card title={viewOwnSales && !viewAllSales ? 'فروش‌های من' : 'فروش‌ها'} actions={canEdit ? <Button onClick={openCreate}>+ ثبت فروش</Button> : null}>
+      {branchQueueView && !viewAllSales && (
+      <div className="stats-grid">
+        <Card title={`فروش ماه ${monthLabel} — ${branchStatsTitle}`}>
+          <p className="stat-value">{formatMoney(monthly?.total_final || 0)}</p>
+          <p className="muted">{monthly?.count || 0} فقره — شامل ارسال‌شده به اداری</p>
+        </Card>
+        <Card title={`فروش سال ${yearLabel} — ${branchStatsTitle}`}>
+          <p className="stat-value">{formatMoney(yearly?.total_final || 0)}</p>
+          <p className="muted">{yearly?.count || 0} فقره — سال جاری شعبه</p>
+        </Card>
+      </div>
+      )}
+
+      <Card
+        title={salesPageTitle()}
+        actions={canCreateSale ? <Button onClick={openCreate}>+ ثبت فروش</Button> : null}
+      >
 
         {error && <div className="alert-error">{error}</div>}
 
-        <form onSubmit={applyFilters}>
+        {summaryOnly && isShop && (
+          <ShopDailyBreakdownSection
+            data={dailyBreakdown}
+            loading={loading || breakdownLoading}
+            breakdownMonth={breakdownMonth}
+            onMonthChange={onBreakdownMonthChange}
+          />
+        )}
+
+        {summaryOnly && !isShop && monthly && (
+          <Card title={`فروش ماه ${monthLabel}`}>
+            <p className="stat-value">{formatMoney(monthly.total_final || 0)}</p>
+            <p className="muted">{monthly.count || 0} سفارش ثبت‌شده — جزئیات سفارش‌ها نمایش داده نمی‌شود.</p>
+          </Card>
+        )}
+
+        {!summaryOnly && (
+        <>
+        {shopBranchSupervisor ? (
+          <p className="branch-queue-hint muted">
+            سفارش‌های زیر منتظر ارسال به اداری هستند.
+          </p>
+        ) : null}
+        <form onSubmit={applyFilters} className={shopBranchSupervisor ? 'sales-filters-branch-queue' : ''}>
           <FilterBar>
             <Field label="وضعیت پرداخت">
               <Select
                 value={filters.payment_status}
                 onChange={(v) => setFilters({ ...filters, payment_status: v })}
-                options={[{ value: '', label: 'همه' }, ...PAYMENT_STATUSES]}
+                options={[{ value: '', label: 'همه' }, ...paymentStatuses]}
                 placeholder="همه"
               />
             </Field>
@@ -513,7 +903,7 @@ export default function Sales() {
               <Select
                 value={filters.payment_method}
                 onChange={(v) => setFilters({ ...filters, payment_method: v })}
-                options={[{ value: '', label: 'همه' }, ...PAYMENT_METHODS]}
+                options={[{ value: '', label: 'همه' }, ...paymentMethods]}
                 placeholder="همه"
               />
             </Field>
@@ -565,9 +955,13 @@ export default function Sales() {
 
               <tr>
 
-                <th>فاکتور</th><th>مشتری</th><th>نهایی</th><th>پرداخت‌شده</th><th>مانده</th><th>وضعیت</th>                <th>تاریخ</th><th>فاکتور</th>
+                <th>فاکتور</th>
+                {isShop && branchQueueView && <th>شعبه</th>}
+                <th>مشتری</th><th>نوع</th>
+                {!hideWorkflowStage && <th>مرحله</th>}
+                <th>نهایی</th><th>پرداخت‌شده</th><th>مانده</th><th>وضعیت</th><th>تاریخ</th><th>فاکتور</th>
 
-                {canEdit && <th>عملیات</th>}
+                {showActionsColumn && <th>عملیات</th>}
 
               </tr>
 
@@ -581,15 +975,34 @@ export default function Sales() {
 
                   <td>{s.invoice_number || s.id}</td>
 
+                  {isShop && branchQueueView && <td>{s.branch_label || s.branch || '—'}</td>}
+
                   <td>{s.customer_name}</td>
 
-                  <td>{formatMoney(s.final_amount)}</td>
+                  <td>
+                    <Badge color={resolvedOrderStatusColors[s.order_status] || '#6366f1'}>
+                      {s.order_kind_display}
+                      {!hideWorkflowStage && s.order_status === 'pending' ? ' — در انتظار' : ''}
+                    </Badge>
+                  </td>
 
-                  <td>{formatMoney(s.paid_amount)}</td>
+                  {!hideWorkflowStage && (
+                  <td>
+                    {s.workflow_stage && s.workflow_stage !== 'completed' && (
+                      <Badge color={workflowColors[s.workflow_stage] || '#6366f1'}>
+                        {s.workflow_stage_display}
+                      </Badge>
+                    )}
+                  </td>
+                  )}
 
-                  <td>{formatMoney(s.balance_due)}</td>
+                  <td>{s.amounts_masked ? '—' : formatMoney(s.final_amount)}</td>
 
-                  <td><Badge color={STATUS_COLORS[s.payment_status] || '#6366f1'}>{s.payment_status_display}</Badge></td>
+                  <td>{s.amounts_masked ? '—' : formatMoney(s.paid_amount)}</td>
+
+                  <td>{s.amounts_masked ? '—' : formatMoney(s.balance_due)}</td>
+
+                  <td><Badge color={statusColors[s.payment_status] || '#6366f1'}>{s.payment_status_display}</Badge></td>
 
                   <td>{formatDate(s.sold_at)}</td>
 
@@ -599,15 +1012,42 @@ export default function Sales() {
                     </button>
                   </td>
 
-                  {canEdit && (
+                  {(canActOnSale(s)) && (
 
                     <td className="row-actions">
 
+                      {canApproveBranch && s.workflow_stage === 'pending_branch' && (
+                        <button type="button" className="link" onClick={() => approveBranch(s)}>{isShop ? 'ارسال به اداری' : 'تایید شعبه'}</button>
+                      )}
+
+                      {canApproveAccounting && s.workflow_stage === 'branch_approved' && (
+                        <button type="button" className="link" onClick={() => approveAccounting(s)}>تایید حسابداری</button>
+                      )}
+
+                      {canEditSale(s) && (
+                        <>
                       <button type="button" className="link" onClick={() => openEdit(s)}>ویرایش</button>
 
-                      {s.balance_due > 0 && <button type="button" className="link" onClick={() => { setPayModal(s); setPayAmount(String(s.balance_due)) }}>پرداخت</button>}
+                      {s.balance_due > 0 && s.order_status !== 'cancelled' && !s.amounts_masked && (
+                        <button type="button" className="link" onClick={() => { setPayModal(s); setPayAmount(String(s.balance_due)) }}>پرداخت</button>
+                      )}
 
-                      <button type="button" className="link danger" onClick={() => remove(s.id)}>حذف</button>
+                      {s.order_kind === 'pre_invoice' && s.order_status === 'pending' && (
+                        <>
+                          <button type="button" className="link" onClick={() => confirmOrder(s)}>تایید</button>
+                          <button type="button" className="link danger" onClick={() => cancelOrder(s)}>لغو</button>
+                        </>
+                      )}
+
+                      {(s.order_kind === 'deposit') && s.order_status === 'pending' && (
+                        <button type="button" className="link danger" onClick={() => cancelOrder(s)}>لغو</button>
+                      )}
+
+                      {s.order_status !== 'cancelled' && (
+                        <button type="button" className="link danger" onClick={() => remove(s.id)}>حذف</button>
+                      )}
+                        </>
+                      )}
 
                     </td>
 
@@ -623,33 +1063,63 @@ export default function Sales() {
 
           </div>
 
-          <div className="sales-cards-mobile">
+          <div className={`sales-cards-mobile${shopBranchSupervisor ? ' sales-branch-queue-mobile' : ''}`}>
             {sales.map((s) => (
-              <div key={s.id} className="m-card">
+              <div key={s.id} className={`m-card${shopBranchSupervisor ? ' sales-branch-queue-card' : ''}`}>
                 <div className="m-card-head">
                   <div>
                     <strong>{s.customer_name}</strong>
                     <div className="muted small">{s.invoice_number || `#${s.id}`}</div>
+                    {isShop && branchQueueView && (
+                      <div className="muted small">{s.branch_label || s.branch || '—'}</div>
+                    )}
                   </div>
-                  <Badge color={STATUS_COLORS[s.payment_status] || '#6366f1'}>{s.payment_status_display}</Badge>
+                  <Badge color={resolvedOrderStatusColors[s.order_status] || statusColors[s.payment_status] || '#6366f1'}>
+                    {s.order_kind !== 'normal' ? s.order_kind_display : s.payment_status_display}
+                  </Badge>
                 </div>
                 <div className="m-card-grid">
-                  <div><span className="muted">نهایی</span><strong>{formatMoney(s.final_amount)}</strong></div>
-                  <div><span className="muted">مانده</span><strong>{formatMoney(s.balance_due)}</strong></div>
-                  <div><span className="muted">پرداخت</span>{formatMoney(s.paid_amount)}</div>
+                  <div><span className="muted">نهایی</span><strong>{s.amounts_masked ? '—' : formatMoney(s.final_amount)}</strong></div>
+                  <div><span className="muted">مانده</span><strong>{s.amounts_masked ? '—' : formatMoney(s.balance_due)}</strong></div>
+                  <div><span className="muted">پرداخت</span>{s.amounts_masked ? '—' : formatMoney(s.paid_amount)}</div>
                   <div><span className="muted">تاریخ</span>{formatDate(s.sold_at)}</div>
                 </div>
+                {canApproveBranch && s.workflow_stage === 'pending_branch' && (
+                  <div className={`m-card-primary-action${shopBranchSupervisor ? ' m-card-primary-action-prominent' : ''}`}>
+                    <Button
+                      type="button"
+                      className="m-card-send-office"
+                      onClick={() => approveBranch(s)}
+                    >
+                      {isShop ? 'ارسال به اداری' : 'تایید شعبه'}
+                    </Button>
+                  </div>
+                )}
                 <div className="m-card-actions">
                   <button type="button" className="link" onClick={() => openInvoice(s)} disabled={invoiceLoadingId === s.id}>
                     {invoiceLoadingId === s.id ? '…' : 'فاکتور'}
                   </button>
-                  {canEdit && (
+                  {canApproveAccounting && s.workflow_stage === 'branch_approved' && (
+                    <button type="button" className="link" onClick={() => approveAccounting(s)}>تایید حسابداری</button>
+                  )}
+                  {canEditSale(s) && (
                     <>
                       <button type="button" className="link" onClick={() => openEdit(s)}>ویرایش</button>
-                      {s.balance_due > 0 && (
+                      {s.balance_due > 0 && s.order_status !== 'cancelled' && !s.amounts_masked && (
                         <button type="button" className="link" onClick={() => { setPayModal(s); setPayAmount(String(s.balance_due)) }}>پرداخت</button>
                       )}
-                      <button type="button" className="link danger" onClick={() => remove(s.id)}>حذف</button>
+                      {s.order_kind === 'pre_invoice' && s.order_status === 'pending' && (
+                        <>
+                          <button type="button" className="link" onClick={() => confirmOrder(s)}>تایید</button>
+                          <button type="button" className="link danger" onClick={() => cancelOrder(s)}>لغو</button>
+                        </>
+                      )}
+                      {s.order_kind === 'deposit' && s.order_status === 'pending' && (
+                        <button type="button" className="link danger" onClick={() => cancelOrder(s)}>لغو</button>
+                      )}
+                      {s.order_status !== 'cancelled' && hasPermission(user, 'delete_sale') && (
+                        <button type="button" className="link danger" onClick={() => remove(s.id)}>حذف</button>
+                      )}
                     </>
                   )}
                 </div>
@@ -659,6 +1129,18 @@ export default function Sales() {
 
           </>
 
+        )}
+
+        </>
+        )}
+
+        {isShop && branchQueueView && (
+          <ShopDailyBreakdownSection
+            data={dailyBreakdown}
+            loading={loading || breakdownLoading}
+            breakdownMonth={breakdownMonth}
+            onMonthChange={onBreakdownMonthChange}
+          />
         )}
 
       </Card>
@@ -690,7 +1172,7 @@ export default function Sales() {
                 <Select
                   value={form.payment_method}
                   onChange={(v) => setForm({ ...form, payment_method: v })}
-                  options={PAYMENT_METHODS}
+                  options={paymentMethods}
                 />
               </Field>
 
@@ -715,19 +1197,55 @@ export default function Sales() {
                 onCreateNew={(c) => setSelectedCustomer(c)}
               />
 
-              {selectedCustomer && !selectedCustomer.id && (
-
-                <Field label="موبایل مشتری جدید">
-
-                  <input className="ltr" value={form.new_customer_phone} onChange={(e) => setForm({ ...form, new_customer_phone: e.target.value })} placeholder="09xxxxxxxxx" required />
-
+              {pickBranchOnSale && (
+                <Field label="شعبه">
+                  <Select
+                    value={form.branch}
+                    onChange={(v) => setForm({ ...form, branch: v })}
+                    options={[{ value: '', label: 'انتخاب شعبه…' }, ...branchOptions]}
+                    required
+                  />
                 </Field>
-
               )}
 
-              <ProductLines lines={form.line_items} onChange={(line_items) => setForm({ ...form, line_items })} />
+              <Field label="نوع فروش">
+                <Select
+                  value={form.order_kind}
+                  onChange={setOrderKind}
+                  options={orderKinds}
+                />
+              </Field>
 
-              <Field label="مبلغ"><MoneyInput min="1" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required /></Field>
+              {isPreInvoice(form) && (
+                <p className="muted small">
+                  پیش‌فاکتور: بیعانه اختیاری ثبت می‌شود. بعداً «تایید» یا «لغو» کنید.
+                </p>
+              )}
+
+              {isDeposit(form) && (
+                <p className="muted small">
+                  بیعانیه: مانده حساب یک روز قبل از تحویل سررسید می‌شود.
+                </p>
+              )}
+
+              <ProductLines
+                lines={form.line_items}
+                onChange={(line_items) => {
+                  const amount = line_items.reduce(
+                    (s, i) => s + Number(i.unit_price || 0) * Number(i.quantity || 1),
+                    0,
+                  )
+                  setForm({ ...form, line_items, amount: amount ? String(amount) : form.amount })
+                }}
+              />
+
+              {form.line_items?.length > 0 ? (
+                <Field label="جمع محصولات">
+                  <p className="sale-lines-total"><strong>{formatMoney(Number(form.amount || 0))}</strong></p>
+                </Field>
+              ) : (
+                <Field label="مبلغ"><MoneyInput min="1" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required /></Field>
+              )}
 
               <SaleDiscountFields
                 form={form}
@@ -736,15 +1254,40 @@ export default function Sales() {
                 customerSelected={customerSelected}
               />
 
+              {isDeposit(form) && (
+                <>
+                  <Field label="تاریخ تحویل">
+                    <PersianDateInput
+                      value={form.delivery_date}
+                      onChange={(v) => setForm({ ...form, delivery_date: v })}
+                      required
+                    />
+                  </Field>
+                  <Field label="بیعانه اولیه">
+                    <MoneyInput min="0" value={form.paid_amount} onChange={(e) => setForm({ ...form, paid_amount: e.target.value })} />
+                    <span className="muted">مبلغی که همین الان دریافت می‌شود (۰ اگر نبود)</span>
+                  </Field>
+                </>
+              )}
+
+              {isPreInvoice(form) && (
+                <Field label="مبلغ بیعانه (اختیاری)">
+                  <MoneyInput min="0" value={form.paid_amount} onChange={(e) => setForm({ ...form, paid_amount: e.target.value })} />
+                  <span className="muted">می‌توانید بعداً از حسابداری یا دکمه پرداخت هم اضافه کنید</span>
+                </Field>
+              )}
+
+              {!isPreInvoice(form) && !isDeposit(form) && (
               <Field label="وضعیت پرداخت">
                 <Select
                   value={form.payment_status}
                   onChange={(v) => setPaymentStatus(v)}
-                  options={PAYMENT_STATUSES}
+                  options={paymentStatuses}
                 />
               </Field>
+              )}
 
-              {form.payment_status === 'installment' && (
+              {!isPreInvoice(form) && !isDeposit(form) && form.payment_status === 'installment' && (
                 <Field label="پرداخت اولیه">
                   <MoneyInput min="0" value={form.paid_amount} onChange={(e) => setForm({ ...form, paid_amount: e.target.value })} required />
                   <span className="muted">مبلغی که همین الان دریافت شده (۰ اگر نبود)</span>
@@ -755,7 +1298,7 @@ export default function Sales() {
                 <Select
                   value={form.payment_method}
                   onChange={(v) => setPaymentMethod(v)}
-                  options={PAYMENT_METHODS}
+                  options={paymentMethods}
                 />
               </Field>
 
@@ -768,6 +1311,16 @@ export default function Sales() {
               )}
 
               <Field label="شماره فاکتور"><input className="ltr" value={form.invoice_number} onChange={(e) => setForm({ ...form, invoice_number: e.target.value })} placeholder="خالی = شماره سیستمی" /></Field>
+
+              {!isDeposit(form) && (
+                <Field label="تاریخ تحویل">
+                  <PersianDateInput
+                    value={form.delivery_date}
+                    onChange={(v) => setForm({ ...form, delivery_date: v })}
+                  />
+                  <span className="muted">اختیاری — روی فاکتور نمایش داده می‌شود</span>
+                </Field>
+              )}
 
               <Field label="توضیحات فاکتور"><textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} /></Field>
 

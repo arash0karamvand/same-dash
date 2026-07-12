@@ -26,9 +26,10 @@ export default function PersonalSalesPanel({
   collapsed,
   onToggleCollapse,
   onApplyListFilter,
+  monthOnly = false,
 }) {
   const jNow = currentJalali()
-  const [period, setPeriod] = useState('month')
+  const [period, setPeriod] = useState(monthOnly ? 'month' : 'day')
   const [dayIso, setDayIso] = useState(todayIso())
   const [monthYear, setMonthYear] = useState(jNow.year)
   const [monthValue, setMonthValue] = useState(jNow.month)
@@ -94,7 +95,7 @@ export default function PersonalSalesPanel({
   return (
     <Card
       className={`personal-sales-panel ${collapsed ? 'is-collapsed' : ''}`}
-      title="فروش من"
+      title={monthOnly ? 'فروش ماهانه من' : 'فروش من'}
       actions={
         <button type="button" className="link collapse-toggle" onClick={onToggleCollapse}>
           {collapsed ? 'نمایش ▼' : 'بستن ▲'}
@@ -103,8 +104,11 @@ export default function PersonalSalesPanel({
     >
       {!collapsed && (
         <>
-          <p className="muted small panel-hint">فقط فروش‌های ثبت‌شده توسط شما در شعبه‌تان.</p>
+          <p className="muted small panel-hint">
+            {monthOnly ? 'فقط جمع فروش ماهانه — بدون دسترسی به جزئیات سفارش‌ها.' : 'فقط فروش‌های ثبت‌شده توسط شما در شعبه‌تان.'}
+          </p>
           <div className="personal-sales-filters">
+            {!monthOnly && (
             <Field label="بازه">
               <Select
                 value={period}
@@ -112,6 +116,7 @@ export default function PersonalSalesPanel({
                 options={PERIOD_OPTIONS}
               />
             </Field>
+            )}
             {period === 'day' && (
               <Field label="روز">
                 <PersianDateInput
@@ -131,7 +136,7 @@ export default function PersonalSalesPanel({
                 />
               </Field>
             )}
-            {period === 'year' && (
+            {period === 'year' && !monthOnly && (
               <Field label="سال">
                 <Select
                   value={String(yearValue)}
@@ -144,9 +149,11 @@ export default function PersonalSalesPanel({
               <Button type="button" onClick={loadStats} disabled={loading}>
                 {loading ? '…' : 'بروزرسانی'}
               </Button>
+              {!monthOnly && onApplyListFilter && (
               <Button type="button" variant="ghost" onClick={applyToList}>
                 اعمال روی لیست
               </Button>
+              )}
             </div>
           </div>
           {error && <div className="alert-error">{error}</div>}

@@ -7,6 +7,7 @@ import MoneyInput from '../components/MoneyInput'
 import Select from '../components/Select'
 import { Badge, Button, Card, EmptyState, Field, Modal } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
+import { useConfirm } from '../context/ConfirmContext'
 import { formatDate } from '../utils/format'
 import { formatJalali, toPersianDigits } from '../utils/jalali'
 import { hasPermission } from '../utils/permissions'
@@ -32,6 +33,7 @@ function formatTimeFa(hhmm) {
 
 export default function Sms() {
   const { user } = useAuth()
+  const confirm = useConfirm()
   const canSend = hasPermission(user, 'send_sms')
   const canViewLogs = hasPermission(user, 'view_sms_logs')
   const canManageBirthday = hasPermission(user, 'manage_birthday_sms')
@@ -235,7 +237,12 @@ export default function Sms() {
   }
 
   const sendBirthdayNow = async () => {
-    if (!confirm('پیامک تبریک تولد برای مشتریان واجد شرایط همین الان ارسال شود؟')) return
+    if (!await confirm({
+      title: 'ارسال پیامک تولد',
+      message: 'پیامک تبریک تولد برای مشتریان واجد شرایط همین الان ارسال شود؟',
+      confirmText: 'بله، ارسال شود',
+      variant: 'warning',
+    })) return
     try {
       const result = await smsApi.birthdaySend(true)
       setInfo(`ارسال تولد: ${result.successful} موفق، ${result.failed} ناموفق`)

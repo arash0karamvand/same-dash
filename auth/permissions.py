@@ -20,6 +20,13 @@ VIEW_OWN_SALES = "view_own_sales"
 VIEW_EMPLOYEE_RANKING = "view_employee_ranking"
 CREATE_SALE = "create_sale"
 EDIT_SALE = "edit_sale"
+VIEW_SALES_SUMMARY = "view_sales_summary"
+APPROVE_SALE_BRANCH = "approve_sale_branch"
+APPROVE_SALE_ACCOUNTING = "approve_sale_accounting"
+VIEW_FACTORY_ORDERS = "view_factory_orders"
+MANAGE_FACTORY_ORDERS = "manage_factory_orders"
+VIEW_FREIGHT_ORDERS = "view_freight_orders"
+MANAGE_FREIGHT_ORDERS = "manage_freight_orders"
 
 VIEW_ACCOUNTING = "view_accounting"
 CREATE_ACCOUNTING = "create_accounting"
@@ -45,6 +52,10 @@ VIEW_ATTENDANCE = "view_attendance"
 MANAGE_ATTENDANCE = "manage_attendance"
 MANAGE_STAFF = "manage_staff"
 DELETE_STAFF = "delete_staff"
+VIEW_SELLERS = "view_sellers"
+VIEW_MANAGERS = "view_managers"
+MANAGE_MANAGERS = "manage_managers"
+DELETE_MANAGERS = "delete_managers"
 SELF_CHECK_IN = "self_check_in"
 VIEW_AUDIT_LOGS = "view_audit_logs"
 VIEW_INSTALLMENTS = "view_installments"
@@ -67,6 +78,13 @@ PERMISSION_LABELS = {
     VIEW_EMPLOYEE_RANKING: "رده‌بندی کارکنان",
     CREATE_SALE: "ثبت فروش",
     EDIT_SALE: "ویرایش فروش",
+    VIEW_SALES_SUMMARY: "فقط جمع فروش ماهانه",
+    APPROVE_SALE_BRANCH: "ارسال به اداری (سرپرست شعبه)",
+    APPROVE_SALE_ACCOUNTING: "تایید اداری و ارسال به کارخانه",
+    VIEW_FACTORY_ORDERS: "مشاهده سفارش‌های کارخانه",
+    MANAGE_FACTORY_ORDERS: "مدیریت ساخت کارخانه",
+    VIEW_FREIGHT_ORDERS: "مشاهده سفارش‌های باربری",
+    MANAGE_FREIGHT_ORDERS: "مدیریت باربری",
     DELETE_SALE: "حذف فروش",
     VIEW_ACCOUNTING: "مشاهده حسابداری",
     CREATE_ACCOUNTING: "ثبت سند حسابداری",
@@ -89,6 +107,10 @@ PERMISSION_LABELS = {
     MANAGE_ATTENDANCE: "مدیریت حضور",
     MANAGE_STAFF: "مدیریت فروشندگان",
     DELETE_STAFF: "حذف فروشنده",
+    VIEW_SELLERS: "مشاهده فروشندگان",
+    VIEW_MANAGERS: "مشاهده مدیران",
+    MANAGE_MANAGERS: "مدیریت مدیران",
+    DELETE_MANAGERS: "حذف مدیر",
     SELF_CHECK_IN: "ثبت حضور شخصی",
     VIEW_AUDIT_LOGS: "لاگ فعالیت",
     VIEW_INSTALLMENTS: "مشاهده اقساط",
@@ -112,6 +134,13 @@ ALL_PERMISSIONS = {
     VIEW_EMPLOYEE_RANKING,
     CREATE_SALE,
     EDIT_SALE,
+    VIEW_SALES_SUMMARY,
+    APPROVE_SALE_BRANCH,
+    APPROVE_SALE_ACCOUNTING,
+    VIEW_FACTORY_ORDERS,
+    MANAGE_FACTORY_ORDERS,
+    VIEW_FREIGHT_ORDERS,
+    MANAGE_FREIGHT_ORDERS,
     VIEW_ACCOUNTING,
     CREATE_ACCOUNTING,
     EDIT_ACCOUNTING,
@@ -134,6 +163,10 @@ ALL_PERMISSIONS = {
     MANAGE_ATTENDANCE,
     MANAGE_STAFF,
     DELETE_STAFF,
+    VIEW_SELLERS,
+    VIEW_MANAGERS,
+    MANAGE_MANAGERS,
+    DELETE_MANAGERS,
     SELF_CHECK_IN,
     VIEW_AUDIT_LOGS,
     VIEW_INSTALLMENTS,
@@ -162,6 +195,263 @@ ADMIN_ONLY_PERMISSIONS = {
 
 ASSIGNABLE_PERMISSIONS = ALL_PERMISSIONS - ADMIN_ONLY_PERMISSIONS
 
+# گروه‌بندی برای صفحه نقش‌ها و دسترسی‌ها
+PERMISSION_GROUPS = [
+    {
+        "id": "customers",
+        "label": "مشتریان",
+        "permissions": [VIEW_CUSTOMERS, CREATE_CUSTOMER, EDIT_CUSTOMER, DELETE_CUSTOMER],
+    },
+    {
+        "id": "workflow",
+        "label": "گردش سفارش (فروشگاه / اداری / کارخانه)",
+        "permissions": [
+            VIEW_SALES,
+            VIEW_SALES_SUMMARY,
+            CREATE_SALE,
+            EDIT_SALE,
+            DELETE_SALE,
+            APPROVE_SALE_BRANCH,
+            APPROVE_SALE_ACCOUNTING,
+            VIEW_FACTORY_ORDERS,
+            MANAGE_FACTORY_ORDERS,
+        ],
+    },
+    {
+        "id": "sellers",
+        "label": "فروشندگان",
+        "permissions": [VIEW_SELLERS, MANAGE_STAFF, DELETE_STAFF],
+    },
+    {
+        "id": "managers",
+        "label": "مدیران",
+        "permissions": [VIEW_MANAGERS, MANAGE_MANAGERS, DELETE_MANAGERS],
+    },
+    {
+        "id": "attendance",
+        "label": "حضور و غیاب",
+        "permissions": [VIEW_ATTENDANCE, MANAGE_ATTENDANCE, SELF_CHECK_IN],
+    },
+    {
+        "id": "accounting",
+        "label": "حسابداری",
+        "permissions": [
+            VIEW_ACCOUNTING,
+            CREATE_ACCOUNTING,
+            EDIT_ACCOUNTING,
+            DELETE_ACCOUNTING,
+            APPROVE_ACCOUNTING,
+            VIEW_REPORTS,
+            VIEW_INSTALLMENTS,
+            MANAGE_INSTALLMENTS,
+        ],
+    },
+    {
+        "id": "loyalty",
+        "label": "باشگاه و سطوح",
+        "permissions": [VIEW_LOYALTY, MANAGE_LOYALTY, RECALCULATE_LEVELS, MANAGE_REMINDERS],
+    },
+    {
+        "id": "products",
+        "label": "محصولات",
+        "permissions": [VIEW_PRODUCTS, MANAGE_PRODUCTS],
+    },
+    {
+        "id": "sms",
+        "label": "پیامک",
+        "permissions": [SEND_SMS, MANAGE_SMS_CLUB, MANAGE_BIRTHDAY_SMS, VIEW_SMS_LOGS],
+    },
+    {
+        "id": "wallet",
+        "label": "کیف پول",
+        "permissions": [VIEW_WALLET, MANAGE_WALLET],
+    },
+    {
+        "id": "system",
+        "label": "سیستم",
+        "permissions": [VIEW_DASHBOARD, VIEW_AUDIT_LOGS, VIEW_ORG_CHART],
+    },
+]
+
+
+# بخش‌های منوی پنل — چهار پورتال اصلی
+MENU_SECTIONS = [
+    {
+        "id": "managers",
+        "label": "مدیران",
+        "icon": "👔",
+        "page_key": "managers",
+        "executive_only": True,
+        "menu_permissions": [VIEW_DASHBOARD],
+        "section_permissions": [
+            VIEW_DASHBOARD,
+            MANAGE_USERS,
+            MANAGE_ROLES,
+            VIEW_ORG_CHART,
+            MANAGE_ORG_RANKS,
+            VIEW_MANAGERS,
+            MANAGE_MANAGERS,
+            DELETE_MANAGERS,
+            VIEW_SELLERS,
+            MANAGE_STAFF,
+            DELETE_STAFF,
+            VIEW_EMPLOYEE_RANKING,
+            VIEW_ATTENDANCE,
+            MANAGE_ATTENDANCE,
+            SELF_CHECK_IN,
+            VIEW_LOYALTY,
+            MANAGE_LOYALTY,
+            RECALCULATE_LEVELS,
+            MANAGE_REMINDERS,
+            SEND_SMS,
+            MANAGE_SMS_CLUB,
+            MANAGE_BIRTHDAY_SMS,
+            VIEW_SMS_LOGS,
+            VIEW_AUDIT_LOGS,
+        ],
+    },
+    {
+        "id": "shop",
+        "label": "فروشگاه",
+        "icon": "🏪",
+        "page_key": "shop",
+        "menu_permissions": [CREATE_SALE, APPROVE_SALE_BRANCH, VIEW_SALES_SUMMARY],
+        "section_permissions": [
+            VIEW_SALES,
+            VIEW_SALES_SUMMARY,
+            CREATE_SALE,
+            EDIT_SALE,
+            DELETE_SALE,
+            APPROVE_SALE_BRANCH,
+            VIEW_CUSTOMERS,
+            CREATE_CUSTOMER,
+            EDIT_CUSTOMER,
+            DELETE_CUSTOMER,
+            VIEW_WALLET,
+            MANAGE_WALLET,
+            VIEW_PRODUCTS,
+            MANAGE_PRODUCTS,
+        ],
+    },
+    {
+        "id": "office",
+        "label": "اداری",
+        "icon": "🏢",
+        "page_key": "office",
+        "menu_permissions": [APPROVE_SALE_ACCOUNTING, VIEW_ACCOUNTING, VIEW_CUSTOMERS, VIEW_FACTORY_ORDERS],
+        "section_permissions": [
+            APPROVE_SALE_ACCOUNTING,
+            EDIT_SALE,
+            VIEW_ACCOUNTING,
+            CREATE_ACCOUNTING,
+            EDIT_ACCOUNTING,
+            DELETE_ACCOUNTING,
+            APPROVE_ACCOUNTING,
+            VIEW_REPORTS,
+            VIEW_INSTALLMENTS,
+            MANAGE_INSTALLMENTS,
+            VIEW_CUSTOMERS,
+            EDIT_CUSTOMER,
+            VIEW_PRODUCTS,
+            VIEW_FACTORY_ORDERS,
+            VIEW_FREIGHT_ORDERS,
+        ],
+    },
+    {
+        "id": "factory",
+        "label": "کارخانه",
+        "icon": "🏭",
+        "page_key": "factory",
+        "menu_permissions": [VIEW_FACTORY_ORDERS],
+        "section_permissions": [
+            VIEW_FACTORY_ORDERS,
+            MANAGE_FACTORY_ORDERS,
+        ],
+    },
+]
+
+
+from auth.org_roles import is_executive_user
+
+
+def _accounting_active_office_sale(sale):
+    """سفارش در صف اداری یا کارخانه (قبل از تکمیل نهایی)."""
+    from backend.models import FactoryOrder, OfficeOrder
+
+    office = OfficeOrder.objects.filter(source_sale=sale, is_deleted=False).first()
+    if not office:
+        return False
+    if office.status == OfficeOrder.STATUS_PENDING:
+        return True
+    factory = FactoryOrder.objects.filter(source_sale=sale, is_deleted=False).first()
+    if not factory:
+        return office.status == OfficeOrder.STATUS_RELEASED
+    return factory.workflow_stage != FactoryOrder.WORKFLOW_STAGE_COMPLETED
+
+
+def menu_sections_for_matrix(assignable_only=False):
+    """بخش‌های منو برای صفحه نقش‌ها — از MySQL."""
+    pool = ASSIGNABLE_PERMISSIONS if assignable_only else ALL_PERMISSIONS
+    try:
+        return _menu_sections_for_matrix(assignable_only=assignable_only, pool=pool)
+    except Exception:
+        sections = []
+        for sec in MENU_SECTIONS:
+            if assignable_only and sec.get("system_admin"):
+                continue
+            menu_codes = [c for c in sec["menu_permissions"] if c in pool]
+            section_codes = sorted(set(sec["section_permissions"]) & pool)
+            if not menu_codes and not section_codes:
+                continue
+            sections.append({
+                "id": sec["id"],
+                "label": sec["label"],
+                "icon": sec["icon"],
+                "page_key": sec["page_key"],
+                "system_admin": bool(sec.get("system_admin")),
+                "menu_permission_codes": menu_codes,
+                "section_permission_codes": section_codes,
+                "menu_permissions": [
+                    {"code": code, "label": PERMISSION_LABELS.get(code, code)} for code in menu_codes
+                ],
+                "section_permissions": [
+                    {"code": code, "label": PERMISSION_LABELS.get(code, code)} for code in section_codes
+                ],
+            })
+        return sections
+
+
+def permission_groups_for_matrix(assignable_only=False):
+    """گروه‌های مجوز برای UI — با بخش «سایر» برای موارد بدون گروه."""
+    pool = ASSIGNABLE_PERMISSIONS if assignable_only else ALL_PERMISSIONS
+    grouped_codes = set()
+    groups = []
+    for group in PERMISSION_GROUPS:
+        codes = [code for code in group["permissions"] if code in pool]
+        grouped_codes.update(codes)
+        if codes:
+            groups.append(
+                {
+                    "id": group["id"],
+                    "label": group["label"],
+                    "permissions": [
+                        {"code": code, "label": PERMISSION_LABELS.get(code, code)} for code in codes
+                    ],
+                }
+            )
+    other = sorted(pool - grouped_codes)
+    if other:
+        groups.append(
+            {
+                "id": "other",
+                "label": "سایر",
+                "permissions": [
+                    {"code": code, "label": PERMISSION_LABELS.get(code, code)} for code in other
+                ],
+            }
+        )
+    return groups
+
 
 def is_system_admin(user):
     """مدیر سیستم (نقش admin یا superuser)."""
@@ -172,33 +462,137 @@ def is_system_admin(user):
     return get_user_role(user) == ADMIN
 
 
+def has_full_access(user):
+    """مدیرعامل یا مدیر سیستم — دسترسی کامل."""
+    if not user or not user.is_authenticated:
+        return False
+    if user.is_superuser:
+        return True
+    from auth.org_roles import is_full_access_role
+
+    return is_full_access_role(get_user_role(user))
+
+
 def sanitize_role_permissions(slug, permissions):
     """حذف مجوزهای مخصوص مدیر سیستم از نقش‌های غیر admin."""
+    from auth.org_roles import is_full_access_role
+
     perms = set(permissions or []) & ALL_PERMISSIONS
-    if slug == ADMIN:
+    if slug == ADMIN or is_full_access_role(slug):
         return sorted(ALL_PERMISSIONS)
     return sorted(perms - ADMIN_ONLY_PERMISSIONS)
 
 
 def has_permission(user, permission):
     """بررسی مجوز کاربر برای یک عملیات."""
-    role = get_user_role(user)
-    if role == ADMIN:
+    if has_full_access(user):
         return True
+    role = get_user_role(user)
     from logic.role_definitions import get_role_permissions
 
     return permission in get_role_permissions(role)
 
 
-def can_view_sale(user, sale):
-    """آیا کاربر مجاز به مشاهده این فروش است؟"""
-    if has_permission(user, VIEW_SALES):
-        return True
-    if has_permission(user, VIEW_OWN_SALES):
-        from logic.sellers import effective_sale_branch
+def can_edit_sale(user, sale):
+    """اصلاح فقط در صف مسئولیت — مدیران همه."""
+    from auth.org_roles import is_accounting_finance, is_branch_supervisor, is_executive_user
+    from logic.sale_workflow import STAGE_BRANCH_APPROVED, STAGE_PENDING_BRANCH
 
-        branch = effective_sale_branch(user)
-        if branch and sale.branch:
-            return sale.branch == branch
-        return sale.recorded_by_id == user.id
+    if sale.order_status == sale.ORDER_STATUS_CANCELLED:
+        return False
+
+    if is_executive_user(user) and has_permission(user, EDIT_SALE):
+        return True
+
+    if is_branch_supervisor(user) or (
+        has_permission(user, APPROVE_SALE_BRANCH) and not is_executive_user(user)
+    ):
+        return (
+            has_permission(user, EDIT_SALE)
+            and sale.workflow_stage == STAGE_PENDING_BRANCH
+            and not sale.transferred_to_office_at
+        )
+
+    if is_accounting_finance(user) or (
+        has_permission(user, APPROVE_SALE_ACCOUNTING) and not is_executive_user(user)
+    ):
+        return (
+            has_permission(user, EDIT_SALE) or has_permission(user, APPROVE_SALE_ACCOUNTING)
+        ) and _accounting_active_office_sale(sale)
+
+    if not has_permission(user, EDIT_SALE):
+        return False
+    if sale.workflow_stage not in {STAGE_PENDING_BRANCH, sale.WORKFLOW_STAGE_COMPLETED}:
+        return False
+    if sale.order_status == sale.ORDER_STATUS_CONFIRMED:
+        return False
+    return True
+
+
+def can_view_sale(user, sale):
+    """معلق‌ها فقط مدیران و مسئول همان مرحله."""
+    from auth.org_roles import (
+        is_branch_supervisor,
+        is_executive_user,
+        is_factory_supervisor,
+        is_freight_supervisor,
+        sales_expert_summary_only,
+    )
+    from logic.sale_workflow import (
+        STAGE_ACCOUNTING_APPROVED,
+        STAGE_BRANCH_APPROVED,
+        STAGE_IN_FREIGHT,
+        STAGE_IN_PRODUCTION,
+        STAGE_PENDING_BRANCH,
+        STAGE_PRODUCTION_DONE,
+    )
+    from logic.sellers import effective_sale_branch, get_user_branch
+
+    if is_executive_user(user):
+        return True
+
+    if sales_expert_summary_only(user):
+        return False
+
+    if is_accounting_finance(user) or (
+        has_permission(user, APPROVE_SALE_ACCOUNTING) and not is_executive_user(user)
+    ):
+        return _accounting_active_office_sale(sale)
+
+    if is_factory_supervisor(user) or (
+        has_permission(user, VIEW_FACTORY_ORDERS) and not has_permission(user, APPROVE_SALE_ACCOUNTING)
+    ):
+        from backend.models import FactoryOrder
+
+        return FactoryOrder.objects.filter(
+            source_sale=sale,
+            workflow_stage__in={
+                FactoryOrder.WORKFLOW_STAGE_ACCOUNTING_APPROVED,
+                FactoryOrder.WORKFLOW_STAGE_IN_PRODUCTION,
+            },
+        ).exists()
+
+    if is_freight_supervisor(user) or has_permission(user, VIEW_FREIGHT_ORDERS):
+        from backend.models import FactoryOrder
+        from django.utils import timezone
+
+        today = timezone.localdate()
+        return FactoryOrder.objects.filter(
+            source_sale=sale,
+            delivery_date=today,
+            workflow_stage__in={
+                FactoryOrder.WORKFLOW_STAGE_PRODUCTION_DONE,
+                FactoryOrder.WORKFLOW_STAGE_IN_FREIGHT,
+            },
+        ).exists()
+
+    if is_branch_supervisor(user) or has_permission(user, APPROVE_SALE_BRANCH):
+        branch = get_user_branch(user) or effective_sale_branch(user)
+        if not branch or sale.branch != branch:
+            return False
+        return (
+            sale.workflow_stage == STAGE_PENDING_BRANCH
+            and not sale.transferred_to_office_at
+        )
+
     return False

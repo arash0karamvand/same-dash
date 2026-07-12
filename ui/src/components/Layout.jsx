@@ -1,41 +1,36 @@
-// چیدمان اصلی پنل — سایدبار کشویی در موبایل/تبلت
+// چیدمان پنل — چهار پورتال + زیرمنو
 
 import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import ChangePasswordModal from './ChangePasswordModal'
 import MobileBottomNav from './MobileBottomNav'
+import PortalNav from './PortalNav'
 import { useMediaQuery } from '../hooks/useMediaQuery'
-import { canSeeNavItem } from '../utils/permissions'
+import { PORTALS } from '../config/portals'
+import { getVisiblePortals, canSeeNavItem } from '../utils/permissions'
+import { getPortal } from '../config/portals'
 
-export const NAV_ITEMS = [
-  { key: 'dashboard', label: 'داشبورد', icon: '📊', permission: 'view_dashboard' },
-  { key: 'customers', label: 'مشتریان', icon: '👥', permission: 'view_customers' },
-  { key: 'products', label: 'محصولات', icon: '📦', permission: 'view_products' },
-  { key: 'sellers', label: 'فروشندگان', icon: '🧑‍💼', permission: 'manage_staff' },
-  { key: 'sales', label: 'فروش', icon: '🧾', anyPermission: ['view_sales', 'view_own_sales'] },
-  { key: 'ranking', label: 'رده‌بندی کارکنان', icon: '🏆', permission: 'view_employee_ranking' },
-  { key: 'checks', label: 'چک و اقساط', icon: '📋', permission: 'view_installments' },
-  { key: 'accounting', label: 'حسابداری', icon: '💰', permission: 'view_accounting' },
-  { key: 'levels', label: 'باشگاه و سطوح', icon: '🏅', permission: 'view_loyalty' },
-  { key: 'attendance', label: 'حضور و غیاب', icon: '📅', permission: 'view_attendance' },
-  { key: 'logs', label: 'لاگ‌ها', icon: '📜', permission: 'view_audit_logs' },
-  { key: 'sms', label: 'پیامک', icon: '✉️', anyPermission: ['send_sms', 'view_sms_logs'] },
-  { key: 'users', label: 'کاربران', icon: '🛡️', systemAdmin: true },
-  { key: 'roles', label: 'نقش‌ها و دسترسی', icon: '🔐', systemAdmin: true },
-  { key: 'orgchart', label: 'چارت سازمانی', icon: '🏢', permission: 'view_org_chart' },
-]
-
-export default function Layout({ current, onNavigate, children }) {
+export default function Layout({ portal, page, onNavigate, children }) {
   const { user, logout } = useAuth()
   const [passwordOpen, setPasswordOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const isMobile = useMediaQuery('(max-width: 767px)')
   const isCompactNav = useMediaQuery('(max-width: 1023px)')
-  const navItems = NAV_ITEMS.filter((item) => canSeeNavItem(user, item))
-  const pageTitle = NAV_ITEMS.find((i) => i.key === current)?.label || ''
+  const visiblePortals = getVisiblePortals(user)
+  const activePortal = getPortal(portal)
+  const pageTitle = activePortal
+    ? (activePortal.children.find((c) => c.key === page)?.label || activePortal.label)
+    : 'داشبورد'
 
-  const navigate = (key) => {
-    onNavigate(key)
+  const navigatePortal = (portalId) => {
+    const p = getPortal(portalId)
+    const defaultPage = p?.defaultPage || portalId
+    onNavigate(portalId, defaultPage)
+    setMenuOpen(false)
+  }
+
+  const navigateSub = (portalId, pageKey) => {
+    onNavigate(portalId, pageKey)
     setMenuOpen(false)
   }
 
@@ -63,7 +58,7 @@ export default function Layout({ current, onNavigate, children }) {
   }, [])
 
   return (
-    <div className={`layout ${menuOpen ? 'menu-open' : ''}`}>
+    <div className={`layout portal-layout ${menuOpen ? 'menu-open' : ''}`}>
       <button
         type="button"
         className="sidebar-backdrop"
@@ -71,7 +66,7 @@ export default function Layout({ current, onNavigate, children }) {
         tabIndex={menuOpen ? 0 : -1}
         onClick={() => setMenuOpen(false)}
       />
-      <aside className="sidebar" aria-label="منوی اصلی">
+      <aside className="sidebar" aria-label="پورتال‌ها">
         <div className="brand">
           <span className="brand-logo">◆</span>
           <span className="brand-name">پنل مدیریت</span>
@@ -84,38 +79,64 @@ export default function Layout({ current, onNavigate, children }) {
             ×
           </button>
         </div>
-        <nav className="nav" aria-label="صفحات">
-          {navItems.map((item) => (
+
+        <nav className="portal-nav" aria-label="بخش‌های اصلی">
+          {visiblePortals.map((p) => (
             <button
-              key={item.key}
+              key={p.id}
               type="button"
-              className={`nav-item ${current === item.key ? 'active' : ''}`}
-              onClick={() => navigate(item.key)}
+              className={`portal-nav-item ${portal === p.id ? 'active' : ''}`}
+              onClick={() => navigatePortal(p.id)}
             >
-              <span className="nav-icon">{item.icon}</span>
-              <span>{item.label}</span>
+              <span className="portal-nav-icon">{p.icon}</span>
+              <span className="portal-nav-label">{p.label}</span>
             </button>
           ))}
         </nav>
-        <div className="sidebar-footer">نسخه ۱.۱.۰</div>
+
+        {activePortal && !isMobile && (
+          <nav className="portal-sidebar-sub" aria-label="زیرمنو">
+            {(activePortal.children || [])
+              .filter((c) => canSeeNavItem(user, c))
+              .map((item) => (
+                <button
+                  key={item.key}
+                  type="button"
+                  className={`nav-item ${page === item.key ? 'active' : ''}`}
+                  onClick={() => navigateSub(portal, item.key)}
+                >
+                  <span className="nav-icon">{item.icon}</span>
+                  <span>{item.label}</span>
+                </button>
+              ))}
+          </nav>
+        )}
+
+        <div className="sidebar-footer">نسخه ۲.۰</div>
       </aside>
+
       <div className="main">
         <header className="topbar">
           <div className="topbar-start">
             {isCompactNav && (
-            <button
-              type="button"
-              className="menu-toggle"
-              aria-label={menuOpen ? 'بستن منو' : 'باز کردن منو'}
-              aria-expanded={menuOpen}
-              onClick={() => setMenuOpen((open) => !open)}
-            >
-              <span />
-              <span />
-              <span />
-            </button>
+              <button
+                type="button"
+                className="menu-toggle"
+                aria-label={menuOpen ? 'بستن منو' : 'باز کردن منو'}
+                aria-expanded={menuOpen}
+                onClick={() => setMenuOpen((open) => !open)}
+              >
+                <span />
+                <span />
+                <span />
+              </button>
             )}
-            <h2 className="page-title">{pageTitle}</h2>
+            <div className="topbar-titles">
+              {activePortal && (
+                <span className="topbar-portal muted">{activePortal.icon} {activePortal.label}</span>
+              )}
+              <h2 className="page-title">{pageTitle}</h2>
+            </div>
           </div>
           <div className="user-box">
             <div className="user-info">
@@ -130,13 +151,20 @@ export default function Layout({ current, onNavigate, children }) {
             </button>
           </div>
         </header>
+
+        {isMobile && portal && (
+          <PortalNav user={user} portalId={portal} currentPage={page} onNavigate={navigateSub} />
+        )}
+
         <main className="content">{children}</main>
       </div>
+
       {isMobile && (
         <MobileBottomNav
           user={user}
-          current={current}
-          onNavigate={navigate}
+          portals={visiblePortals}
+          currentPortal={portal}
+          onNavigate={navigatePortal}
           onOpenMenu={() => setMenuOpen(true)}
         />
       )}

@@ -12,6 +12,13 @@
 from django.contrib.auth.models import Group
 
 ADMIN = "admin"
+CEO = "ceo"
+CO_CEO = "co_ceo"
+BRANCH_SUPERVISOR = "branch_supervisor"
+ACCOUNTING_FINANCE = "accounting_finance"
+SALES_EXPERT = "sales_expert"
+FACTORY_SUPERVISOR = "factory_supervisor"
+FREIGHT_SUPERVISOR = "freight_supervisor"
 ACCOUNTANT = "accountant"
 SALES_MANAGER = "sales_manager"
 OPERATOR = "operator"
@@ -24,6 +31,13 @@ ROLES = [ADMIN, PENDING, *LEGACY_ROLES]
 
 ROLE_LABELS = {
     ADMIN: "مدیر سیستم",
+    CEO: "مدیرعامل (CEO)",
+    CO_CEO: "معاون مدیرعامل",
+    BRANCH_SUPERVISOR: "سرپرست شعبه",
+    ACCOUNTING_FINANCE: "اداری",
+    SALES_EXPERT: "کارشناس فروش",
+    FACTORY_SUPERVISOR: "سرپرست کارخانه",
+    FREIGHT_SUPERVISOR: "سرپرست باربری",
     ACCOUNTANT: "حسابدار",
     SALES_MANAGER: "مدیر فروش",
     OPERATOR: "فروشنده",
@@ -31,7 +45,14 @@ ROLE_LABELS = {
 }
 
 ROLE_DESCRIPTIONS = {
-    ADMIN: "دسترسی کامل — کاربران، لاگ‌ها، حضور و همه ماژول‌ها",
+    ADMIN: "مدیر سیستم — دسترسی کامل",
+    CEO: "مدیرعامل — دسترسی کامل",
+    CO_CEO: "معاون مدیرعامل — حسابداری و گزارش (قابل تنظیم)",
+    BRANCH_SUPERVISOR: "سرپرست شعبه — فروشگاه کمرد/پاسداران",
+    ACCOUNTING_FINANCE: "اداری — تایید و ارسال به کارخانه",
+    SALES_EXPERT: "کارشناس فروش — ثبت سفارش",
+    FACTORY_SUPERVISOR: "سرپرست کارخانه — ساخت سفارش",
+    FREIGHT_SUPERVISOR: "سرپرست باربری — اطلاعات مشتری بدون مبلغ",
     ACCOUNTANT: "حسابدار (نقش سفارشی)",
     SALES_MANAGER: "مدیر فروش (نقش سفارشی)",
     OPERATOR: "فروشنده (نقش سفارشی)",

@@ -2,8 +2,10 @@
 
 from datetime import datetime
 
-from django.db.models import Q
+from django.db.models import F, Q
 from django.utils import timezone
+
+from backend.models import Sale
 
 
 def parse_date(value):
@@ -59,6 +61,21 @@ def apply_sales_filters(qs, params):
     branch = (params.get("branch") or "").strip()
     if branch:
         qs = qs.filter(branch=branch)
+
+    if params.get("has_balance") == "1":
+        qs = qs.filter(final_amount__gt=F("paid_amount")).exclude(
+            order_status=Sale.ORDER_STATUS_CANCELLED
+        )
+
+    order_kind = (params.get("order_kind") or "").strip()
+    if order_kind:
+        qs = qs.filter(order_kind=order_kind)
+
+    order_status = (params.get("order_status") or "").strip()
+    if order_status:
+        qs = qs.filter(order_status=order_status)
+    elif params.get("exclude_cancelled") == "1":
+        qs = qs.exclude(order_status=Sale.ORDER_STATUS_CANCELLED)
 
     include_deleted = params.get("include_deleted") == "1"
     if include_deleted and hasattr(qs.model, "all_objects"):

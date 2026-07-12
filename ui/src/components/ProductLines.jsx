@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 import { productsApi } from '../api/client'
-import MoneyInput from './MoneyInput'
 import { Button, Field, Modal } from './ui'
 import { formatMoney } from '../utils/format'
 
@@ -8,10 +7,16 @@ const EMPTY_LINE = {
   product_id: '',
   variant_id: '',
   product_name: '',
+  product_model: '',
+  fabric: '',
   color_name: '',
   color_hex: '',
   quantity: 1,
   unit_price: '',
+}
+
+function catalogPrice(product) {
+  return Number(product?.default_price || product?.display_price || 0)
 }
 
 export default function ProductLines({ lines, onChange }) {
@@ -71,10 +76,8 @@ export default function ProductLines({ lines, onChange }) {
   const confirmPick = () => {
     if (!selectedProduct) return
     const variant = selectedVariant || selectedProduct.variants?.[0]
-    const displayName = variant
-      ? `${selectedProduct.name} — ${variant.color_name}`
-      : selectedProduct.name
-    const price = variant ? variant.price : selectedProduct.display_price
+    const price = catalogPrice(selectedProduct)
+    if (price <= 0) return
 
     const nextLines = [...lines]
     if (nextLines.length <= activeLineIdx) {
@@ -84,15 +87,19 @@ export default function ProductLines({ lines, onChange }) {
       ...nextLines[activeLineIdx],
       product_id: selectedProduct.id,
       variant_id: variant?.id || '',
-      product_name: displayName,
+      product_name: selectedProduct.name,
+      product_model: selectedProduct.product_model || '',
+      fabric: selectedProduct.fabric || '',
       color_name: variant?.color_name || '',
       color_hex: variant?.color_hex || '',
-      unit_price: String(price ?? ''),
+      unit_price: String(price),
       quantity: nextLines[activeLineIdx]?.quantity || 1,
     }
     onChange(nextLines)
     setPickerOpen(false)
   }
+
+  const pickerPrice = selectedProduct ? catalogPrice(selectedProduct) : 0
 
   const total = lines.reduce((s, l) => s + Number(l.unit_price || 0) * Number(l.quantity || 1), 0)
 
@@ -112,25 +119,32 @@ export default function ProductLines({ lines, onChange }) {
             )}
           </div>
           <div className="sale-line-body">
-            <Field label="محصول">
-              <div className="product-pick-row">
-                <input
-                  value={line.product_name}
-                  onChange={(e) => updateLine(idx, { product_name: e.target.value, product_id: '', variant_id: '' })}
-                  placeholder="انتخاب یا تایپ دستی…"
-                  required
-                />
-                <Button type="button" variant="ghost" onClick={() => openPicker(idx)}>انتخاب</Button>
+            {line.product_id ? (
+              <div className="sale-line-product-readonly">
+                <div className="sale-line-product-name">
+                  <strong>{line.product_name}</strong>
+                  {line.color_name && <span className="muted"> — {line.color_name}</span>}
+                </div>
+                <div className="sale-line-meta-grid">
+                  {line.product_model && <span><em className="muted">مدل:</em> {line.product_model}</span>}
+                  {line.fabric && <span><em className="muted">پارچه:</em> {line.fabric}</span>}
+                  {line.unit_price && (
+                    <span><em className="muted">قیمت واحد:</em> {formatMoney(line.unit_price)}</span>
+                  )}
+                </div>
+                <Button type="button" variant="ghost" onClick={() => openPicker(idx)}>تغییر محصول</Button>
               </div>
+            ) : (
+              <Field label="محصول">
+                <Button type="button" onClick={() => openPicker(idx)}>انتخاب از کاتالوگ</Button>
+              </Field>
+            )}
+            <Field label="تعداد">
+              <input className="ltr" type="number" min="1" value={line.quantity} onChange={(e) => updateLine(idx, { quantity: e.target.value })} />
             </Field>
-            <div className="form-grid-2">
-              <Field label="تعداد">
-                <input className="ltr" type="number" min="1" value={line.quantity} onChange={(e) => updateLine(idx, { quantity: e.target.value })} />
-              </Field>
-              <Field label="قیمت واحد">
-                <MoneyInput min="0" value={line.unit_price} onChange={(e) => updateLine(idx, { unit_price: e.target.value })} required />
-              </Field>
-            </div>
+            {line.product_id && line.unit_price && (
+              <p className="muted small">جمع ردیف: {formatMoney(Number(line.unit_price) * Number(line.quantity || 1))}</p>
+            )}
           </div>
         </div>
       ))}
@@ -178,11 +192,13 @@ export default function ProductLines({ lines, onChange }) {
                   }}
                 >
                   <strong>{p.name}</strong>
-                  <span className="muted">{formatMoney(p.display_price)}</span>
+                  <span className="muted">{formatMoney(catalogPrice(p))}</span>
+                  {p.product_model && <span className="muted small">مدل: {p.product_model}</span>}
+                  {p.fabric && <span className="muted small">پارچه: {p.fabric}</span>}
                   {p.variants?.length > 0 && (
                     <div className="product-color-swatches small">
                       {p.variants.map((v) => (
-                        <span key={v.id} className="color-swatch" style={{ background: v.color_hex }} />
+                        <span key={v.id} className="color-swatch" style={{ background: v.color_hex }} title={v.color_name} />
                       ))}
                     </div>
                   )}
@@ -193,7 +209,11 @@ export default function ProductLines({ lines, onChange }) {
 
           {selectedProduct && (
             <div className="variant-picker-panel">
-              <h4>{selectedProduct.name} — انتخاب رنگ</h4>
+              <h4>{selectedProduct.name}</h4>
+              <div className="sale-line-meta-grid">
+                {selectedProduct.product_model && <span><em className="muted">مدل:</em> {selectedProduct.product_model}</span>}
+                {selectedProduct.fabric && <span><em className="muted">پارچه:</em> {selectedProduct.fabric}</span>}
+              </div>
               {selectedProduct.variants?.length ? (
                 <div className="variant-picker-options">
                   {selectedProduct.variants.map((v) => (
@@ -205,19 +225,27 @@ export default function ProductLines({ lines, onChange }) {
                     >
                       <span className="color-swatch" style={{ background: v.color_hex }} />
                       <span>{v.color_name}</span>
-                      <strong>{formatMoney(v.price)}</strong>
                     </button>
                   ))}
                 </div>
+              ) : null}
+              {pickerPrice > 0 ? (
+                <p className="muted">قیمت: <strong>{formatMoney(pickerPrice)}</strong></p>
               ) : (
-                <p className="muted">این محصول رنگ‌بندی ندارد — قیمت: {formatMoney(selectedProduct.display_price)}</p>
+                <p className="alert-error" style={{ marginTop: 8 }}>این محصول قیمت ندارد — ابتدا در بخش محصولات قیمت را تنظیم کنید.</p>
               )}
             </div>
           )}
 
           <div className="form-actions">
             <Button type="button" variant="ghost" onClick={() => setPickerOpen(false)}>انصراف</Button>
-            <Button type="button" onClick={confirmPick} disabled={!selectedProduct}>افزودن به فاکتور</Button>
+            <Button
+              type="button"
+              onClick={confirmPick}
+              disabled={!selectedProduct || pickerPrice <= 0}
+            >
+              افزودن به فاکتور
+            </Button>
           </div>
         </div>
       </Modal>

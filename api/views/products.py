@@ -17,6 +17,7 @@ from logic.products import (
     update_category,
     update_product,
 )
+from logic.analytics import best_selling_products
 
 
 def _can_view(user):
@@ -170,9 +171,17 @@ def product_quick_create(request):
         product.default_price = price
         product.is_active = True
         product.save()
-    if not product.variants.exists() and price:
-        from backend.models import ProductVariant
-
-        ProductVariant.objects.create(product=product, color_name="پیش‌فرض", color_hex="#94a3b8", price=price)
     log_action(request.user, "create", f"محصول: {name}", entity_type="Product", entity_id=product.id)
     return success(product_to_dict(product), status=201 if created else 200)
+
+
+@api_view("GET")
+def product_top_selling(request):
+    if not _can_view(request.user):
+        return fail("Permission denied", status=403)
+    try:
+        limit = min(max(int(request.GET.get("limit") or 20), 1), 50)
+    except (TypeError, ValueError):
+        limit = 20
+    results = best_selling_products(limit=limit)
+    return success({"results": results, "count": len(results)})

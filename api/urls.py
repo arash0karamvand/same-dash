@@ -8,10 +8,13 @@ from api.views import (
     audit_logs,
     auth,
     birthday_sms,
+    config,
     customers,
     dashboard,
+    factory_orders,
     installments,
     loyalty_levels,
+    office_orders,
     org_chart,
     products,
     reminder_sms,
@@ -45,6 +48,13 @@ urlpatterns = [
     ),
     path("auth/org-ranks/", role_definitions.org_rank_list, name="auth-org-ranks"),
     path("auth/org-ranks/<int:pk>/", role_definitions.org_rank_detail, name="auth-org-rank-detail"),
+    path("config/", config.app_config, name="app-config"),
+    path("config/branches/", config.branch_list, name="config-branches"),
+    path("config/branches/<int:pk>/", config.branch_detail, name="config-branch-detail"),
+    path("config/lookups/", config.lookup_list, name="config-lookups"),
+    path("config/lookups/<int:pk>/", config.lookup_detail, name="config-lookup-detail"),
+    path("config/menu-sections/", config.menu_section_list, name="config-menu-sections"),
+    path("config/menu-sections/<int:pk>/", config.menu_section_detail, name="config-menu-section-detail"),
     path("org-chart/", org_chart.org_chart, name="org-chart"),
 
     # --- Dashboard ---
@@ -78,15 +88,46 @@ urlpatterns = [
     # --- Sales ---
     path("sales/reports/daily/", sales.sales_daily_report, name="sales-daily-report"),
     path("sales/reports/monthly/", sales.sales_monthly_report, name="sales-monthly-report"),
+    path("sales/reports/daily-breakdown/", sales.sales_daily_breakdown, name="sales-daily-breakdown"),
     path("sales/reports/yearly/", sales.sales_yearly_report, name="sales-yearly-report"),
     path("sales/employee-ranking/", sales.employee_ranking, name="sales-employee-ranking"),
     path("sales/", sales.sale_list, name="sale-list"),
-    path(
-        "sales/<int:pk>/record-payment/",
+    path("sales/<int:pk>/approve-branch/", sales.sale_approve_branch, name="sale-approve-branch"),
+    path("sales/<int:pk>/approve-accounting/", sales.sale_approve_accounting, name="sale-approve-accounting"),
+    path("sales/<int:pk>/factory-receive/", sales.sale_factory_receive, name="sale-factory-receive"),
+    path("sales/<int:pk>/factory-complete/", sales.sale_factory_complete, name="sale-factory-complete"),
+    path("sales/<int:pk>/freight-receive/", sales.sale_freight_receive, name="sale-freight-receive"),
+    path("sales/<int:pk>/freight-complete/", sales.sale_freight_complete, name="sale-freight-complete"),
+    path("sales/<int:pk>/record-payment/",
         sales.sale_record_payment,
         name="sale-record-payment",
     ),
+    path("sales/<int:pk>/confirm/", sales.sale_confirm, name="sale-confirm"),
+    path("sales/<int:pk>/cancel/", sales.sale_cancel, name="sale-cancel"),
     path("sales/<int:pk>/", sales.sale_detail, name="sale-detail"),
+
+    # --- Office queue (جدول جدا) ---
+    path("office/orders/", office_orders.office_order_list, name="office-order-list"),
+    path("office/orders/<int:pk>/", office_orders.office_order_detail, name="office-order-detail"),
+    path("office/orders/<int:pk>/approve/", office_orders.office_order_approve, name="office-order-approve"),
+    path("office/orders/<int:pk>/reject/", office_orders.office_order_reject, name="office-order-reject"),
+    path("office/orders/<int:pk>/rollback/", office_orders.office_order_rollback, name="office-order-rollback"),
+
+    # --- Factory queue (جدول جدا) ---
+    path("factory/orders/", factory_orders.factory_order_list, name="factory-order-list"),
+    path("factory/orders/<int:pk>/", factory_orders.factory_order_detail, name="factory-order-detail"),
+    path("factory/orders/<int:pk>/receive/", factory_orders.factory_order_receive, name="factory-order-receive"),
+    path("factory/orders/<int:pk>/complete/", factory_orders.factory_order_complete, name="factory-order-complete"),
+    path(
+        "factory/orders/<int:pk>/freight-receive/",
+        factory_orders.factory_order_freight_receive,
+        name="factory-order-freight-receive",
+    ),
+    path(
+        "factory/orders/<int:pk>/freight-complete/",
+        factory_orders.factory_order_freight_complete,
+        name="factory-order-freight-complete",
+    ),
 
     # --- Installments & Checks ---
     path("installments/", installments.installment_list, name="installment-list"),
@@ -98,6 +139,7 @@ urlpatterns = [
     # --- Products ---
     path("products/categories/", products.category_list, name="product-category-list"),
     path("products/categories/<int:pk>/", products.category_detail, name="product-category-detail"),
+    path("products/top-selling/", products.product_top_selling, name="product-top-selling"),
     path("products/", products.product_list, name="product-list"),
     path("products/<int:pk>/", products.product_detail, name="product-detail"),
     path("audit-logs/", audit_logs.audit_log_list, name="audit-log-list"),

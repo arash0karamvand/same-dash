@@ -1,14 +1,21 @@
-// ریشه اپ: مدیریت احراز هویت و روتینگ ساده مبتنی بر state
-// (بدون react-router تا هیچ پکیج جدیدی لازم نباشد).
+// ریشه اپ — چهار پورتال: مدیران / فروشگاه / اداری / حسابداری
 
 import { useEffect, useState } from 'react'
 import { AuthProvider, useAuth } from './context/AuthContext'
+import { ConfigProvider } from './context/ConfigContext'
+import { ConfirmProvider } from './context/ConfirmContext'
 import Layout from './components/Layout'
 import Login from './pages/Login'
+import { canAccessRoute, getFirstAccessibleRoute } from './utils/permissions'
+import { navigateToRoute, parseRoute, resolvePage } from './utils/routing'
 import Dashboard from './pages/Dashboard'
 import Customers from './pages/Customers'
 import Products from './pages/Products'
-import Sales from './pages/Sales'
+import Shop from './pages/Shop'
+import Office from './pages/Office'
+import Factory from './pages/Factory'
+import FactoryBuilt from './pages/FactoryBuilt'
+import FreightOrders from './pages/FreightOrders'
 import Accounting from './pages/Accounting'
 import Levels from './pages/Levels'
 import Sms from './pages/Sms'
@@ -17,30 +24,38 @@ import Attendance from './pages/Attendance'
 import Checks from './pages/Checks'
 import Logs from './pages/Logs'
 import Sellers from './pages/Sellers'
+import Managers from './pages/Managers'
 import Roles from './pages/Roles'
 import EmployeeRanking from './pages/EmployeeRanking'
 import OrgChart from './pages/OrgChart'
+import Settings from './pages/Settings'
 import './App.css'
 
 const PAGES = {
   dashboard: Dashboard,
+  orders: Shop,
+  shop: Shop,
+  office: Office,
+  factory: Factory,
+  'factory-built': FactoryBuilt,
+  freight: FreightOrders,
   customers: Customers,
   products: Products,
-  sales: Sales,
   accounting: Accounting,
   levels: Levels,
   sms: Sms,
   users: Users,
   roles: Roles,
+  settings: Settings,
   ranking: EmployeeRanking,
   orgchart: OrgChart,
   attendance: Attendance,
   checks: Checks,
   logs: Logs,
   sellers: Sellers,
+  managers: Managers,
 }
 
-// صفحه‌ای که به کاربرِ در انتظار تایید نمایش داده می‌شود (بدون دسترسی داده‌ای).
 function PendingScreen() {
   const { user, logout } = useAuth()
   return (
@@ -50,7 +65,6 @@ function PendingScreen() {
         <h1 style={{ fontSize: 20, marginTop: 12 }}>در انتظار تایید مدیر</h1>
         <p className="muted">
           {user?.full_name} عزیز، حساب شما ساخته شده اما هنوز نقشی به آن اختصاص داده نشده است.
-          پس از تایید مدیر سیستم می‌توانید از پنل استفاده کنید.
         </p>
         <button className="btn btn-ghost" style={{ marginTop: 16 }} onClick={logout}>
           خروج
@@ -62,30 +76,82 @@ function PendingScreen() {
 
 function Shell() {
   const { user, loading } = useAuth()
-  const [page, setPage] = useState('dashboard')
+  const [route, setRoute] = useState(() => {
+    const parsed = parseRoute()
+    return {
+      portal: parsed.portal,
+      page: parsed.portal ? resolvePage(parsed.portal, parsed.page) : 'dashboard',
+    }
+  })
+
+  const setRouteWithUrl = (portal, page) => {
+    navigateToRoute(portal, page, setRoute)
+  }
 
   useEffect(() => {
-    if (user?.role && user.role !== 'pending') setPage('dashboard')
+    const onPop = () => {
+      const parsed = parseRoute()
+      setRoute({
+        portal: parsed.portal,
+        page: parsed.portal ? resolvePage(parsed.portal, parsed.page) : 'dashboard',
+      })
+    }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
+
+  useEffect(() => {
+    if (!user || user.role === 'pending') return
+    const parsed = parseRoute()
+    let { portal, page } = parsed
+    if (!portal) {
+      const first = getFirstAccessibleRoute(user)
+      portal = first.portal
+      page = first.page
+    } else {
+      page = resolvePage(portal, page)
+    }
+    if (!canAccessRoute(user, portal, page)) {
+      const first = getFirstAccessibleRoute(user)
+      setRouteWithUrl(first.portal, first.page)
+      return
+    }
+    if (portal !== route.portal || page !== route.page) {
+      setRouteWithUrl(portal, page)
+    }
   }, [user?.role])
+
+  useEffect(() => {
+    if (!user || user.role === 'pending') return
+    if (!canAccessRoute(user, route.portal, route.page)) {
+      const first = getFirstAccessibleRoute(user)
+      setRouteWithUrl(first.portal, first.page)
+    }
+  }, [route.portal, route.page, user])
 
   if (loading) {
     return <div className="fullscreen-loading">در حال بارگذاری…</div>
   }
 
-  // اگر کاربر وارد نشده باشد، صفحه ورود نمایش داده می‌شود.
-  if (!user) {
-    return <Login />
-  }
+  if (!user) return <Login />
+  if (user.role === 'pending') return <PendingScreen />
 
-  // کاربر بدون نقش معتبر (در انتظار تایید) به پنل دسترسی ندارد.
-  if (user.role === 'pending') {
-    return <PendingScreen />
-  }
+  const PageComponent = PAGES[route.page] || Dashboard
+  const allowed = canAccessRoute(user, route.portal, route.page)
 
-  const PageComponent = PAGES[page] || Dashboard
   return (
-    <Layout current={page} onNavigate={setPage}>
-      <PageComponent />
+    <Layout
+      portal={route.portal}
+      page={route.page}
+      onNavigate={setRouteWithUrl}
+    >
+      {allowed ? (
+        <PageComponent />
+      ) : (
+        <div className="page">
+          <div className="alert-error">دسترسی به این بخش را ندارید.</div>
+        </div>
+      )}
     </Layout>
   )
 }
@@ -93,7 +159,11 @@ function Shell() {
 export default function App() {
   return (
     <AuthProvider>
-      <Shell />
+      <ConfigProvider>
+        <ConfirmProvider>
+          <Shell />
+        </ConfirmProvider>
+      </ConfigProvider>
     </AuthProvider>
   )
 }

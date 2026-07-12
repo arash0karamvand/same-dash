@@ -10,10 +10,21 @@ from backend.models import (
     Customer,
     CustomerLevelHistory,
     LoyaltyLevel,
+    OfficeOrder,
     SMSLog,
 )
+from logic.accounting import delete_accounting_entry
 from logic.levels import find_level_for_amount, recalculate_customer_level
-from logic.sales import delete_sale, record_payment, record_sale
+from logic.order_queues import create_factory_order_from_office, create_office_order_from_sale
+from logic.sale_workflow import (
+    approve_office_order,
+    get_office_workflow_snapshot,
+    recall_factory_order_to_office,
+    receive_factory_order,
+    reject_office_order,
+    rollback_factory_receive,
+)
+from logic.sales import delete_sale, record_payment, record_sale, update_sale
 from logic.sms import (
     is_valid_phone,
     send_sms,
@@ -130,6 +141,111 @@ class SalesLogicTest(TestCase):
     def test_discount_greater_than_amount_rejected(self):
         with self.assertRaises(ValueError):
             record_sale(self.customer, Decimal("1000"), discount=Decimal("2000"))
+
+    def test_delete_sale_soft_deletes_office_and_factory_orders(self):
+        user = User.objects.create_user(username="wfuser", password="secret123")
+        sale = record_sale(self.customer, Decimal("5000000"), payment_status="paid")
+        office = create_office_order_from_sale(sale, user)
+        factory = create_factory_order_from_office(office, user)
+
+        delete_sale(sale)
+        office.refresh_from_db()
+        factory.refresh_from_db()
+        sale.refresh_from_db()
+        self.assertTrue(sale.is_deleted)
+        self.assertTrue(office.is_deleted)
+        self.assertTrue(factory.is_deleted)
+
+    def test_update_sale_syncs_office_order_amounts(self):
+        user = User.objects.create_user(username="wfuser2", password="secret123")
+        sale = record_sale(
+            self.customer,
+            Decimal("5000000"),
+            payment_status="installment",
+            paid_amount=Decimal("2000000"),
+        )
+        office = create_office_order_from_sale(sale, user)
+        update_sale(sale, amount=Decimal("6000000"), paid_amount=Decimal("3000000"))
+        office.refresh_from_db()
+        self.assertEqual(office.final_amount, Decimal("6000000"))
+        self.assertEqual(office.paid_amount, Decimal("3000000"))
+
+    def test_reject_office_order_returns_sale_to_branch_queue(self):
+        user = User.objects.create_user(username="wfuser4", password="secret123")
+        sale = record_sale(self.customer, Decimal("5000000"), payment_status="paid")
+        office = create_office_order_from_sale(sale, user)
+
+        reject_office_order(office, user, reason="اطلاعات ناقص")
+        sale.refresh_from_db()
+        office.refresh_from_db()
+
+        self.assertTrue(office.is_deleted)
+        self.assertEqual(sale.workflow_stage, "pending_branch")
+        self.assertIsNone(sale.transferred_to_office_at)
+        self.assertIn("عدم تایید اداری", sale.description)
+
+        office2 = create_office_order_from_sale(sale, user)
+        self.assertFalse(office2.is_deleted)
+        self.assertEqual(office2.id, office.id)
+        self.assertEqual(office2.status, OfficeOrder.STATUS_PENDING)
+
+    def test_recall_factory_order_to_office(self):
+        user = User.objects.create_user(username="wfuser5", password="secret123")
+        sale = record_sale(self.customer, Decimal("5000000"), payment_status="paid")
+        office = create_office_order_from_sale(sale, user)
+        approve_office_order(office, user)
+
+        office.refresh_from_db()
+        snapshot = get_office_workflow_snapshot(office)
+        self.assertEqual(snapshot["workflow_stage"], "accounting_approved")
+        self.assertTrue(snapshot["can_rollback"])
+        self.assertEqual(snapshot["rollback_action"], "to_office")
+
+        recall_factory_order_to_office(office, user, reason="ارسال اشتباه")
+        office.refresh_from_db()
+        sale.refresh_from_db()
+
+        self.assertEqual(office.status, OfficeOrder.STATUS_PENDING)
+        self.assertIn("برگشت اداری", sale.description)
+
+    def test_rollback_factory_receive(self):
+        user = User.objects.create_user(username="wfuser6", password="secret123")
+        sale = record_sale(self.customer, Decimal("5000000"), payment_status="paid")
+        office = create_office_order_from_sale(sale, user)
+        approve_office_order(office, user)
+        factory = office.factory_order
+        receive_factory_order(factory, user)
+        rollback_factory_receive(factory, user, reason="اشتباه دریافت")
+
+        factory.refresh_from_db()
+        sale.refresh_from_db()
+        self.assertEqual(factory.workflow_stage, factory.WORKFLOW_STAGE_ACCOUNTING_APPROVED)
+        self.assertEqual(sale.workflow_stage, "accounting_approved")
+
+    def test_delete_payment_entry_reverses_sale_paid_amount(self):
+        sale = record_sale(
+            self.customer,
+            Decimal("8000000"),
+            payment_status="installment",
+            paid_amount=Decimal("3000000"),
+        )
+        record_payment(sale, Decimal("2000000"))
+        payment = AccountingEntry.objects.filter(entry_type="payment", sale=sale).order_by("-id").first()
+        delete_accounting_entry(payment)
+        sale.refresh_from_db()
+        self.assertEqual(sale.paid_amount, Decimal("3000000"))
+
+    def test_delete_sale_entry_soft_deletes_invoice_everywhere(self):
+        user = User.objects.create_user(username="wfuser3", password="secret123")
+        sale = record_sale(self.customer, Decimal("5000000"), payment_status="paid")
+        office = create_office_order_from_sale(sale, user)
+        sale_entry = AccountingEntry.objects.get(entry_type="sale", sale=sale)
+        result = delete_accounting_entry(sale_entry)
+        office.refresh_from_db()
+        sale.refresh_from_db()
+        self.assertTrue(result["sale_deleted"])
+        self.assertTrue(sale.is_deleted)
+        self.assertTrue(office.is_deleted)
 
 
 class SmsLogicTest(TestCase):

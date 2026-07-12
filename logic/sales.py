@@ -1,5 +1,6 @@
 """منطق حسابداری فروش، پرداخت بخشی و مطالبات (بستانکاری)."""
 
+from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.db import transaction
@@ -12,10 +13,36 @@ def balance_due(sale):
     return max(Decimal(0), sale.final_amount - sale.paid_amount)
 
 
+def is_pre_invoice_pending(sale):
+    return sale.order_kind == Sale.ORDER_KIND_PRE_INVOICE and sale.order_status == Sale.ORDER_STATUS_PENDING
+
+
+def is_order_cancelled(sale):
+    return sale.order_status == Sale.ORDER_STATUS_CANCELLED
+
+
+def normalize_order_kind(kind):
+    kind = (kind or Sale.ORDER_KIND_NORMAL).strip()
+    valid = {Sale.ORDER_KIND_NORMAL, Sale.ORDER_KIND_PRE_INVOICE, Sale.ORDER_KIND_DEPOSIT}
+    if kind not in valid:
+        return Sale.ORDER_KIND_NORMAL
+    return kind
+
+
 def normalize_payment_status(status):
     if status == "partial":
         return "installment"
     return status
+
+
+VALID_PAYMENT_METHODS = frozenset({"cash", "card", "check"})
+
+
+def normalize_payment_method(method, default="cash"):
+    value = (method or default).strip()
+    if value not in VALID_PAYMENT_METHODS:
+        raise ValueError("روش پرداخت باید نقدی، کارت‌خوان یا چک باشد.")
+    return value
 
 
 def resolve_discount_amount(amount, discount_type, discount_value, customer=None):
@@ -48,20 +75,55 @@ def resolve_discount_amount(amount, discount_type, discount_value, customer=None
     return discount
 
 
-def _resolve_paid_amount(payment_status, final_amount, paid_amount):
+def _resolve_paid_amount(payment_status, final_amount, paid_amount, *, allow_partial=True):
     paid = Decimal(paid_amount or 0)
     if payment_status in ("partial", "installment"):
         payment_status = "installment"
-        if paid <= 0:
-            raise ValueError("برای فروش قسطی، مبلغ پرداخت‌شده اولیه باید بزرگ‌تر از صفر باشد.")
+        if paid < 0:
+            raise ValueError("مبلغ پرداخت‌شده نمی‌تواند منفی باشد.")
+        if allow_partial and paid >= final_amount:
+            return final_amount, "paid"
         if paid >= final_amount:
             raise ValueError("مبلغ پرداخت‌شده باید کمتر از مبلغ نهایی باشد.")
-        return paid, "installment"
+        return paid, "installment" if paid > 0 else "unpaid"
     if payment_status == "paid":
         return final_amount, "paid"
     if payment_status == "unpaid":
+        if paid > 0 and allow_partial:
+            return paid, "installment" if paid < final_amount else "paid"
         return Decimal(0), "unpaid"
     raise ValueError("وضعیت پرداخت نامعتبر است.")
+
+
+def _payment_status_from_paid(final_amount, paid_amount):
+    paid = Decimal(paid_amount or 0)
+    if paid >= final_amount:
+        return "paid"
+    if paid > 0:
+        return "installment"
+    return "unpaid"
+
+
+def _record_deposit_payment(sale, amount, description="", recorded_by=None):
+    """ثبت دریافت بیعانه — بدون سند درآمد/مطالبات برای پیش‌فاکتور در انتظار."""
+    amount = Decimal(amount)
+    if amount <= 0:
+        return
+    AccountingEntry.objects.create(
+        entry_type="payment",
+        credit=amount,
+        amount=amount,
+        description=description or f"بیعانه فاکتور {sale.invoice_number or sale.pk}",
+        sale=sale,
+        is_approved=True,
+    )
+    _apply_purchase_to_customer(
+        sale.customer,
+        amount,
+        sale.sold_at,
+        reason="دریافت بیعانه",
+        user=recorded_by,
+    )
 
 
 def _apply_wallet_discount(customer, amount, sale, user=None):
@@ -125,12 +187,17 @@ def _refresh_customer_last_purchase(customer, exclude_sale_id=None):
 
 def _create_sale_accounting(sale, outstanding):
     """سند درآمد (بستانکار) + در صورت مانده، سند مطالبات (بدهکار مشتری)."""
+    if is_pre_invoice_pending(sale):
+        return
+    if AccountingEntry.objects.filter(sale=sale, entry_type="sale").exists():
+        return
     AccountingEntry.objects.create(
         entry_type="sale",
         credit=sale.final_amount,
         amount=sale.final_amount,
         description=f"درآمد فروش فاکتور {sale.invoice_number or sale.pk}",
         sale=sale,
+        is_approved=True,
     )
     if outstanding > 0:
         AccountingEntry.objects.create(
@@ -139,11 +206,25 @@ def _create_sale_accounting(sale, outstanding):
             amount=outstanding,
             description=f"مطالبات مشتری فاکتور {sale.invoice_number or sale.pk}",
             sale=sale,
+            is_approved=True,
+        )
+
+
+def _create_pre_invoice_deposit_accounting(sale, paid_amount, recorded_by=None):
+    """پیش‌فاکتور: فقط ثبت بیعانه دریافتی."""
+    if paid_amount > 0:
+        _record_deposit_payment(
+            sale,
+            paid_amount,
+            description=f"بیعانه پیش‌فاکتور {sale.invoice_number or sale.pk}",
+            recorded_by=recorded_by,
         )
 
 
 def _sync_receivable_entry(sale):
     """به‌روزرسانی سند مطالبات بر اساس مانده فعلی."""
+    if is_pre_invoice_pending(sale) or is_order_cancelled(sale):
+        return
     outstanding = balance_due(sale)
     receivable = AccountingEntry.objects.filter(sale=sale, entry_type="receivable").first()
     if outstanding <= 0:
@@ -161,7 +242,29 @@ def _sync_receivable_entry(sale):
             amount=outstanding,
             description=f"مطالبات مشتری فاکتور {sale.invoice_number or sale.pk}",
             sale=sale,
+            is_approved=True,
         )
+
+
+def _create_deposit_installment(sale, delivery_date, payment_method="cash"):
+    """قسط تسویه یک روز قبل از تحویل — برای بیعانیه."""
+    balance = balance_due(sale)
+    if balance <= 0 or not delivery_date:
+        return
+    due = delivery_date - timedelta(days=1)
+    from logic.installments import create_installments
+
+    create_installments(
+        sale,
+        [
+            {
+                "amount": int(balance),
+                "due_date": due.isoformat(),
+                "payment_method": payment_method,
+                "notes": "تسویه قبل از تحویل",
+            }
+        ],
+    )
 
 
 @transaction.atomic
@@ -182,26 +285,73 @@ def record_sale(
     recorded_by=None,
     branch="",
     seller=None,
+    order_kind=Sale.ORDER_KIND_NORMAL,
+    delivery_date=None,
 ):
+    resolved_items = None
     if line_items:
+        from logic.products import resolve_line_item_from_catalog
+
+        resolved_items = []
         amount = Decimal(0)
         for item in line_items:
-            qty = int(item.get("quantity") or 1)
-            price = Decimal(str(item.get("unit_price") or 0))
-            amount += price * qty
+            resolved = resolve_line_item_from_catalog(item)
+            if not resolved:
+                raise ValueError("هر ردیف فروش باید از کاتالوگ محصولات انتخاب شود.")
+            resolved_items.append(resolved)
+            amount += Decimal(resolved["unit_price"]) * resolved["quantity"]
     amount = Decimal(amount)
     discount_type = (discount_type or "amount").strip()
     if discount_value is None:
         discount_value = discount
     discount = resolve_discount_amount(amount, discount_type, discount_value, customer=customer)
+    payment_method = normalize_payment_method(payment_method)
     if amount <= 0:
         raise ValueError("مبلغ فروش باید مثبت باشد.")
 
     final_amount = amount - discount
-    payment_status = normalize_payment_status(payment_status)
-    resolved_paid, resolved_status = _resolve_paid_amount(
-        payment_status, final_amount, paid_amount if paid_amount is not None else (final_amount if payment_status == "paid" else 0)
-    )
+    order_kind = normalize_order_kind(order_kind)
+
+    if order_kind == Sale.ORDER_KIND_DEPOSIT and not delivery_date:
+        raise ValueError("برای بیعانیه، تاریخ تحویل الزامی است.")
+
+    if order_kind == Sale.ORDER_KIND_PRE_INVOICE:
+        payment_status = normalize_payment_status(payment_status or "unpaid")
+        resolved_paid, resolved_status = _resolve_paid_amount(
+            payment_status,
+            final_amount,
+            paid_amount if paid_amount is not None else 0,
+            allow_partial=True,
+        )
+        order_status = Sale.ORDER_STATUS_PENDING
+    elif order_kind == Sale.ORDER_KIND_DEPOSIT:
+        initial_paid = Decimal(paid_amount or 0)
+        if initial_paid < 0:
+            raise ValueError("مبلغ بیعانه نمی‌تواند منفی باشد.")
+        if initial_paid > final_amount:
+            raise ValueError("مبلغ بیعانه نمی‌تواند از مبلغ نهایی بیشتر باشد.")
+        resolved_paid = initial_paid
+        resolved_status = _payment_status_from_paid(final_amount, resolved_paid)
+        order_status = Sale.ORDER_STATUS_PENDING
+    else:
+        payment_status = normalize_payment_status(payment_status)
+        resolved_paid, resolved_status = _resolve_paid_amount(
+            payment_status,
+            final_amount,
+            paid_amount if paid_amount is not None else (final_amount if payment_status == "paid" else 0),
+            allow_partial=False,
+        )
+        order_status = Sale.ORDER_STATUS_CONFIRMED
+
+    from logic.sale_workflow import STAGE_PENDING_BRANCH, uses_workflow_on_create
+
+    workflow_stage = Sale.WORKFLOW_STAGE_COMPLETED
+    defer_accounting = False
+    if recorded_by and uses_workflow_on_create(recorded_by):
+        workflow_stage = STAGE_PENDING_BRANCH
+        order_status = Sale.ORDER_STATUS_PENDING
+        defer_accounting = True
+
     outstanding = final_amount - resolved_paid
 
     sale_kwargs = {
@@ -219,6 +369,13 @@ def record_sale(
         "recorded_by": recorded_by,
         "branch": branch or "",
         "seller": seller,
+        "order_kind": order_kind,
+        "order_status": order_status,
+        "workflow_stage": workflow_stage,
+        "delivery_date": delivery_date,
+        "office_released_at": None,
+        "factory_released_at": None,
+        "transferred_to_office_at": None,
     }
     if sold_at is not None:
         sale_kwargs["sold_at"] = sold_at
@@ -228,27 +385,22 @@ def record_sale(
         customer.refresh_from_db(fields=["wallet_balance"])
         _apply_wallet_discount(customer, discount, sale, user=recorded_by)
 
-    if line_items:
+    if resolved_items:
         from backend.models import SaleLineItem
 
-        for item in line_items:
-            from logic.products import resolve_line_item_from_catalog
-
-            resolved = resolve_line_item_from_catalog(item)
-            if not resolved:
-                continue
+        for resolved in resolved_items:
             qty = resolved["quantity"]
             price = resolved["unit_price"]
             product = resolved["product"]
             variant = resolved["variant"]
             name = resolved["product_name"]
-            if resolved["color_name"] and resolved["color_name"] not in name:
-                name = f"{name} — {resolved['color_name']}"
             SaleLineItem.objects.create(
                 sale=sale,
                 product=product,
                 variant=variant,
                 product_name=name,
+                product_model=resolved["product_model"],
+                fabric=resolved["fabric"],
                 color_name=resolved["color_name"],
                 color_hex=resolved["color_hex"],
                 quantity=qty,
@@ -256,15 +408,32 @@ def record_sale(
                 line_total=price * qty,
             )
 
-    _create_sale_accounting(sale, outstanding)
-    _apply_purchase_to_customer(
-        customer,
-        resolved_paid,
-        sale.sold_at,
-        reason="ثبت فروش (مبلغ پرداخت‌شده)",
-        user=recorded_by,
-    )
-    if installments:
+    if order_kind == Sale.ORDER_KIND_PRE_INVOICE:
+        if not defer_accounting:
+            _create_pre_invoice_deposit_accounting(sale, resolved_paid, recorded_by=recorded_by)
+    elif order_kind == Sale.ORDER_KIND_DEPOSIT:
+        if not defer_accounting:
+            _create_sale_accounting(sale, outstanding)
+            if resolved_paid > 0:
+                _record_deposit_payment(
+                    sale,
+                    resolved_paid,
+                    description=f"بیعانه — فاکتور {sale.invoice_number or sale.pk}",
+                    recorded_by=recorded_by,
+                )
+    elif not defer_accounting:
+        _create_sale_accounting(sale, outstanding)
+        _apply_purchase_to_customer(
+            customer,
+            resolved_paid,
+            sale.sold_at,
+            reason="ثبت فروش (مبلغ پرداخت‌شده)",
+            user=recorded_by,
+        )
+
+    if order_kind == Sale.ORDER_KIND_DEPOSIT:
+        _create_deposit_installment(sale, delivery_date, payment_method=payment_method)
+    elif installments:
         from logic.installments import create_installments
 
         create_installments(sale, installments)
@@ -298,6 +467,9 @@ def delete_sale(sale, user=None):
         send_level_up_sms=False,
     )
 
+    from logic.order_queues import soft_delete_workflow_orders_for_sale
+
+    soft_delete_workflow_orders_for_sale(sale)
     sale.soft_delete()
     return deleted_entries
 
@@ -305,6 +477,9 @@ def delete_sale(sale, user=None):
 @transaction.atomic
 def record_payment(sale, amount, description="", recorded_by=None):
     """ثبت پرداخت/قسط جدید روی فروش — کاهش مطالبات و به‌روزرسانی سطح مشتری."""
+    if is_order_cancelled(sale):
+        raise ValueError("این سفارش لغو شده و قابل پرداخت نیست.")
+
     amount = Decimal(amount)
     if amount <= 0:
         raise ValueError("مبلغ پرداخت باید مثبت باشد.")
@@ -319,12 +494,22 @@ def record_payment(sale, amount, description="", recorded_by=None):
     sale.payment_status = "paid" if sale.paid_amount >= sale.final_amount else "installment"
     sale.save(update_fields=["paid_amount", "payment_status"])
 
+    if is_pre_invoice_pending(sale):
+        _record_deposit_payment(
+            sale,
+            amount,
+            description=description or f"بیعانه پیش‌فاکتور {sale.invoice_number or sale.pk}",
+            recorded_by=recorded_by,
+        )
+        return sale
+
     AccountingEntry.objects.create(
         entry_type="payment",
         credit=amount,
         amount=amount,
         description=description or f"دریافت پرداخت فاکتور {sale.invoice_number or sale.pk}",
         sale=sale,
+        is_approved=True,
     )
     _sync_receivable_entry(sale)
     _apply_purchase_to_customer(
@@ -334,7 +519,149 @@ def record_payment(sale, amount, description="", recorded_by=None):
         reason="دریافت پرداخت فاکتور",
         user=recorded_by,
     )
+
+    from logic.order_queues import sync_workflow_orders_from_sale
+
+    sync_workflow_orders_from_sale(sale)
     return sale
+
+
+@transaction.atomic
+def reverse_payment(sale, amount, user=None):
+    """برگرداندن یک پرداخت ثبت‌شده — معکوس record_payment."""
+    if is_order_cancelled(sale):
+        raise ValueError("این سفارش لغو شده است.")
+
+    amount = Decimal(amount)
+    if amount <= 0:
+        raise ValueError("مبلغ بازگشت باید مثبت باشد.")
+    if sale.paid_amount < amount:
+        raise ValueError("مبلغ بازگشت بیش از پرداخت‌شده فاکتور است.")
+
+    sale.paid_amount -= amount
+    sale.payment_status = _payment_status_from_paid(sale.final_amount, sale.paid_amount)
+    sale.save(update_fields=["paid_amount", "payment_status"])
+
+    _sync_receivable_entry(sale)
+    _reverse_purchase_from_customer(sale.customer, amount)
+    update_customer_level(
+        sale.customer,
+        reason=f"برگشت پرداخت فاکتور #{sale.pk}",
+        user=user,
+        send_level_up_sms=False,
+    )
+
+    from logic.order_queues import sync_workflow_orders_from_sale
+
+    sync_workflow_orders_from_sale(sale)
+    return sale
+
+
+@transaction.atomic
+def confirm_pre_invoice(sale, recorded_by=None):
+    """تایید پیش‌فاکتور — تبدیل به فروش قطعی با ثبت درآمد و مطالبات."""
+    if sale.order_kind != Sale.ORDER_KIND_PRE_INVOICE:
+        raise ValueError("فقط پیش‌فاکتور قابل تایید است.")
+    if sale.order_status != Sale.ORDER_STATUS_PENDING:
+        raise ValueError("این پیش‌فاکتور قبلاً تایید یا لغو شده است.")
+
+    sale.order_status = Sale.ORDER_STATUS_CONFIRMED
+    sale.save(update_fields=["order_status"])
+
+    outstanding = balance_due(sale)
+    _create_sale_accounting(sale, outstanding)
+    _sync_receivable_entry(sale)
+    return sale
+
+
+@transaction.atomic
+def cancel_order(sale, recorded_by=None):
+    """لغو پیش‌فاکتور یا بیعانیه."""
+    if sale.order_status == Sale.ORDER_STATUS_CANCELLED:
+        raise ValueError("این سفارش قبلاً لغو شده است.")
+    if sale.order_kind not in (Sale.ORDER_KIND_PRE_INVOICE, Sale.ORDER_KIND_DEPOSIT):
+        raise ValueError("فقط پیش‌فاکتور یا بیعانیه قابل لغو از این مسیر است.")
+    if sale.order_status != Sale.ORDER_STATUS_PENDING:
+        raise ValueError("فقط سفارش‌های در انتظار قابل لغو هستند.")
+
+    paid = sale.paid_amount
+    customer = sale.customer
+
+    for inst in sale.installments.filter(is_deleted=False):
+        if inst.status == "pending":
+            inst.status = "cancelled"
+            inst.save(update_fields=["status"])
+
+    if paid > 0:
+        AccountingEntry.objects.create(
+            entry_type="refund",
+            debit=paid,
+            amount=paid,
+            description=f"بازگشت بیعانه — فاکتور {sale.invoice_number or sale.pk}",
+            sale=sale,
+        )
+        _reverse_purchase_from_customer(customer, paid)
+        AccountingEntry.objects.filter(sale=sale, entry_type="payment").delete()
+
+    if sale.order_kind == Sale.ORDER_KIND_PRE_INVOICE:
+        AccountingEntry.objects.filter(
+            sale=sale, entry_type__in=("sale", "receivable")
+        ).delete()
+    elif sale.order_kind == Sale.ORDER_KIND_DEPOSIT:
+        AccountingEntry.objects.filter(
+            sale=sale, entry_type__in=("sale", "receivable")
+        ).delete()
+
+    sale.order_status = Sale.ORDER_STATUS_CANCELLED
+    sale.save(update_fields=["order_status"])
+    update_customer_level(customer, reason=f"لغو سفارش #{sale.pk}", user=recorded_by, send_level_up_sms=False)
+    return sale
+
+
+def _replace_sale_line_items(sale, line_items):
+    """جایگزینی اقلام فاکتور — مبلغ جدید از جمع ردیف‌ها."""
+    from backend.models import SaleLineItem
+    from logic.products import resolve_line_item_from_catalog
+
+    resolved_items = []
+    amount = Decimal(0)
+    for item in line_items:
+        resolved = resolve_line_item_from_catalog(item)
+        if not resolved:
+            raise ValueError("هر ردیف فروش باید از کاتالوگ محصولات انتخاب شود.")
+        resolved_items.append(resolved)
+        amount += Decimal(resolved["unit_price"]) * resolved["quantity"]
+
+    sale.line_items.all().delete()
+    for resolved in resolved_items:
+        qty = resolved["quantity"]
+        price = resolved["unit_price"]
+        SaleLineItem.objects.create(
+            sale=sale,
+            product=resolved["product"],
+            variant=resolved["variant"],
+            product_name=resolved["product_name"],
+            product_model=resolved["product_model"],
+            fabric=resolved["fabric"],
+            color_name=resolved["color_name"],
+            color_hex=resolved["color_hex"],
+            quantity=qty,
+            unit_price=price,
+            line_total=price * qty,
+        )
+    return amount
+
+
+def _replace_sale_installments(sale, installments):
+    """جایگزینی اقساط در انتظار — اقساط پرداخت‌شده دست‌نخورده می‌مانند."""
+    if installments is None:
+        return
+    for inst in sale.installments.filter(is_deleted=False, status="pending"):
+        inst.soft_delete()
+    if installments:
+        from logic.installments import create_installments
+
+        create_installments(sale, installments)
 
 
 @transaction.atomic
@@ -346,12 +673,27 @@ def update_sale(
     discount_type=None,
     discount_value=None,
     paid_amount=None,
+    line_items=None,
+    installments=None,
+    payment_status=None,
+    order_kind=None,
+    delivery_date=None,
     **meta_fields,
 ):
-    """ویرایش فروش — مبلغ، تخفیف، پرداخت‌شده و فیلدهای متنی."""
+    """ویرایش فروش — مبلغ، تخفیف، اقلام، اقساط و فیلدهای متنی."""
     old_paid = sale.paid_amount
     old_wallet = sale.discount if sale.discount_type == "wallet" else Decimal(0)
     customer = sale.customer
+
+    if line_items is not None:
+        amount = _replace_sale_line_items(sale, line_items)
+
+    if order_kind is not None:
+        sale.order_kind = normalize_order_kind(order_kind)
+    if payment_status is not None:
+        sale.payment_status = normalize_payment_status(payment_status)
+    if delivery_date is not None:
+        sale.delivery_date = delivery_date or None
 
     if amount is not None:
         sale.amount = Decimal(str(amount))
@@ -396,9 +738,14 @@ def update_sale(
 
     for field in ("description", "invoice_number", "payment_method"):
         if field in meta_fields:
-            setattr(sale, field, (meta_fields[field] or "").strip())
+            value = (meta_fields[field] or "").strip()
+            if field == "payment_method":
+                value = normalize_payment_method(value)
+            setattr(sale, field, value)
 
     sale.save()
+
+    _replace_sale_installments(sale, installments)
 
     sale_entry = AccountingEntry.objects.filter(sale=sale, entry_type="sale").first()
     if sale_entry:
@@ -417,6 +764,9 @@ def update_sale(
             reason="اصلاح مبلغ پرداخت‌شده فاکتور",
         )
 
+    from logic.order_queues import sync_workflow_orders_from_sale
+
+    sync_workflow_orders_from_sale(sale)
     return sale
 
 

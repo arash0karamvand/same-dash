@@ -7,12 +7,13 @@ from django.db.models import Q
 
 from api.helpers import api_view, fail, parse_json, success
 from auth import roles
-from auth.branches import BRANCH_CHOICES, BRANCH_LABELS, DEFAULT_BRANCH
+from auth.branches import BRANCH_CHOICES, BRANCH_LABELS, DEFAULT_BRANCH, normalize_branch_code, refresh_branches
 from auth.permissions import (
     ALL_PERMISSIONS,
     MANAGE_USERS,
     RESET_BUSINESS_DATA,
     SELF_CHECK_IN,
+    has_full_access,
     has_permission,
     is_system_admin,
 )
@@ -54,7 +55,7 @@ def user_to_dict(user):
     except RoleDefinition.DoesNotExist:
         role_label = roles.ROLE_LABELS.get(role, "")
 
-    if role == roles.ADMIN or user.is_superuser:
+    if has_full_access(user):
         permissions = sorted(ALL_PERMISSIONS)
     elif role == roles.PENDING:
         permissions = []
@@ -69,6 +70,7 @@ def user_to_dict(user):
         "role": role,
         "role_label": role_label,
         "permissions": permissions,
+        "grants_full_access": has_full_access(user),
         "branch": branch,
         "branch_label": BRANCH_LABELS.get(branch, "—"),
         "manager_id": profile.manager_id if profile else None,
@@ -111,10 +113,8 @@ def apply_user_access(user, role, branch=None):
 
 
 def _normalize_branch(branch):
-    branch = (branch or DEFAULT_BRANCH).strip()
-    if branch not in dict(BRANCH_CHOICES):
-        return DEFAULT_BRANCH
-    return branch
+    refresh_branches()
+    return normalize_branch_code(branch)
 
 
 def _set_full_name(user, full_name):
@@ -270,10 +270,16 @@ def role_list(request):
                 "permissions": [],
             }
         )
+    from logic.branches import get_active_branches
+
+    refresh_branches()
     return success(
         {
             "results": results,
-            "branches": [{"value": v, "label": l} for v, l in BRANCH_CHOICES],
+            "branches": [
+                {"value": b["code"], "label": b["label"], "color": b.get("color")}
+                for b in get_active_branches()
+            ],
         }
     )
 
@@ -446,7 +452,7 @@ def reset_business_data(request):
     counts = do_reset()
     return success(
         {
-            "message": "داده‌ها پاک شد. کاربران مدیر سیستم حفظ شدند.",
+            "message": "همه داده‌ها به‌صورت دائمی حذف شدند. فقط مدیر سیستم باقی ماند.",
             "counts": counts,
         }
     )

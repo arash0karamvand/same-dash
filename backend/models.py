@@ -1,6 +1,7 @@
 """مدل‌های دامنه پروژه."""
 
 from datetime import time
+from decimal import Decimal
 
 from django.conf import settings
 from django.db import models
@@ -14,6 +15,69 @@ BRANCH_CHOICES = [
     ("branch_1", "کمرد"),
     ("branch_2", "پاسداران"),
 ]
+
+
+class Branch(models.Model):
+    """شعبه فروشگاه — قابل مدیریت توسط مدیر سیستم."""
+
+    code = models.SlugField("کد شعبه", max_length=40, unique=True)
+    label = models.CharField("نام شعبه", max_length=80)
+    color = models.CharField("رنگ", max_length=20, default="#6366f1")
+    sort_order = models.PositiveIntegerField("ترتیب", default=0)
+    is_active = models.BooleanField("فعال", default=True)
+    created_at = models.DateTimeField("تاریخ ایجاد", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "شعبه"
+        verbose_name_plural = "شعبه‌ها"
+        ordering = ["sort_order", "label"]
+
+    def __str__(self):
+        return self.label
+
+
+class LookupOption(models.Model):
+    """گزینه‌های قابل تنظیم — روش پرداخت، نوع سفارش و غیره."""
+
+    category = models.CharField("دسته", max_length=40, db_index=True)
+    code = models.CharField("کد", max_length=40)
+    label = models.CharField("عنوان", max_length=80)
+    sort_order = models.PositiveIntegerField("ترتیب", default=0)
+    is_active = models.BooleanField("فعال", default=True)
+    meta = models.JSONField("متادیتا", default=dict, blank=True)
+
+    class Meta:
+        verbose_name = "گزینه سیستم"
+        verbose_name_plural = "گزینه‌های سیستم"
+        ordering = ["category", "sort_order", "label"]
+        constraints = [
+            models.UniqueConstraint(fields=["category", "code"], name="uniq_lookup_category_code"),
+        ]
+
+    def __str__(self):
+        return f"{self.category}:{self.code}"
+
+
+class MenuSection(models.Model):
+    """بخش‌های منوی پنل — قابل مدیریت در دیتابیس."""
+
+    section_id = models.SlugField("شناسه بخش", max_length=40, unique=True)
+    label = models.CharField("عنوان", max_length=80)
+    icon = models.CharField("آیکون", max_length=16, default="📄")
+    page_key = models.SlugField("کلید صفحه", max_length=40)
+    sort_order = models.PositiveIntegerField("ترتیب", default=0)
+    is_active = models.BooleanField("فعال", default=True)
+    system_admin = models.BooleanField("فقط مدیر سیستم", default=False)
+    menu_permission_codes = models.JSONField("مجوزهای منو", default=list)
+    section_permission_codes = models.JSONField("مجوزهای بخش", default=list)
+
+    class Meta:
+        verbose_name = "بخش منو"
+        verbose_name_plural = "بخش‌های منو"
+        ordering = ["sort_order", "label"]
+
+    def __str__(self):
+        return self.label
 
 
 class LoyaltyLevel(SoftDeleteModel):
@@ -48,6 +112,7 @@ class Customer(SoftDeleteModel):
         db_index=True,
     )
     email = models.EmailField("ایمیل", blank=True)
+    address = models.TextField("آدرس", blank=True)
     joined_at = models.DateTimeField("تاریخ عضویت", auto_now_add=True)
     is_active = models.BooleanField("فعال", default=True)
     notes = models.TextField("توضیحات داخلی", blank=True)
@@ -78,7 +143,7 @@ class OrgRank(models.Model):
     """رتبه سازمانی قابل تعریف توسط مدیر — مثلاً سرپرست شعبه."""
 
     name = models.CharField("عنوان رتبه", max_length=80)
-    branch = models.CharField("شعبه", max_length=20, choices=BRANCH_CHOICES, blank=True)
+    branch = models.CharField("شعبه", max_length=40, blank=True)
     color = models.CharField("رنگ", max_length=20, default="#6366f1")
     sort_order = models.PositiveIntegerField("ترتیب", default=0)
     is_active = models.BooleanField("فعال", default=True)
@@ -101,6 +166,8 @@ class RoleDefinition(models.Model):
     permissions = models.JSONField("مجوزها", default=list)
     is_builtin = models.BooleanField("نقش پیش‌فرض", default=False)
     needs_branch = models.BooleanField("نیاز به شعبه", default=False)
+    grants_full_access = models.BooleanField("دسترسی کامل", default=False)
+    is_locked = models.BooleanField("غیرقابل ویرایش", default=False)
     color = models.CharField("رنگ", max_length=20, default="#6366f1")
     sort_order = models.PositiveIntegerField("ترتیب", default=0)
     parent = models.ForeignKey(
@@ -130,7 +197,7 @@ class StaffProfile(models.Model):
         on_delete=models.CASCADE,
         related_name="staff_profile",
     )
-    branch = models.CharField("شعبه", max_length=20, choices=BRANCH_CHOICES, default="branch_1")
+    branch = models.CharField("شعبه", max_length=40, default="branch_1")
     manager = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         verbose_name="مدیر مستقیم",
@@ -161,14 +228,46 @@ class Sale(SoftDeleteModel):
     PAYMENT_METHOD_CHOICES = [
         ("cash", "نقدی"),
         ("card", "کارت‌خوان"),
-        ("online", "آنلاین"),
-        ("credit", "اعتباری"),
         ("check", "چک"),
     ]
     PAYMENT_STATUS_CHOICES = [
         ("paid", "پرداخت‌شده"),
         ("unpaid", "پرداخت‌نشده"),
         ("installment", "قسطی"),
+    ]
+    ORDER_KIND_CHOICES = [
+        ("normal", "فروش عادی"),
+        ("pre_invoice", "پیش‌فاکتور"),
+        ("deposit", "بیعانیه"),
+    ]
+    ORDER_STATUS_CHOICES = [
+        ("confirmed", "تایید شده"),
+        ("pending", "در انتظار"),
+        ("cancelled", "لغو شده"),
+    ]
+
+    ORDER_KIND_NORMAL = "normal"
+    ORDER_KIND_PRE_INVOICE = "pre_invoice"
+    ORDER_KIND_DEPOSIT = "deposit"
+    ORDER_STATUS_CONFIRMED = "confirmed"
+    ORDER_STATUS_PENDING = "pending"
+    ORDER_STATUS_CANCELLED = "cancelled"
+
+    WORKFLOW_STAGE_PENDING_BRANCH = "pending_branch"
+    WORKFLOW_STAGE_BRANCH_APPROVED = "branch_approved"
+    WORKFLOW_STAGE_ACCOUNTING_APPROVED = "accounting_approved"
+    WORKFLOW_STAGE_IN_PRODUCTION = "in_production"
+    WORKFLOW_STAGE_PRODUCTION_DONE = "production_done"
+    WORKFLOW_STAGE_IN_FREIGHT = "in_freight"
+    WORKFLOW_STAGE_COMPLETED = "completed"
+    WORKFLOW_STAGE_CHOICES = [
+        (WORKFLOW_STAGE_PENDING_BRANCH, "منتظر سرپرست شعبه"),
+        (WORKFLOW_STAGE_BRANCH_APPROVED, "منتظر حسابداری"),
+        (WORKFLOW_STAGE_ACCOUNTING_APPROVED, "ارسال به کارخانه"),
+        (WORKFLOW_STAGE_IN_PRODUCTION, "در حال ساخت"),
+        (WORKFLOW_STAGE_PRODUCTION_DONE, "آماده باربری"),
+        (WORKFLOW_STAGE_IN_FREIGHT, "در باربری"),
+        (WORKFLOW_STAGE_COMPLETED, "تکمیل شده"),
     ]
 
     customer = models.ForeignKey(
@@ -197,6 +296,76 @@ class Sale(SoftDeleteModel):
     payment_method = models.CharField(
         "روش پرداخت", max_length=10, choices=PAYMENT_METHOD_CHOICES, default="cash"
     )
+    order_kind = models.CharField(
+        "نوع سفارش", max_length=12, choices=ORDER_KIND_CHOICES, default="normal"
+    )
+    order_status = models.CharField(
+        "وضعیت سفارش", max_length=12, choices=ORDER_STATUS_CHOICES, default="confirmed"
+    )
+    delivery_date = models.DateField("تاریخ تحویل", null=True, blank=True)
+    workflow_stage = models.CharField(
+        "مرحله گردش کار",
+        max_length=24,
+        choices=WORKFLOW_STAGE_CHOICES,
+        default=WORKFLOW_STAGE_COMPLETED,
+        db_index=True,
+    )
+    branch_approved_at = models.DateTimeField("تاریخ تایید سرپرست", null=True, blank=True)
+    branch_approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="تاییدکننده سرپرست",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="branch_approved_sales",
+    )
+    accounting_approved_at = models.DateTimeField("تاریخ تایید حسابداری", null=True, blank=True)
+    accounting_approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="تاییدکننده حسابداری",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="accounting_approved_sales",
+    )
+    factory_received_at = models.DateTimeField("دریافت کارخانه", null=True, blank=True)
+    factory_received_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="دریافت‌کننده کارخانه",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="factory_received_sales",
+    )
+    production_done_at = models.DateTimeField("پایان ساخت", null=True, blank=True)
+    freight_received_at = models.DateTimeField("دریافت باربری", null=True, blank=True)
+    freight_received_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="دریافت‌کننده باربری",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="freight_received_sales",
+    )
+    freight_completed_at = models.DateTimeField("تکمیل باربری", null=True, blank=True)
+    office_released_at = models.DateTimeField(
+        "زمان انتشار برای اداری",
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+    factory_released_at = models.DateTimeField(
+        "زمان انتشار برای کارخانه",
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+    transferred_to_office_at = models.DateTimeField(
+        "انتقال به جدول اداری",
+        null=True,
+        blank=True,
+        db_index=True,
+    )
     recorded_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         verbose_name="ثبت‌کننده",
@@ -205,7 +374,7 @@ class Sale(SoftDeleteModel):
         on_delete=models.SET_NULL,
         related_name="recorded_sales",
     )
-    branch = models.CharField("شعبه", max_length=20, choices=BRANCH_CHOICES, blank=True)
+    branch = models.CharField("شعبه", max_length=40, blank=True)
     seller = models.ForeignKey(
         "Seller",
         verbose_name="فروشنده",
@@ -260,10 +429,24 @@ class SaleInstallment(SoftDeleteModel):
 
 
 class Seller(SoftDeleteModel):
-    """فروشنده — بدون نیاز به نام کاربری؛ اتصال اختیاری به حساب ورود."""
+    """فروشنده / مدیر — بدون نیاز به نام کاربری؛ اتصال اختیاری به حساب ورود."""
+
+    STAFF_KIND_SELLER = "seller"
+    STAFF_KIND_MANAGER = "manager"
+    STAFF_KIND_CHOICES = [
+        (STAFF_KIND_SELLER, "فروشنده"),
+        (STAFF_KIND_MANAGER, "مدیر"),
+    ]
 
     full_name = models.CharField("نام کامل", max_length=150)
-    branch = models.CharField("شعبه", max_length=20, choices=BRANCH_CHOICES, default="branch_1")
+    staff_kind = models.CharField(
+        "نوع پرسنل",
+        max_length=20,
+        choices=STAFF_KIND_CHOICES,
+        default=STAFF_KIND_SELLER,
+        db_index=True,
+    )
+    branch = models.CharField("شعبه", max_length=40, default="branch_1")
     phone = models.CharField("موبایل", max_length=20, blank=True)
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
@@ -317,10 +500,12 @@ class Product(SoftDeleteModel):
     name = models.CharField("نام محصول", max_length=150)
     sku = models.CharField("کد محصول", max_length=50, blank=True, db_index=True)
     brand = models.CharField("برند", max_length=100, blank=True)
+    product_model = models.CharField("مدل", max_length=100, blank=True)
+    fabric = models.CharField("پارچه", max_length=100, blank=True)
     description = models.TextField("توضیحات", blank=True)
     unit = models.CharField("واحد", max_length=20, default="عدد")
     attributes = models.JSONField("ویژگی‌های سفارشی", default=dict, blank=True)
-    default_price = models.DecimalField("قیمت پیش‌فرض", default=0, **MONEY_KWARGS)
+    default_price = models.DecimalField("قیمت", default=0, **MONEY_KWARGS)
     is_active = models.BooleanField("فعال", default=True)
     created_at = models.DateTimeField("تاریخ ثبت", auto_now_add=True)
     updated_at = models.DateTimeField("آخرین بروزرسانی", auto_now=True)
@@ -335,10 +520,7 @@ class Product(SoftDeleteModel):
 
     @property
     def display_price(self):
-        active = self.variants.filter(is_active=True).order_by("sort_order", "id").first()
-        if active:
-            return active.price
-        return self.default_price
+        return Decimal(self.default_price or 0)
 
 
 class ProductVariant(models.Model):
@@ -382,6 +564,8 @@ class SaleLineItem(models.Model):
         related_name="sale_lines",
     )
     product_name = models.CharField("نام محصول", max_length=150)
+    product_model = models.CharField("مدل", max_length=100, blank=True)
+    fabric = models.CharField("پارچه", max_length=100, blank=True)
     color_name = models.CharField("رنگ", max_length=50, blank=True)
     color_hex = models.CharField("کد رنگ", max_length=7, blank=True)
     quantity = models.PositiveIntegerField("تعداد", default=1)
@@ -397,6 +581,262 @@ class SaleLineItem(models.Model):
         if self.color_name:
             label = f"{label} ({self.color_name})"
         return f"{label} x{self.quantity}"
+
+
+class OfficeOrder(SoftDeleteModel):
+    """صف اداری — فقط پس از تایید سرپرست شعبه در این جدول ایجاد می‌شود."""
+
+    STATUS_PENDING = "pending_accounting"
+    STATUS_RELEASED = "released_to_factory"
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "منتظر تایید اداری"),
+        (STATUS_RELEASED, "ارسال‌شده به کارخانه"),
+    ]
+
+    source_sale = models.OneToOneField(
+        Sale,
+        verbose_name="فروش مبدأ",
+        on_delete=models.CASCADE,
+        related_name="office_order",
+    )
+    customer = models.ForeignKey(
+        Customer, verbose_name="مشتری", on_delete=models.CASCADE, related_name="office_orders"
+    )
+    amount = models.DecimalField("مبلغ فروش", **MONEY_KWARGS)
+    discount_type = models.CharField(
+        "نوع تخفیف", max_length=10, choices=Sale.DISCOUNT_TYPE_CHOICES, default="amount"
+    )
+    discount_value = models.DecimalField("مقدار تخفیف (ورودی)", default=0, **MONEY_KWARGS)
+    discount = models.DecimalField("تخفیف (تومان)", default=0, **MONEY_KWARGS)
+    final_amount = models.DecimalField("مبلغ نهایی", default=0, **MONEY_KWARGS)
+    paid_amount = models.DecimalField("مبلغ پرداخت‌شده", default=0, **MONEY_KWARGS)
+    sold_at = models.DateTimeField("تاریخ فروش", default=timezone.now)
+    invoice_number = models.CharField("شماره فاکتور", max_length=40, blank=True)
+    description = models.CharField("توضیحات", max_length=255, blank=True)
+    payment_status = models.CharField(
+        "وضعیت پرداخت", max_length=12, choices=Sale.PAYMENT_STATUS_CHOICES, default="paid"
+    )
+    payment_method = models.CharField(
+        "روش پرداخت", max_length=10, choices=Sale.PAYMENT_METHOD_CHOICES, default="cash"
+    )
+    order_kind = models.CharField(
+        "نوع سفارش", max_length=12, choices=Sale.ORDER_KIND_CHOICES, default="normal"
+    )
+    order_status = models.CharField(
+        "وضعیت سفارش", max_length=12, choices=Sale.ORDER_STATUS_CHOICES, default="pending"
+    )
+    delivery_date = models.DateField("تاریخ تحویل", null=True, blank=True)
+    branch = models.CharField("شعبه", max_length=40, blank=True)
+    recorded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="ثبت‌کننده",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="recorded_office_orders",
+    )
+    seller = models.ForeignKey(
+        "Seller",
+        verbose_name="فروشنده",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="office_orders",
+    )
+    branch_approved_at = models.DateTimeField("تاریخ تایید سرپرست", null=True, blank=True)
+    branch_approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="تاییدکننده سرپرست",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="branch_approved_office_orders",
+    )
+    accounting_approved_at = models.DateTimeField("تاریخ تایید اداری", null=True, blank=True)
+    accounting_approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="تاییدکننده اداری",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="accounting_approved_office_orders",
+    )
+    status = models.CharField(
+        "وضعیت صف اداری",
+        max_length=24,
+        choices=STATUS_CHOICES,
+        default=STATUS_PENDING,
+        db_index=True,
+    )
+    created_at = models.DateTimeField("تاریخ ثبت", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "سفارش اداری"
+        verbose_name_plural = "سفارش‌های اداری"
+        db_table = "office_orders"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"اداری {self.invoice_number or self.pk}"
+
+
+class OfficeOrderLineItem(models.Model):
+    office_order = models.ForeignKey(
+        OfficeOrder, verbose_name="سفارش اداری", on_delete=models.CASCADE, related_name="line_items"
+    )
+    product = models.ForeignKey(
+        Product, verbose_name="محصول", null=True, blank=True, on_delete=models.SET_NULL
+    )
+    variant = models.ForeignKey(
+        ProductVariant, verbose_name="تنوع", null=True, blank=True, on_delete=models.SET_NULL
+    )
+    product_name = models.CharField("نام محصول", max_length=150)
+    product_model = models.CharField("مدل", max_length=100, blank=True)
+    fabric = models.CharField("پارچه", max_length=100, blank=True)
+    color_name = models.CharField("رنگ", max_length=50, blank=True)
+    color_hex = models.CharField("کد رنگ", max_length=7, blank=True)
+    quantity = models.PositiveIntegerField("تعداد", default=1)
+    unit_price = models.DecimalField("قیمت واحد", **MONEY_KWARGS)
+    line_total = models.DecimalField("جمع ردیف", **MONEY_KWARGS)
+
+    class Meta:
+        verbose_name = "ردیف سفارش اداری"
+        verbose_name_plural = "ردیف‌های سفارش اداری"
+        db_table = "office_order_line_items"
+
+
+class OfficeOrderInstallment(SoftDeleteModel):
+    office_order = models.ForeignKey(
+        OfficeOrder, verbose_name="سفارش اداری", on_delete=models.CASCADE, related_name="installments"
+    )
+    amount = models.DecimalField("مبلغ قسط", **MONEY_KWARGS)
+    due_date = models.DateField("تاریخ سررسید")
+    payment_method = models.CharField(
+        "روش پرداخت", max_length=10, choices=Sale.PAYMENT_METHOD_CHOICES, default="cash"
+    )
+    check_number = models.CharField("شماره چک", max_length=50, blank=True)
+    bank_name = models.CharField("نام بانک", max_length=100, blank=True)
+    status = models.CharField(
+        "وضعیت", max_length=12, choices=SaleInstallment.STATUS_CHOICES, default="pending"
+    )
+    paid_at = models.DateTimeField("تاریخ پرداخت", null=True, blank=True)
+    notes = models.CharField("توضیحات", max_length=255, blank=True)
+    created_at = models.DateTimeField("تاریخ ثبت", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "قسط سفارش اداری"
+        verbose_name_plural = "اقساط سفارش اداری"
+        db_table = "office_order_installments"
+        ordering = ["due_date"]
+
+
+class FactoryOrder(SoftDeleteModel):
+    """صف کارخانه — فقط پس از تایید اداری در این جدول ایجاد می‌شود."""
+
+    WORKFLOW_STAGE_ACCOUNTING_APPROVED = "accounting_approved"
+    WORKFLOW_STAGE_IN_PRODUCTION = "in_production"
+    WORKFLOW_STAGE_PRODUCTION_DONE = "production_done"
+    WORKFLOW_STAGE_IN_FREIGHT = "in_freight"
+    WORKFLOW_STAGE_COMPLETED = "completed"
+    WORKFLOW_STAGE_CHOICES = [
+        (WORKFLOW_STAGE_ACCOUNTING_APPROVED, "ارسال به کارخانه"),
+        (WORKFLOW_STAGE_IN_PRODUCTION, "در حال ساخت"),
+        (WORKFLOW_STAGE_PRODUCTION_DONE, "آماده باربری"),
+        (WORKFLOW_STAGE_IN_FREIGHT, "در باربری"),
+        (WORKFLOW_STAGE_COMPLETED, "تکمیل شده"),
+    ]
+
+    source_office_order = models.OneToOneField(
+        OfficeOrder,
+        verbose_name="سفارش اداری مبدأ",
+        on_delete=models.CASCADE,
+        related_name="factory_order",
+    )
+    source_sale = models.ForeignKey(
+        Sale,
+        verbose_name="فروش مبدأ",
+        on_delete=models.CASCADE,
+        related_name="factory_orders",
+    )
+    customer = models.ForeignKey(
+        Customer, verbose_name="مشتری", on_delete=models.CASCADE, related_name="factory_orders"
+    )
+    invoice_number = models.CharField("شماره فاکتور", max_length=40, blank=True)
+    description = models.CharField("توضیحات", max_length=255, blank=True)
+    delivery_date = models.DateField("تاریخ تحویل", null=True, blank=True)
+    branch = models.CharField("شعبه", max_length=40, blank=True)
+    order_kind = models.CharField(
+        "نوع سفارش", max_length=12, choices=Sale.ORDER_KIND_CHOICES, default="normal"
+    )
+    workflow_stage = models.CharField(
+        "مرحله کارخانه",
+        max_length=24,
+        choices=WORKFLOW_STAGE_CHOICES,
+        default=WORKFLOW_STAGE_ACCOUNTING_APPROVED,
+        db_index=True,
+    )
+    accounting_approved_at = models.DateTimeField("تاریخ تایید اداری", null=True, blank=True)
+    accounting_approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="تاییدکننده اداری",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="accounting_approved_factory_orders",
+    )
+    factory_received_at = models.DateTimeField("دریافت کارخانه", null=True, blank=True)
+    factory_received_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="دریافت‌کننده کارخانه",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="factory_received_orders",
+    )
+    production_done_at = models.DateTimeField("پایان ساخت", null=True, blank=True)
+    freight_received_at = models.DateTimeField("دریافت باربری", null=True, blank=True)
+    freight_received_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="دریافت‌کننده باربری",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="freight_received_orders",
+    )
+    freight_completed_at = models.DateTimeField("تکمیل باربری", null=True, blank=True)
+    created_at = models.DateTimeField("تاریخ ثبت", auto_now_add=True)
+
+    class Meta:
+        verbose_name = "سفارش کارخانه"
+        verbose_name_plural = "سفارش‌های کارخانه"
+        db_table = "factory_orders"
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"کارخانه {self.invoice_number or self.pk}"
+
+
+class FactoryOrderLineItem(models.Model):
+    factory_order = models.ForeignKey(
+        FactoryOrder, verbose_name="سفارش کارخانه", on_delete=models.CASCADE, related_name="line_items"
+    )
+    product = models.ForeignKey(
+        Product, verbose_name="محصول", null=True, blank=True, on_delete=models.SET_NULL
+    )
+    variant = models.ForeignKey(
+        ProductVariant, verbose_name="تنوع", null=True, blank=True, on_delete=models.SET_NULL
+    )
+    product_name = models.CharField("نام محصول", max_length=150)
+    product_model = models.CharField("مدل", max_length=100, blank=True)
+    fabric = models.CharField("پارچه", max_length=100, blank=True)
+    color_name = models.CharField("رنگ", max_length=50, blank=True)
+    color_hex = models.CharField("کد رنگ", max_length=7, blank=True)
+    quantity = models.PositiveIntegerField("تعداد", default=1)
+
+    class Meta:
+        verbose_name = "ردیف سفارش کارخانه"
+        verbose_name_plural = "ردیف‌های سفارش کارخانه"
+        db_table = "factory_order_line_items"
 
 
 class StaffAttendance(SoftDeleteModel):
@@ -422,7 +862,7 @@ class StaffAttendance(SoftDeleteModel):
     date = models.DateField("تاریخ")
     status = models.CharField("وضعیت", max_length=10, choices=STATUS_CHOICES, default="present")
     work_branch = models.CharField(
-        "شعبه کاری", max_length=20, choices=BRANCH_CHOICES, blank=True,
+        "شعبه کاری", max_length=40, blank=True,
     )
     approval_status = models.CharField(
         "وضعیت تایید", max_length=12, choices=APPROVAL_CHOICES, default="approved"

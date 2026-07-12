@@ -7,6 +7,7 @@ import PersianMonthPicker from '../components/PersianMonthPicker'
 import MoneyInput from '../components/MoneyInput'
 import Select from '../components/Select'
 import { Badge, Button, Card, EmptyState, Field, FilterBar, Modal } from '../components/ui'
+import { useConfirm } from '../context/ConfirmContext'
 import { formatDate, formatMoney } from '../utils/format'
 import { currentJalali, jalaliMonthToGregorian, PERSIAN_MONTHS, todayIso, toPersianDigits } from '../utils/jalali'
 
@@ -21,6 +22,7 @@ const EMPTY = {
 }
 
 export default function Checks() {
+  const confirm = useConfirm()
   const init = currentJalali()
   const [items, setItems] = useState([])
   const [report, setReport] = useState(null)
@@ -114,7 +116,12 @@ export default function Checks() {
   }
 
   const remove = async (id) => {
-    if (!confirm('حذف این قسط/چک؟')) return
+    if (!await confirm({
+      title: 'حذف قسط/چک',
+      message: 'حذف این قسط/چک؟',
+      confirmText: 'بله، حذف شود',
+      variant: 'danger',
+    })) return
     try {
       await installmentsApi.remove(id)
       load()
@@ -226,9 +233,9 @@ export default function Checks() {
               value={form.payment_method}
               onChange={(v) => setForm({ ...form, payment_method: v })}
               options={[
+                { value: 'cash', label: 'نقدی' },
+                { value: 'card', label: 'کارت‌خوان' },
                 { value: 'check', label: 'چک' },
-                { value: 'cash', label: 'نقد' },
-                { value: 'card', label: 'کارت' },
               ]}
             />
           </Field>

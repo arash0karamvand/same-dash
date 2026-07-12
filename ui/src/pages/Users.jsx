@@ -5,6 +5,7 @@ import { authApi } from '../api/client'
 import Select from '../components/Select'
 import { Badge, Button, Card, EmptyState, Field, FilterBar, Modal, StatCard } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
+import { useConfirm } from '../context/ConfirmContext'
 import { formatDate } from '../utils/format'
 
 const ROLE_COLORS = {
@@ -45,6 +46,7 @@ function Flash({ type, message, onClose }) {
 
 export default function Users() {
   const { user: currentUser } = useAuth()
+  const confirm = useConfirm()
   const [users, setUsers] = useState([])
   const [stats, setStats] = useState({ total: 0, active: 0, pending: 0 })
   const [roles, setRoles] = useState([])
@@ -181,7 +183,12 @@ export default function Users() {
   }
 
   const deactivate = async (u) => {
-    if (!window.confirm(`کاربر «${u.full_name}» غیرفعال شود؟ دیگر نمی‌تواند وارد شود.`)) return
+    if (!await confirm({
+      title: 'غیرفعال‌سازی کاربر',
+      message: `کاربر «${u.full_name}» غیرفعال شود؟ دیگر نمی‌تواند وارد شود.`,
+      confirmText: 'بله، غیرفعال شود',
+      variant: 'danger',
+    })) return
     try {
       await authApi.deactivateUser(u.id)
       showFlash('success', `کاربر «${u.username}» غیرفعال شد.`)
@@ -200,7 +207,7 @@ export default function Users() {
     setResetting(true)
     try {
       await authApi.resetBusinessData(resetConfirm)
-      showFlash('success', 'همه داده‌ها پاک شد. کاربران مدیر سیستم حفظ شدند.')
+      showFlash('success', 'همه داده‌ها به‌صورت دائمی حذف شدند. فقط مدیر سیستم باقی ماند.')
       setResetOpen(false)
       setResetConfirm('')
       loadUsers()
@@ -342,9 +349,9 @@ export default function Users() {
           <div className="danger-zone">
             <h3>پاک‌سازی کامل داده‌ها</h3>
             <p>
-              همه مشتریان، فروش‌ها، حسابداری، پیامک‌ها، حضور و غیاب، محصولات، سطوح باشگاه،
-              فروشندگان و کاربران (به‌جز مدیر سیستم) برای همیشه حذف می‌شوند. این عمل غیرقابل
-              بازگشت است.
+              همه اطلاعات سیستم (مشتریان، فروش‌ها، حسابداری، پیامک‌ها، حضور و غیاب، محصولات،
+              سطوح باشگاه، فروشندگان و کاربران) به‌صورت دائمی و فیزیکی حذف می‌شوند.
+              فقط حساب مدیر سیستم باقی می‌ماند. بازیابی ممکن نیست.
             </p>
             <Button type="button" variant="danger" onClick={() => setResetOpen(true)}>
               پاک‌سازی همه داده‌ها
@@ -360,8 +367,8 @@ export default function Users() {
       >
         <form onSubmit={handleResetData}>
           <p className="muted" style={{ marginBottom: 16, lineHeight: 1.7 }}>
-            با این کار تمام اطلاعات ذخیره‌شده در سیستم (به‌جز حساب‌های مدیر سیستم) حذف می‌شود.
-            برای ادامه، عبارت <strong>پاکسازی</strong> را در کادر زیر بنویسید.
+            با این کار تمام اطلاعات به‌صورت دائمی از دیتابیس پاک می‌شود (نه حذف نرم).
+            فقط حساب مدیر سیستم باقی می‌ماند. برای ادامه، عبارت <strong>پاکسازی</strong> را بنویسید.
           </p>
           <Field label="تأیید">
             <input

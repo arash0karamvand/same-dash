@@ -1,13 +1,16 @@
 // صفحه حسابداری — CRUD کامل اسناد
 
 import { useEffect, useMemo, useState } from 'react'
-import { accountingApi } from '../api/client'
+import { accountingApi, salesApi } from '../api/client'
 import PersianDateInput from '../components/PersianDateInput'
 import PersianMonthPicker from '../components/PersianMonthPicker'
 import MoneyInput from '../components/MoneyInput'
 import Select from '../components/Select'
 import { Badge, Button, Card, EmptyState, Field, FilterBar, Modal, StatCard } from '../components/ui'
+import { useAuth } from '../context/AuthContext'
+import { useConfirm } from '../context/ConfirmContext'
 import { formatDate, formatMoney, formatNumber } from '../utils/format'
+import { hasPermission } from '../utils/permissions'
 import { currentJalali, jalaliMonthToGregorian, todayIso } from '../utils/jalali'
 
 const TYPE_COLORS = {
@@ -36,9 +39,13 @@ const EMPTY_FORM = {
   amount: '',
   entry_date: todayIso(),
   description: '',
+  sale_id: '',
 }
 
 export default function Accounting() {
+  const { user } = useAuth()
+  const confirm = useConfirm()
+  const skipEntryApproval = hasPermission(user, 'approve_sale_accounting')
   const init = currentJalali()
   const [entries, setEntries] = useState([])
   const [summary, setSummary] = useState(null)
@@ -62,6 +69,7 @@ export default function Accounting() {
   const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
   const [modalError, setModalError] = useState('')
+  const [openSales, setOpenSales] = useState([])
 
   const dateRange = useMemo(() => {
     if (!monthMode) return {}
@@ -109,6 +117,16 @@ export default function Accounting() {
     load()
   }, [typeFilter, approvedFilter, search, monthMode, jYear, jMonth, offset])
 
+  useEffect(() => {
+    if (!modalOpen || editing || form.entry_type !== 'payment') {
+      setOpenSales([])
+      return
+    }
+    salesApi.list('has_balance=1&limit=100')
+      .then((data) => setOpenSales(data.results || []))
+      .catch(() => setOpenSales([]))
+  }, [modalOpen, editing, form.entry_type])
+
   const toggleApprove = async (entry) => {
     try {
       await accountingApi.approve(entry.id, !entry.is_approved)
@@ -119,7 +137,12 @@ export default function Accounting() {
   }
 
   const approveAllPending = async () => {
-    if (!confirm('همه اسناد در انتظار تایید شوند؟')) return
+    if (!await confirm({
+      title: 'تایید گروهی',
+      message: 'همه اسناد در انتظار تایید شوند؟',
+      confirmText: 'بله، تایید شوند',
+      variant: 'warning',
+    })) return
     try {
       const res = await accountingApi.bulkApprove()
       setError('')
@@ -155,7 +178,25 @@ export default function Accounting() {
 
   const onTypeChange = (value) => {
     const t = ENTRY_TYPES.find((x) => x.value === value)
-    setForm((prev) => ({ ...prev, entry_type: value, direction: t ? t.direction : prev.direction }))
+    setForm((prev) => ({
+      ...prev,
+      entry_type: value,
+      direction: t ? t.direction : prev.direction,
+      sale_id: value === 'payment' ? prev.sale_id : '',
+    }))
+  }
+
+  const onSaleSelect = (saleId) => {
+    const sale = openSales.find((s) => String(s.id) === String(saleId))
+    setForm((prev) => ({
+      ...prev,
+      sale_id: saleId,
+      direction: 'credit',
+      amount: sale ? String(sale.balance_due) : prev.amount,
+      description: sale
+        ? `دریافت وجه فاکتور ${sale.invoice_number || sale.id} — ${sale.customer_name}`
+        : prev.description,
+    }))
   }
 
   const save = async (e) => {
@@ -186,6 +227,9 @@ export default function Accounting() {
         entry_date: form.entry_date,
         description: form.description.trim(),
       }
+      if (form.entry_type === 'payment' && form.sale_id) {
+        payload.sale_id = Number(form.sale_id)
+      }
     }
 
     setSaving(true)
@@ -211,9 +255,20 @@ export default function Accounting() {
     let msg = `سند «${entry.entry_type_display} — ${formatMoney(entry.amount)}» حذف شود؟`
     if (entry.is_approved) msg = `این سند تایید شده است.\n${msg}`
     if (entry.sale_id) {
-      msg += `\n\nاین سند به فاکتور #${entry.sale_id} متصل است.`
+      if (entry.entry_type === 'sale') {
+        msg += `\n\nاین سند درآمد فاکتور #${entry.sale_id} است — با حذف، فاکتور از فروشگاه، اداری و کارخانه هم حذف می‌شود.`
+      } else if (entry.entry_type === 'payment') {
+        msg += `\n\nمبلغ پرداخت از فاکتور #${entry.sale_id} برگردانده می‌شود.`
+      } else {
+        msg += `\n\nاین سند به فاکتور #${entry.sale_id} متصل است.`
+      }
     }
-    if (!confirm(msg)) return
+    if (!await confirm({
+      title: 'حذف سند',
+      message: msg,
+      confirmText: 'بله، حذف شود',
+      variant: 'danger',
+    })) return
     try {
       await accountingApi.remove(entry.id)
       load()
@@ -234,9 +289,11 @@ export default function Accounting() {
           حذف
         </button>
       )}
-      <button className="link" type="button" onClick={() => toggleApprove(entry)}>
-        {entry.is_approved ? 'لغو تایید' : 'تایید'}
-      </button>
+      {!skipEntryApproval && (
+        <button className="link" type="button" onClick={() => toggleApprove(entry)}>
+          {entry.is_approved ? 'لغو تایید' : 'تایید'}
+        </button>
+      )}
     </div>
   )
 
@@ -279,7 +336,7 @@ export default function Accounting() {
         <Button type="button" onClick={openCreate}>
           + ثبت سند
         </Button>
-        {summary?.pending_count > 0 && (
+        {!skipEntryApproval && summary?.pending_count > 0 && (
           <Button variant="ghost" type="button" onClick={approveAllPending}>
             تایید همه ({formatNumber(summary.pending_count)})
           </Button>
@@ -511,6 +568,23 @@ export default function Accounting() {
                   ]}
                 />
               </Field>
+              {form.entry_type === 'payment' && (
+                <Field label="فاکتور فروش (اختیاری)">
+                  <Select
+                    value={form.sale_id ? String(form.sale_id) : ''}
+                    onChange={onSaleSelect}
+                    options={[
+                      { value: '', label: 'بدون ارتباط با فاکتور' },
+                      ...openSales.map((s) => ({
+                        value: String(s.id),
+                        label: `#${s.invoice_number || s.id} — ${s.customer_name}${s.order_kind !== 'normal' ? ` (${s.order_kind_display})` : ''} — مانده ${formatMoney(s.balance_due)}`,
+                      })),
+                    ]}
+                    placeholder="انتخاب فاکتور با مانده"
+                  />
+                  <span className="muted small">با انتخاب فاکتور، مبلغ مانده به‌صورت خودکار پر می‌شود و روی فروش ثبت می‌گردد.</span>
+                </Field>
+              )}
               <Field label="مبلغ (تومان)">
                 <MoneyInput
                   min="1"

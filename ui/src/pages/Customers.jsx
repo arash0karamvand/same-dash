@@ -7,15 +7,17 @@ import MoneyInput from '../components/MoneyInput'
 import Select from '../components/Select'
 import { Badge, Button, Card, EmptyState, Field, FilterBar, Modal } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
+import { useConfirm } from '../context/ConfirmContext'
 import { formatDate, formatMoney } from '../utils/format'
 import { todayIso } from '../utils/jalali'
 import { hasAnyPermission } from '../utils/permissions'
 
-const EMPTY_FORM = { full_name: '', phone: '', email: '', notes: '', birthday: '' }
+const EMPTY_FORM = { full_name: '', phone: '', email: '', address: '', notes: '', birthday: '' }
 const EMPTY_WALLET_FORM = { action: 'deposit', amount: '', description: '' }
 
 export default function Customers() {
   const { user } = useAuth()
+  const confirm = useConfirm()
   const canEdit = hasAnyPermission(user, ['create_customer', 'edit_customer', 'delete_customer'])
 
   const [customers, setCustomers] = useState([])
@@ -52,7 +54,7 @@ export default function Customers() {
 
   useEffect(() => {
     load()
-    customersApi.topBuyers(5).then(setTopBuyers).catch(() => setTopBuyers(null))
+    customersApi.topBuyers(20, { minPurchases: 2, days: 365 }).then(setTopBuyers).catch(() => setTopBuyers(null))
   }, [])
 
   const openCreate = () => {
@@ -67,6 +69,7 @@ export default function Customers() {
       full_name: customer.full_name,
       phone: customer.phone,
       email: customer.email,
+      address: customer.address || '',
       notes: customer.notes,
       birthday: customer.birthday?.slice(0, 10) || '',
     })
@@ -91,7 +94,12 @@ export default function Customers() {
   }
 
   const remove = async (customer) => {
-    if (!confirm(`حذف مشتری «${customer.full_name}»؟`)) return
+    if (!await confirm({
+      title: 'حذف مشتری',
+      message: `حذف مشتری «${customer.full_name}»؟`,
+      confirmText: 'بله، حذف شود',
+      variant: 'danger',
+    })) return
     await customersApi.remove(customer.id)
     load(search)
   }
@@ -163,28 +171,35 @@ export default function Customers() {
 
   return (
     <div className="page customers-page">
-      {topBuyers?.top && (
-        <Card title="بیشترین خرید" className="top-buyers-card">
-          <div className="top-buyer-hero">
-            <div>
-              <strong>{topBuyers.top.full_name}</strong>
-              <p className="muted small">{topBuyers.top.phone}</p>
-            </div>
-            <div className="top-buyer-amount">
-              <span className="muted small">مجموع خرید</span>
-              <strong>{formatMoney(topBuyers.top.total_purchases)}</strong>
-            </div>
+      {topBuyers?.results?.length > 0 && (
+        <Card title="مشتریان وفادار — ۱ سال اخیر" className="top-buyers-card analytics-card">
+          <p className="muted small" style={{ marginBottom: 12 }}>
+            مشتریانی که حداقل ۲ بار خرید کرده‌اند — ۲۰ نفر اول بر اساس مجموع مبلغ
+          </p>
+          <div className="table-wrap">
+            <table className="table table-compact">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>نام</th>
+                  <th>موبایل</th>
+                  <th>تعداد خرید</th>
+                  <th>مجموع خرید (۱ سال)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {topBuyers.results.map((c, idx) => (
+                  <tr key={c.customer_id}>
+                    <td>{idx + 1}</td>
+                    <td><strong>{c.full_name}</strong></td>
+                    <td className="ltr">{c.phone}</td>
+                    <td>{c.purchase_count_year}</td>
+                    <td>{formatMoney(c.year_purchases_total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-          {topBuyers.results?.length > 1 && (
-            <ul className="top-buyers-list">
-              {topBuyers.results.slice(1).map((c, idx) => (
-                <li key={c.id}>
-                  <span>{idx + 2}. {c.full_name}</span>
-                  <span>{formatMoney(c.total_purchases)}</span>
-                </li>
-              ))}
-            </ul>
-          )}
         </Card>
       )}
 
@@ -219,6 +234,7 @@ export default function Customers() {
                   <tr>
                     <th>نام</th>
                     <th>موبایل</th>
+                    <th>آدرس</th>
                     <th>کد باشگاه</th>
                     <th>سطح</th>
                     <th>کیف پول</th>
@@ -232,6 +248,7 @@ export default function Customers() {
                     <tr key={c.id}>
                       <td>{c.full_name}</td>
                       <td className="ltr">{c.phone}</td>
+                      <td className="customer-address-cell">{c.address || '—'}</td>
                       <td className="ltr">{c.membership_code || '—'}</td>
                       <td>{c.level ? <Badge color={c.level.color}>{c.level.name}</Badge> : '—'}</td>
                       <td>
@@ -273,6 +290,12 @@ export default function Customers() {
                       <span className="muted">آخرین خرید</span>
                       <span>{c.last_purchase_at ? formatDate(c.last_purchase_at) : '—'}</span>
                     </div>
+                    {c.address && (
+                      <div className="customer-card-address">
+                        <span className="muted">آدرس</span>
+                        <span>{c.address}</span>
+                      </div>
+                    )}
                   </div>
                   {renderActions(c)}
                 </div>
@@ -289,6 +312,9 @@ export default function Customers() {
           </Field>
           <Field label="موبایل">
             <input className="ltr" value={form.phone} onChange={update('phone')} required />
+          </Field>
+          <Field label="آدرس">
+            <textarea value={form.address} onChange={update('address')} rows={2} placeholder="آدرس منزل یا محل تحویل" />
           </Field>
           <Field label="ایمیل">
             <input className="ltr" value={form.email} onChange={update('email')} />
@@ -432,61 +458,105 @@ export default function Customers() {
       </Modal>
 
       <Modal
-        title={historyFor ? `تاریخچه: ${historyFor.full_name}` : ''}
+        title={historyFor ? `تاریخچه خرید: ${historyFor.full_name}` : ''}
         open={!!historyFor}
         onClose={() => setHistoryFor(null)}
+        wide
       >
         {!history ? (
           <div className="loading">در حال بارگذاری…</div>
         ) : (
-          <div className="history">
-            <h4>فروش‌ها</h4>
+          <div className="history purchase-history">
+            <h4>فروش‌ها و محصولات</h4>
             {history.sales.length === 0 ? (
               <EmptyState text="فروشی ثبت نشده." />
             ) : (
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>مبلغ نهایی</th>
-                    <th>روش پرداخت</th>
-                    <th>تاریخ</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {history.sales.map((s) => (
-                    <tr key={s.id}>
-                      <td>{formatMoney(s.final_amount)}</td>
-                      <td>{s.payment_method_display}</td>
-                      <td>{formatDate(s.sold_at)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="purchase-history-list">
+                {history.sales.map((s) => (
+                  <article key={s.id} className="purchase-history-sale">
+                    <div className="purchase-history-sale-head">
+                      <div>
+                        <strong>فاکتور {s.invoice_number || s.id}</strong>
+                        <span className="muted small"> — {formatDate(s.sold_at)}</span>
+                      </div>
+                      <div className="purchase-history-sale-totals">
+                        <span>{formatMoney(s.final_amount)}</span>
+                        <Badge color={s.payment_status === 'paid' ? '#10b981' : '#f59e0b'}>
+                          {s.payment_status_display}
+                        </Badge>
+                      </div>
+                    </div>
+                    {s.line_items?.length ? (
+                      <div className="table-wrap">
+                        <table className="table purchase-history-items">
+                          <thead>
+                            <tr>
+                              <th>محصول</th>
+                              <th>مدل</th>
+                              <th>پارچه</th>
+                              <th>رنگ</th>
+                              <th>تعداد</th>
+                              <th>قیمت واحد</th>
+                              <th>جمع</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {s.line_items.map((item) => (
+                              <tr key={item.id}>
+                                <td>{item.product_name}</td>
+                                <td>{item.product_model || '—'}</td>
+                                <td>{item.fabric || '—'}</td>
+                                <td>
+                                  {item.color_name ? (
+                                    <span className="history-color-cell">
+                                      {item.color_hex && (
+                                        <span className="color-swatch small" style={{ background: item.color_hex }} />
+                                      )}
+                                      {item.color_name}
+                                    </span>
+                                  ) : '—'}
+                                </td>
+                                <td>{item.quantity}</td>
+                                <td>{formatMoney(item.unit_price)}</td>
+                                <td>{formatMoney(item.line_total)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : (
+                      <p className="muted small">جزئیات محصول ثبت نشده.</p>
+                    )}
+                  </article>
+                ))}
+              </div>
             )}
             <h4>تاریخچه تغییر سطح</h4>
             {history.level_history.length === 0 ? (
               <EmptyState text="تغییر سطحی ثبت نشده." />
             ) : (
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>سطح قبلی</th>
-                    <th>سطح جدید</th>
-                    <th>مجموع خرید</th>
-                    <th>تاریخ</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {history.level_history.map((h) => (
-                    <tr key={h.id}>
-                      <td>{h.previous_level || '—'}</td>
-                      <td>{h.new_level || '—'}</td>
-                      <td>{formatMoney(h.total_purchases_at_change)}</td>
-                      <td>{formatDate(h.changed_at)}</td>
+              <div className="table-wrap">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>سطح قبلی</th>
+                      <th>سطح جدید</th>
+                      <th>مجموع خرید</th>
+                      <th>تاریخ</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {history.level_history.map((h) => (
+                      <tr key={h.id}>
+                        <td>{h.previous_level || '—'}</td>
+                        <td>{h.new_level || '—'}</td>
+                        <td>{formatMoney(h.total_purchases_at_change)}</td>
+                        <td>{formatDate(h.changed_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         )}

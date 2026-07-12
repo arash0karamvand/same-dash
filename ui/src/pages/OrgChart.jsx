@@ -103,12 +103,15 @@ export default function OrgChart() {
 
         {view === 'roles' && (
           <div className="org-role-ladder">
-            {data.role_hierarchy.map((r) => (
-              <div key={r.slug} className="org-role-step" style={{ borderRightColor: r.color }}>
-                <Badge color={r.color}>{r.label}</Badge>
-                {r.parent_slug && <span className="muted small"> زیرمجموعه {r.parent_slug}</span>}
-              </div>
-            ))}
+            {data.role_hierarchy.map((r) => {
+              const parent = data.role_hierarchy.find((x) => x.slug === r.parent_slug)
+              return (
+                <div key={r.slug} className="org-role-step" style={{ borderRightColor: r.color }}>
+                  <Badge color={r.color}>{r.label}</Badge>
+                  {parent && <span className="muted small"> زیرمجموعه {parent.label}</span>}
+                </div>
+              )
+            })}
           </div>
         )}
       </Card>

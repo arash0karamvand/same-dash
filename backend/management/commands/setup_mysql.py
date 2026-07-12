@@ -50,6 +50,7 @@ class Command(BaseCommand):
         )
 
         call_command("seed_executives", stdout=io.StringIO())
+        call_command("seed_branch_supervisors", stdout=io.StringIO())
         call_command("seed_ranking_demo", stdout=io.StringIO())
         from logic.sellers import sync_seller_profiles
 

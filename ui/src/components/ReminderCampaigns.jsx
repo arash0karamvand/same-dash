@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { levelsApi, smsApi } from '../api/client'
+import { useConfirm } from '../context/ConfirmContext'
 import { Button, Card, EmptyState, Field, Modal } from '../components/ui'
 
 const EMPTY = {
@@ -15,6 +16,7 @@ const EMPTY = {
 }
 
 export default function ReminderCampaigns() {
+  const confirm = useConfirm()
   const [campaigns, setCampaigns] = useState([])
   const [levels, setLevels] = useState([])
   const [preview, setPreview] = useState(null)
@@ -105,7 +107,12 @@ export default function ReminderCampaigns() {
   }
 
   const remove = async (id) => {
-    if (!window.confirm('این کمپین حذف شود؟')) return
+    if (!await confirm({
+      title: 'حذف کمپین',
+      message: 'این کمپین حذف شود؟',
+      confirmText: 'بله، حذف شود',
+      variant: 'danger',
+    })) return
     try {
       await smsApi.deleteReminder(id)
       load()

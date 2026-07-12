@@ -6,12 +6,15 @@ from django.test import TestCase
 from auth import roles
 from auth.permissions import (
     CREATE_ACCOUNTING,
+    CREATE_SALE,
     DELETE_CUSTOMER,
     EDIT_ACCOUNTING,
     MANAGE_LOYALTY,
     MANAGE_ROLES,
     RESET_BUSINESS_DATA,
     SELF_CHECK_IN,
+    VIEW_ACCOUNTING,
+    VIEW_CUSTOMERS,
     VIEW_DASHBOARD,
     VIEW_SALES,
     has_permission,
@@ -108,9 +111,27 @@ class RolePermissionTest(TestCase):
         self.assertNotIn(MANAGE_ROLES, rd.permissions)
         self.assertIn("view_customers", rd.permissions)
 
-    def test_only_admin_builtin_role_remains(self):
+    def test_org_builtin_roles_seeded(self):
         seed_builtin_roles()
-        builtins = list(
+        slugs = set(
             RoleDefinition.objects.filter(is_builtin=True).values_list("slug", flat=True)
         )
-        self.assertEqual(builtins, [roles.ADMIN])
+        self.assertIn(roles.ADMIN, slugs)
+        self.assertIn(roles.CEO, slugs)
+        self.assertIn(roles.CO_CEO, slugs)
+        self.assertIn(roles.BRANCH_SUPERVISOR, slugs)
+        self.assertIn(roles.ACCOUNTING_FINANCE, slugs)
+        self.assertIn(roles.SALES_EXPERT, slugs)
+
+    def test_ceo_has_full_permissions(self):
+        user = User.objects.create_user(username="ceo_user", password="secret123")
+        roles.assign_role(user, roles.CEO)
+        self.assertTrue(has_permission(user, DELETE_CUSTOMER))
+        self.assertTrue(has_permission(user, MANAGE_ROLES))
+
+    def test_co_ceo_accounting_only_by_default(self):
+        user = User.objects.create_user(username="coceo", password="secret123")
+        roles.assign_role(user, roles.CO_CEO)
+        self.assertTrue(has_permission(user, VIEW_ACCOUNTING))
+        self.assertFalse(has_permission(user, CREATE_SALE))
+        self.assertFalse(has_permission(user, VIEW_CUSTOMERS))

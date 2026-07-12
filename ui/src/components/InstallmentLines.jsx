@@ -99,9 +99,9 @@ export default function InstallmentLines({
                   value={inst.payment_method || 'check'}
                   onChange={(v) => update(idx, 'payment_method', v)}
                   options={[
+                    { value: 'cash', label: 'نقدی' },
+                    { value: 'card', label: 'کارت‌خوان' },
                     { value: 'check', label: 'چک' },
-                    { value: 'cash', label: 'نقد' },
-                    { value: 'card', label: 'کارت' },
                   ]}
                 />
               </Field>

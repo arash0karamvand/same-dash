@@ -4,6 +4,7 @@ import MoneyInput from '../components/MoneyInput'
 import Select from '../components/Select'
 import { Badge, Button, Card, EmptyState, Field, FilterBar, Modal } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
+import { useConfirm } from '../context/ConfirmContext'
 import { formatMoney } from '../utils/format'
 
 import { hasPermission } from '../utils/permissions'
@@ -22,11 +23,13 @@ const COLOR_PRESETS = [
 ]
 
 const EMPTY_CATEGORY = { name: '', description: '', color: '#6366f1', icon: '📦', sort_order: 0, is_active: true }
-const EMPTY_VARIANT = { color_name: '', color_hex: '#cccccc', sku: '', price: '', stock: '', is_active: true }
+const EMPTY_VARIANT = { color_name: '', color_hex: '#cccccc', sku: '', stock: '', is_active: true }
 const EMPTY_PRODUCT = {
   name: '',
   sku: '',
   brand: '',
+  product_model: '',
+  fabric: '',
   description: '',
   unit: 'عدد',
   category_id: '',
@@ -36,12 +39,9 @@ const EMPTY_PRODUCT = {
   variants: [{ ...EMPTY_VARIANT }],
 }
 
-function attrEntries(attrs) {
-  return Object.entries(attrs || {})
-}
-
 export default function Products() {
   const { user } = useAuth()
+  const confirm = useConfirm()
   const canManage = hasPermission(user, 'manage_products')
 
   const [categories, setCategories] = useState([])
@@ -58,14 +58,13 @@ export default function Products() {
   const [editingCategory, setEditingCategory] = useState(null)
   const [productForm, setProductForm] = useState(EMPTY_PRODUCT)
   const [categoryForm, setCategoryForm] = useState(EMPTY_CATEGORY)
-  const [attrKey, setAttrKey] = useState('')
-  const [attrValue, setAttrValue] = useState('')
   const [saving, setSaving] = useState(false)
+  const [topSelling, setTopSelling] = useState([])
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [cats, prods] = await Promise.all([
+      const [cats, prods, topData] = await Promise.all([
         productsApi.categories({ active: canManage ? undefined : true }),
         productsApi.list({
           search: search.trim(),
@@ -73,9 +72,11 @@ export default function Products() {
           limit: 100,
           include_inactive: canManage,
         }),
+        productsApi.topSelling(20).catch(() => ({ results: [] })),
       ])
       setCategories(cats.results || [])
       setProducts(prods.results || [])
+      setTopSelling(topData.results || [])
       setError('')
     } catch (e) {
       setError(e.message)
@@ -103,10 +104,12 @@ export default function Products() {
       name: p.name,
       sku: p.sku || '',
       brand: p.brand || '',
+      product_model: p.product_model || '',
+      fabric: p.fabric || '',
       description: p.description || '',
       unit: p.unit || 'عدد',
       category_id: p.category_id ? String(p.category_id) : '',
-      default_price: String(p.display_price ?? p.default_price ?? ''),
+      default_price: String(p.default_price ?? p.display_price ?? ''),
       is_active: p.is_active,
       attributes: { ...(p.attributes || {}) },
       variants: (p.variants?.length ? p.variants : [{ ...EMPTY_VARIANT }]).map((v) => ({
@@ -114,7 +117,6 @@ export default function Products() {
         color_name: v.color_name,
         color_hex: v.color_hex,
         sku: v.sku || '',
-        price: String(v.price ?? ''),
         stock: v.stock != null ? String(v.stock) : '',
         is_active: v.is_active !== false,
       })),
@@ -164,22 +166,6 @@ export default function Products() {
     updateVariant(idx, 'color_hex', preset.hex)
   }
 
-  const addAttribute = () => {
-    const k = attrKey.trim()
-    if (!k) return
-    setProductForm((f) => ({ ...f, attributes: { ...f.attributes, [k]: attrValue.trim() } }))
-    setAttrKey('')
-    setAttrValue('')
-  }
-
-  const removeAttribute = (key) => {
-    setProductForm((f) => {
-      const next = { ...f.attributes }
-      delete next[key]
-      return { ...f, attributes: next }
-    })
-  }
-
   const saveProduct = async (e) => {
     e.preventDefault()
     setSaving(true)
@@ -188,6 +174,8 @@ export default function Products() {
         name: productForm.name.trim(),
         sku: productForm.sku.trim(),
         brand: productForm.brand.trim(),
+        product_model: productForm.product_model.trim(),
+        fabric: productForm.fabric.trim(),
         description: productForm.description.trim(),
         unit: productForm.unit.trim() || 'عدد',
         category_id: productForm.category_id ? Number(productForm.category_id) : null,
@@ -201,7 +189,6 @@ export default function Products() {
             color_name: v.color_name.trim(),
             color_hex: v.color_hex,
             sku: v.sku.trim(),
-            price: Number(v.price) || 0,
             stock: v.stock === '' ? null : Number(v.stock),
             is_active: v.is_active !== false,
           })),
@@ -243,7 +230,12 @@ export default function Products() {
   }
 
   const removeProduct = async (p) => {
-    if (!window.confirm(`محصول «${p.name}» حذف شود؟`)) return
+    if (!await confirm({
+      title: 'حذف محصول',
+      message: `محصول «${p.name}» حذف شود؟`,
+      confirmText: 'بله، حذف شود',
+      variant: 'danger',
+    })) return
     try {
       await productsApi.remove(p.id)
       load()
@@ -253,7 +245,12 @@ export default function Products() {
   }
 
   const removeCategory = async (c) => {
-    if (!window.confirm(`دسته «${c.name}» حذف شود؟`)) return
+    if (!await confirm({
+      title: 'حذف دسته',
+      message: `دسته «${c.name}» حذف شود؟`,
+      confirmText: 'بله، حذف شود',
+      variant: 'danger',
+    })) return
     try {
       await productsApi.removeCategory(c.id)
       if (categoryFilter === String(c.id)) setCategoryFilter('')
@@ -279,6 +276,42 @@ export default function Products() {
       </div>
 
       {error && <div className="alert-error">{error}</div>}
+
+      {topSelling.length > 0 && (
+        <Card title="پرفروش‌ترین کالاها" className="analytics-card">
+          <p className="muted small" style={{ marginBottom: 12 }}>
+            بر اساس تعداد فروخته‌شده در فاکتورهای قطعی
+          </p>
+          <div className="table-wrap">
+            <table className="table table-compact">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>محصول</th>
+                  <th>مدل</th>
+                  <th>پارچه</th>
+                  <th>تعداد فروش</th>
+                  <th>تعداد فاکتور</th>
+                  <th>مجموع درآمد</th>
+                </tr>
+              </thead>
+              <tbody>
+                {topSelling.map((item, idx) => (
+                  <tr key={`${item.product_id || item.product_name}-${idx}`}>
+                    <td>{idx + 1}</td>
+                    <td>{item.product_name}</td>
+                    <td>{item.product_model || '—'}</td>
+                    <td>{item.fabric || '—'}</td>
+                    <td><strong>{item.total_quantity}</strong></td>
+                    <td>{item.sales_count}</td>
+                    <td>{formatMoney(item.total_revenue)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       <div className="category-scroll">
         <button
@@ -331,7 +364,8 @@ export default function Products() {
                       <Badge color={p.category.color}>{p.category.icon} {p.category.name}</Badge>
                     )}
                     <h3>{p.name}</h3>
-                    {p.brand && <p className="muted small">{p.brand}</p>}
+                    {p.product_model && <p className="muted small">مدل: {p.product_model}</p>}
+                    {p.fabric && <p className="muted small">پارچه: {p.fabric}</p>}
                     {p.sku && <p className="muted small ltr">SKU: {p.sku}</p>}
                   </div>
                   {!p.is_active && <Badge color="#94a3b8">غیرفعال</Badge>}
@@ -343,7 +377,7 @@ export default function Products() {
                       <span
                         key={v.id}
                         className="color-swatch"
-                        title={`${v.color_name} — ${formatMoney(v.price)}`}
+                        title={v.color_name}
                         style={{ background: v.color_hex, borderColor: v.color_hex === '#f8fafc' ? '#cbd5e1' : v.color_hex }}
                       />
                     ))}
@@ -414,11 +448,17 @@ export default function Products() {
             <Field label="برند">
               <input value={productForm.brand} onChange={(e) => setProductForm({ ...productForm, brand: e.target.value })} />
             </Field>
+            <Field label="مدل">
+              <input value={productForm.product_model} onChange={(e) => setProductForm({ ...productForm, product_model: e.target.value })} placeholder="مثلاً کلاسیک" />
+            </Field>
+            <Field label="پارچه">
+              <input value={productForm.fabric} onChange={(e) => setProductForm({ ...productForm, fabric: e.target.value })} placeholder="مثلاً مخمل، چرم" />
+            </Field>
             <Field label="واحد">
               <input value={productForm.unit} onChange={(e) => setProductForm({ ...productForm, unit: e.target.value })} placeholder="عدد" />
             </Field>
-            <Field label="قیمت پایه (اگر رنگ نداشت)">
-              <MoneyInput min="0" value={productForm.default_price} onChange={(e) => setProductForm({ ...productForm, default_price: e.target.value })} />
+            <Field label="قیمت (تومان)">
+              <MoneyInput min="0" value={productForm.default_price} onChange={(e) => setProductForm({ ...productForm, default_price: e.target.value })} required />
             </Field>
           </div>
 
@@ -428,7 +468,7 @@ export default function Products() {
 
           <div className="product-variants-section">
             <div className="section-head">
-              <h4>رنگ‌بندی و قیمت</h4>
+              <h4>رنگ‌بندی</h4>
               <Button type="button" variant="ghost" onClick={addVariant}>+ رنگ</Button>
             </div>
             {productForm.variants.map((v, idx) => (
@@ -452,9 +492,6 @@ export default function Products() {
                   <Field label="کد رنگ">
                     <input className="ltr" type="color" value={v.color_hex} onChange={(e) => updateVariant(idx, 'color_hex', e.target.value)} />
                   </Field>
-                  <Field label="قیمت">
-                    <MoneyInput min="0" value={v.price} onChange={(e) => updateVariant(idx, 'price', e.target.value)} />
-                  </Field>
                   <Field label="موجودی (اختیاری)">
                     <input className="ltr" type="number" min="0" value={v.stock} onChange={(e) => updateVariant(idx, 'stock', e.target.value)} placeholder="—" />
                   </Field>
@@ -464,25 +501,6 @@ export default function Products() {
                 )}
               </div>
             ))}
-          </div>
-
-          <div className="product-attributes-section">
-            <h4>ویژگی‌های سفارشی</h4>
-            <div className="attr-add-row">
-              <input value={attrKey} onChange={(e) => setAttrKey(e.target.value)} placeholder="نام (مثلاً جنس)" />
-              <input value={attrValue} onChange={(e) => setAttrValue(e.target.value)} placeholder="مقدار (مثلاً چرم)" />
-              <Button type="button" variant="ghost" onClick={addAttribute}>افزودن</Button>
-            </div>
-            {attrEntries(productForm.attributes).length > 0 && (
-              <ul className="attr-list">
-                {attrEntries(productForm.attributes).map(([k, val]) => (
-                  <li key={k}>
-                    <span><strong>{k}:</strong> {val}</span>
-                    <button type="button" className="link danger" onClick={() => removeAttribute(k)}>حذف</button>
-                  </li>
-                ))}
-              </ul>
-            )}
           </div>
 
           <label className="checkbox-row">

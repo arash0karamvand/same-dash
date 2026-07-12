@@ -23,14 +23,23 @@ export function Badge({ children, color = '#6366f1' }) {
   )
 }
 
+import { forwardRef } from 'react'
+
 // دکمه با انواع مختلف
-export function Button({ children, variant = 'primary', className = '', ...props }) {
+export const Button = forwardRef(function Button(
+  { children, variant = 'primary', className = '', ...props },
+  ref,
+) {
   return (
-    <button className={`btn btn-${variant}${className ? ` ${className}` : ''}`} {...props}>
+    <button
+      ref={ref}
+      className={`btn btn-${variant}${className ? ` ${className}` : ''}`}
+      {...props}
+    >
       {children}
     </button>
   )
-}
+})
 
 // کارت ساده با عنوان
 export function Card({ title, actions, children, className = '' }) {
@@ -48,11 +57,11 @@ export function Card({ title, actions, children, className = '' }) {
 }
 
 // پنجره مودال ساده
-export function Modal({ title, open, onClose, children, wide = false }) {
+export function Modal({ title, open, onClose, children, wide = false, className = '' }) {
   if (!open) return null
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className={`modal ${wide ? 'modal-wide' : ''}`} onClick={(e) => e.stopPropagation()}>
+      <div className={`modal ${wide ? 'modal-wide' : ''}${className ? ` ${className}` : ''}`} onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <h3>{title}</h3>
           <button className="modal-close" onClick={onClose}>

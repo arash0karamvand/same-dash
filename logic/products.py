@@ -29,7 +29,6 @@ def variant_to_dict(v):
         "color_name": v.color_name,
         "color_hex": v.color_hex,
         "sku": v.sku,
-        "price": int(v.price),
         "stock": v.stock,
         "is_active": v.is_active,
         "sort_order": v.sort_order,
@@ -45,6 +44,8 @@ def product_to_dict(p, include_variants=True):
         "name": p.name,
         "sku": p.sku,
         "brand": p.brand,
+        "product_model": p.product_model or "",
+        "fabric": p.fabric or "",
         "description": p.description,
         "unit": p.unit,
         "attributes": p.attributes or {},
@@ -67,10 +68,6 @@ def _parse_variants(raw_variants):
         color_name = (item.get("color_name") or "").strip()
         if not color_name:
             continue
-        try:
-            price = Decimal(str(item.get("price") or 0))
-        except (InvalidOperation, TypeError):
-            price = Decimal(0)
         stock = item.get("stock")
         if stock is not None and stock != "":
             stock = int(stock)
@@ -81,7 +78,6 @@ def _parse_variants(raw_variants):
                 "color_name": color_name,
                 "color_hex": (item.get("color_hex") or "#cccccc").strip()[:7],
                 "sku": (item.get("sku") or "").strip(),
-                "price": price,
                 "stock": stock,
                 "is_active": bool(item.get("is_active", True)),
                 "sort_order": int(item.get("sort_order") if item.get("sort_order") is not None else idx),
@@ -104,7 +100,7 @@ def _sync_variants(product, variants_data):
         variant.color_name = item["color_name"]
         variant.color_hex = item["color_hex"]
         variant.sku = item.get("sku") or ""
-        variant.price = item["price"]
+        variant.price = Decimal(0)
         variant.stock = item.get("stock")
         variant.is_active = item.get("is_active", True)
         variant.sort_order = item.get("sort_order", 0)
@@ -178,6 +174,8 @@ def create_product(data):
         name=name,
         sku=(data.get("sku") or "").strip(),
         brand=(data.get("brand") or "").strip(),
+        product_model=(data.get("product_model") or "").strip(),
+        fabric=(data.get("fabric") or "").strip(),
         description=(data.get("description") or "").strip(),
         unit=(data.get("unit") or "عدد").strip() or "عدد",
         attributes=attrs or {},
@@ -189,14 +187,6 @@ def create_product(data):
     variants_data = _parse_variants(data.get("variants"))
     if variants_data:
         _sync_variants(product, variants_data)
-    elif default_price > 0:
-        ProductVariant.objects.create(
-            product=product,
-            color_name="پیش‌فرض",
-            color_hex="#94a3b8",
-            price=default_price,
-            sort_order=0,
-        )
     return product
 
 
@@ -211,6 +201,10 @@ def update_product(product, data):
         product.sku = (data.get("sku") or "").strip()
     if "brand" in data:
         product.brand = (data.get("brand") or "").strip()
+    if "product_model" in data:
+        product.product_model = (data.get("product_model") or "").strip()
+    if "fabric" in data:
+        product.fabric = (data.get("fabric") or "").strip()
     if "description" in data:
         product.description = (data.get("description") or "").strip()
     if "unit" in data:
@@ -249,6 +243,13 @@ def update_product(product, data):
     return product
 
 
+def resolve_catalog_price(product, variant=None):
+    """قیمت مؤثر فقط از فیلد قیمت محصول."""
+    if product is None:
+        return Decimal(0)
+    return Decimal(product.default_price or 0)
+
+
 def filter_products(queryset, *, search="", category_id=None, active_only=True):
     if active_only:
         queryset = queryset.filter(is_active=True, is_deleted=False)
@@ -262,40 +263,50 @@ def filter_products(queryset, *, search="", category_id=None, active_only=True):
 
 
 def resolve_line_item_from_catalog(item):
-    """نگاشت ردیف فروش از کاتالوگ — variant_id یا product_id."""
+    """نگاشت ردیف فروش از کاتالوگ — قیمت فقط از تعریف محصول."""
     product_id = item.get("product_id")
     variant_id = item.get("variant_id")
+    if not product_id and not variant_id:
+        return None
+
     product = None
     variant = None
-    name = (item.get("product_name") or "").strip()
-    color_name = (item.get("color_name") or "").strip()
-    color_hex = (item.get("color_hex") or "").strip()[:7]
-    price = Decimal(str(item.get("unit_price") or 0))
+    name = ""
+    color_name = ""
+    color_hex = ""
+    product_model = ""
+    fabric = ""
+    price = Decimal(0)
 
     if variant_id:
         variant = ProductVariant.objects.select_related("product").filter(pk=variant_id, is_active=True).first()
         if variant:
             product = variant.product
-            name = name or product.name
-            color_name = color_name or variant.color_name
-            color_hex = color_hex or variant.color_hex
-            if not item.get("unit_price"):
-                price = variant.price
     elif product_id:
         product = Product.objects.filter(pk=product_id, is_active=True, is_deleted=False).first()
         if product:
-            name = name or product.name
-            if not item.get("unit_price"):
-                first_variant = product.variants.filter(is_active=True).order_by("sort_order", "id").first()
-                price = first_variant.price if first_variant else product.default_price
+            variant = product.variants.filter(is_active=True).order_by("sort_order", "id").first()
 
-    if not name:
+    if product:
+        name = product.name
+        product_model = product.product_model or ""
+        fabric = product.fabric or ""
+        if variant:
+            color_name = variant.color_name
+            color_hex = variant.color_hex
+        price = resolve_catalog_price(product)
+
+    if not product or not name:
         return None
+    if price <= 0:
+        raise ValueError(f"محصول «{name}» قیمت ندارد — ابتدا در بخش محصولات قیمت را تنظیم کنید.")
 
     return {
         "product": product,
         "variant": variant,
         "product_name": name,
+        "product_model": product_model,
+        "fabric": fabric,
         "color_name": color_name,
         "color_hex": color_hex,
         "unit_price": price,

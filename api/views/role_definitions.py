@@ -6,16 +6,19 @@ from django.contrib.auth.models import Group
 
 from api.helpers import api_view, fail, parse_json, success
 from auth import roles
+from auth.org_roles import is_locked_role
 from auth.permissions import (
     ALL_PERMISSIONS,
     ASSIGNABLE_PERMISSIONS,
     PERMISSION_LABELS,
     is_system_admin,
+    permission_groups_for_matrix,
+    menu_sections_for_matrix,
     sanitize_role_permissions,
 )
 from backend.models import OrgRank, RoleDefinition
 from logic.audit import log_action
-from logic.role_definitions import role_definition_to_dict, seed_builtin_roles, sync_group_for_role
+from logic.role_definitions import delete_role_definition, role_definition_to_dict, seed_builtin_roles, sync_group_for_role
 
 
 def _require_system_admin(user):
@@ -47,6 +50,8 @@ def permission_matrix(request):
     if denied:
         return denied
     seed_builtin_roles()
+    from logic.config_seed import seed_config_defaults
+    seed_config_defaults()
     role_defs = [role_definition_to_dict(r) for r in RoleDefinition.objects.order_by("sort_order")]
     return success(
         {
@@ -58,6 +63,10 @@ def permission_matrix(request):
                 {"code": code, "label": PERMISSION_LABELS.get(code, code)}
                 for code in sorted(ASSIGNABLE_PERMISSIONS)
             ],
+            "permission_groups": permission_groups_for_matrix(assignable_only=False),
+            "assignable_permission_groups": permission_groups_for_matrix(assignable_only=True),
+            "menu_sections": menu_sections_for_matrix(assignable_only=False),
+            "assignable_menu_sections": menu_sections_for_matrix(assignable_only=True),
             "roles": role_defs,
         }
     )
@@ -89,6 +98,8 @@ def role_definition_list(request):
         return fail("این شناسه نقش قبلاً ثبت شده.", status=400)
     if slug == roles.ADMIN:
         return fail("نقش مدیر سیستم از این مسیر قابل ساخت نیست.", status=403)
+    if slug in {roles.CEO, roles.CO_CEO, roles.BRANCH_SUPERVISOR, roles.ACCOUNTING_FINANCE, roles.SALES_EXPERT}:
+        return fail("نقش‌های سازمانی پیش‌فرض از این مسیر قابل ساخت نیست.", status=403)
 
     perms = sanitize_role_permissions(slug, data.get("permissions") or [])
     invalid = set(perms) - ALL_PERMISSIONS
@@ -130,18 +141,20 @@ def role_definition_detail(request, slug):
         return success(role_definition_to_dict(rd))
 
     if request.method == "DELETE":
-        if rd.is_builtin:
-            return fail("نقش پیش‌فرض قابل حذف نیست.", status=400)
         if rd.slug == roles.ADMIN:
             return fail("نقش مدیر سیستم قابل حذف نیست.", status=400)
-        Group.objects.filter(name=rd.slug).delete()
-        rd.delete()
-        log_action(request.user, "delete", f"حذف نقش {slug}", entity_type="RoleDefinition")
-        return success({"deleted": True})
+        moved = delete_role_definition(rd)
+        log_action(
+            request.user,
+            "delete",
+            f"حذف نقش {slug}" + (f" — {moved} کاربر به pending" if moved else ""),
+            entity_type="RoleDefinition",
+        )
+        return success({"deleted": True, "users_moved_to_pending": moved})
 
     data = parse_json(request)
-    if slug == roles.ADMIN:
-        return fail("مجوزهای نقش مدیر سیستم قابل تغییر نیست.", status=400)
+    if is_locked_role(slug):
+        return fail("مجوزهای این نقش قابل تغییر نیست.", status=400)
 
     if "label" in data:
         rd.label = (data.get("label") or rd.label).strip()

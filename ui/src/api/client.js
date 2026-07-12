@@ -38,6 +38,22 @@ const post = (url, body) => request('POST', url, body)
 const put = (url, body) => request('PUT', url, body)
 const del = (url) => request('DELETE', url)
 
+export const configApi = {
+  get: () => get('/api/config/'),
+  branches: () => get('/api/config/branches/'),
+  createBranch: (data) => post('/api/config/branches/', data),
+  updateBranch: (id, data) => put(`/api/config/branches/${id}/`, data),
+  deleteBranch: (id) => del(`/api/config/branches/${id}/`),
+  lookups: (category) => get(`/api/config/lookups/${category ? `?category=${category}` : ''}`),
+  createLookup: (data) => post('/api/config/lookups/', data),
+  updateLookup: (id, data) => put(`/api/config/lookups/${id}/`, data),
+  deleteLookup: (id) => del(`/api/config/lookups/${id}/`),
+  menuSections: () => get('/api/config/menu-sections/'),
+  createMenuSection: (data) => post('/api/config/menu-sections/', data),
+  updateMenuSection: (id, data) => put(`/api/config/menu-sections/${id}/`, data),
+  deleteMenuSection: (id) => del(`/api/config/menu-sections/${id}/`),
+}
+
 export const authApi = {
   createUser: (data) => post('/api/auth/users/', data),
   login: (data) => post('/api/auth/login/', data),
@@ -70,7 +86,13 @@ export const authApi = {
 }
 
 export const staffApi = {
-  list: (branch = '') => get(`/api/staff/${branch ? `?branch=${encodeURIComponent(branch)}` : ''}`),
+  list: (branch = '', kind = 'seller') => {
+    const params = new URLSearchParams()
+    if (branch) params.set('branch', branch)
+    if (kind) params.set('kind', kind)
+    const q = params.toString()
+    return get(`/api/staff/${q ? `?${q}` : ''}`)
+  },
   create: (data) => post('/api/staff/', data),
   remove: (id) => del(`/api/staff/${id}/`),
 }
@@ -99,6 +121,7 @@ export const productsApi = {
   createCategory: (data) => post('/api/products/categories/', data),
   updateCategory: (id, data) => put(`/api/products/categories/${id}/`, data),
   removeCategory: (id) => del(`/api/products/categories/${id}/`),
+  topSelling: (limit = 20) => get(`/api/products/top-selling/?limit=${limit}`),
 }
 
 export const auditApi = {
@@ -136,7 +159,13 @@ export const customersApi = {
   recalculateAll: () => post('/api/customers/recalculate-all-levels/'),
   wallet: (id) => get(`/api/customers/${id}/wallet/`),
   walletAdjust: (id, data) => post(`/api/customers/${id}/wallet/`, data),
-  topBuyers: (limit = 5) => get(`/api/customers/top-buyers/?limit=${limit}`),
+  topBuyers: (limit = 20, opts = {}) => {
+    const p = new URLSearchParams()
+    p.set('limit', String(limit))
+    if (opts.minPurchases != null) p.set('min_purchases', String(opts.minPurchases))
+    if (opts.days != null) p.set('days', String(opts.days))
+    return get(`/api/customers/top-buyers/?${p.toString()}`)
+  },
 }
 
 export const salesApi = {
@@ -146,8 +175,17 @@ export const salesApi = {
   update: (id, data) => put(`/api/sales/${id}/`, data),
   remove: (id) => del(`/api/sales/${id}/`),
   recordPayment: (id, data) => post(`/api/sales/${id}/record-payment/`, data),
+  confirm: (id) => post(`/api/sales/${id}/confirm/`),
+  cancel: (id) => post(`/api/sales/${id}/cancel/`),
+  approveBranch: (id) => post(`/api/sales/${id}/approve-branch/`),
+  approveAccounting: (id) => post(`/api/sales/${id}/approve-accounting/`),
+  factoryReceive: (id) => post(`/api/sales/${id}/factory-receive/`),
+  factoryComplete: (id) => post(`/api/sales/${id}/factory-complete/`),
+  freightReceive: (id) => post(`/api/sales/${id}/freight-receive/`),
+  freightComplete: (id) => post(`/api/sales/${id}/freight-complete/`),
   dailyReport: (date) => get(`/api/sales/reports/daily/${date ? `?date=${date}` : ''}`),
   monthlyReport: (year, month) => get(`/api/sales/reports/monthly/?year=${year}&month=${month}`),
+  dailyBreakdown: (year, month) => get(`/api/sales/reports/daily-breakdown/?year=${year}&month=${month}`),
   yearlyReport: (year) => get(`/api/sales/reports/yearly/?year=${year}`),
   employeeRanking: (opts = {}) => {
     const p = new URLSearchParams()
@@ -159,6 +197,23 @@ export const salesApi = {
     const q = p.toString()
     return get(q ? `/api/sales/employee-ranking/?${q}` : '/api/sales/employee-ranking/')
   },
+}
+
+export const officeApi = {
+  list: (params = '') => get(`/api/office/orders/${params ? `?${params}` : ''}`),
+  get: (id) => get(`/api/office/orders/${id}/`),
+  approve: (id) => post(`/api/office/orders/${id}/approve/`),
+  reject: (id, reason = '') => post(`/api/office/orders/${id}/reject/`, { reason }),
+  rollback: (id, reason = '') => post(`/api/office/orders/${id}/rollback/`, { reason }),
+}
+
+export const factoryApi = {
+  list: (params = '') => get(`/api/factory/orders/${params ? `?${params}` : ''}`),
+  get: (id) => get(`/api/factory/orders/${id}/`),
+  receive: (id) => post(`/api/factory/orders/${id}/receive/`),
+  complete: (id) => post(`/api/factory/orders/${id}/complete/`),
+  freightReceive: (id) => post(`/api/factory/orders/${id}/freight-receive/`),
+  freightComplete: (id) => post(`/api/factory/orders/${id}/freight-complete/`),
 }
 
 export const installmentsApi = {

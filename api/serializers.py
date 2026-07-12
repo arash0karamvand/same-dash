@@ -27,6 +27,7 @@ def customer_to_dict(customer):
         "phone": customer.phone,
         "membership_code": customer.membership_code or "",
         "email": customer.email,
+        "address": customer.address or "",
         "level": level_to_dict(customer.level),
         "total_purchases": int(customer.total_purchases),
         "last_purchase_at": customer.last_purchase_at.isoformat() if customer.last_purchase_at else None,
@@ -38,39 +39,63 @@ def customer_to_dict(customer):
     }
 
 
-def line_item_to_dict(item):
+def line_item_to_dict(item, user=None):
+    from auth.org_roles import should_mask_amounts_for_user, should_mask_prices_for_user
+
+    mask_prices = user and should_mask_prices_for_user(user)
+    mask_amounts = user and should_mask_amounts_for_user(user)
+    hide_money = mask_prices or mask_amounts
     return {
         "id": item.id,
         "product_id": item.product_id,
         "variant_id": item.variant_id,
         "product_name": item.product_name,
+        "product_model": item.product_model or "",
+        "fabric": item.fabric or "",
         "color_name": item.color_name or "",
         "color_hex": item.color_hex or "",
         "quantity": item.quantity,
-        "unit_price": int(item.unit_price),
-        "line_total": int(item.line_total),
+        "unit_price": None if hide_money else int(item.unit_price),
+        "line_total": None if hide_money else int(item.line_total),
+        "prices_masked": hide_money,
     }
 
 
-def sale_to_dict(sale, include_installments=False, include_lines=False):
-    from auth.branches import BRANCH_LABELS
+def sale_to_dict(sale, include_installments=False, include_lines=False, user=None):
+    from auth.org_roles import (
+        should_mask_amounts_for_user,
+        should_mask_customer_for_sale,
+        should_mask_prices_for_user,
+    )
+    from logic.branches import branch_labels
+    from logic.sale_workflow import WORKFLOW_STAGE_LABELS
+
+    BRANCH_LABELS = branch_labels()
 
     paid = int(sale.paid_amount)
     final = int(sale.final_amount)
+    mask_customer = user and should_mask_customer_for_sale(user, sale)
+    mask_prices = user and should_mask_prices_for_user(user)
+    mask_amounts = user and should_mask_amounts_for_user(user)
+    hide_money = mask_prices or mask_amounts
     data = {
         "id": sale.id,
-        "customer_id": sale.customer_id,
-        "customer_name": sale.customer.full_name,
-        "customer_phone": sale.customer.phone if sale.customer_id else "",
-        "customer_wallet_balance": int(sale.customer.wallet_balance) if sale.customer_id else 0,
-        "amount": int(sale.amount),
+        "customer_id": None if mask_customer else sale.customer_id,
+        "customer_name": "—" if mask_customer else sale.customer.full_name,
+        "customer_phone": "" if mask_customer else (sale.customer.phone if sale.customer_id else ""),
+        "customer_address": "" if mask_customer else (sale.customer.address or ""),
+        "customer_wallet_balance": 0 if mask_customer else (int(sale.customer.wallet_balance) if sale.customer_id else 0),
+        "customer_masked": mask_customer,
+        "amount": None if hide_money else int(sale.amount),
         "discount_type": sale.discount_type,
         "discount_type_display": sale.get_discount_type_display(),
-        "discount_value": int(sale.discount_value),
-        "discount": int(sale.discount),
-        "final_amount": final,
-        "paid_amount": paid,
-        "balance_due": max(0, final - paid),
+        "discount_value": None if hide_money else int(sale.discount_value),
+        "discount": None if hide_money else int(sale.discount),
+        "final_amount": None if hide_money else final,
+        "paid_amount": None if hide_money else paid,
+        "balance_due": None if hide_money else max(0, final - paid),
+        "amounts_masked": hide_money,
+        "prices_masked": mask_prices,
         "sold_at": sale.sold_at.isoformat(),
         "invoice_number": sale.invoice_number,
         "description": sale.description,
@@ -82,23 +107,194 @@ def sale_to_dict(sale, include_installments=False, include_lines=False):
         "branch": sale.branch or "",
         "branch_label": BRANCH_LABELS.get(sale.branch, "—"),
         "seller_name": sale.seller.full_name if sale.seller_id else None,
+        "order_kind": sale.order_kind,
+        "order_kind_display": sale.get_order_kind_display(),
+        "order_status": sale.order_status,
+        "order_status_display": sale.get_order_status_display(),
+        "workflow_stage": sale.workflow_stage,
+        "workflow_stage_display": WORKFLOW_STAGE_LABELS.get(sale.workflow_stage, sale.workflow_stage),
+        "delivery_date": sale.delivery_date.isoformat() if sale.delivery_date else None,
         "is_deleted": getattr(sale, "is_deleted", False),
     }
     if include_installments:
         data["installments"] = [
-            installment_to_dict(i) for i in sale.installments.filter(is_deleted=False)
+            installment_to_dict(i, user=user) for i in sale.installments.filter(is_deleted=False)
         ]
     if include_lines:
-        data["line_items"] = [line_item_to_dict(i) for i in sale.line_items.all()]
+        data["line_items"] = [line_item_to_dict(i, user=user) for i in sale.line_items.all()]
     return data
 
 
-def installment_to_dict(inst):
+def office_line_item_to_dict(item, user=None):
+    from auth.org_roles import should_mask_amounts_for_user, should_mask_prices_for_user
+
+    mask_prices = user and should_mask_prices_for_user(user)
+    mask_amounts = user and should_mask_amounts_for_user(user)
+    hide_money = mask_prices or mask_amounts
+    return {
+        "id": item.id,
+        "product_id": item.product_id,
+        "variant_id": item.variant_id,
+        "product_name": item.product_name,
+        "product_model": item.product_model or "",
+        "fabric": item.fabric or "",
+        "color_name": item.color_name or "",
+        "color_hex": item.color_hex or "",
+        "quantity": item.quantity,
+        "unit_price": None if hide_money else int(item.unit_price),
+        "line_total": None if hide_money else int(item.line_total),
+        "prices_masked": hide_money,
+    }
+
+
+def office_order_to_dict(order, include_installments=False, include_lines=False, user=None):
+    from auth.org_roles import should_mask_amounts_for_user, should_mask_prices_for_user
+    from auth.permissions import can_edit_sale
+    from logic.branches import branch_labels
+    from logic.sale_workflow import get_office_workflow_snapshot
+
+    BRANCH_LABELS = branch_labels()
+    mask_prices = user and should_mask_prices_for_user(user)
+    mask_amounts = user and should_mask_amounts_for_user(user)
+    hide_money = mask_prices or mask_amounts
+    final = int(order.final_amount)
+    paid = int(order.paid_amount)
+    workflow = get_office_workflow_snapshot(order)
+
+    data = {
+        "id": order.id,
+        "source_sale_id": order.source_sale_id,
+        "customer_id": order.customer_id,
+        "customer_name": order.customer.full_name,
+        "customer_phone": order.customer.phone if order.customer_id else "",
+        "customer_address": order.customer.address or "",
+        "amount": None if hide_money else int(order.amount),
+        "discount_type": order.discount_type,
+        "discount_value": None if hide_money else int(order.discount_value),
+        "discount": None if hide_money else int(order.discount),
+        "final_amount": None if hide_money else final,
+        "paid_amount": None if hide_money else paid,
+        "balance_due": None if hide_money else max(0, final - paid),
+        "amounts_masked": hide_money,
+        "invoice_number": order.invoice_number,
+        "description": order.description,
+        "payment_status": order.payment_status,
+        "payment_method": order.payment_method,
+        "order_kind": order.order_kind,
+        "order_status": order.order_status,
+        "status": order.status,
+        "status_display": order.get_status_display(),
+        "branch": order.branch or "",
+        "branch_label": BRANCH_LABELS.get(order.branch, "—"),
+        "seller_name": order.seller.full_name if order.seller_id else None,
+        "recorded_by": order.recorded_by.username if order.recorded_by else None,
+        "sold_at": order.sold_at.isoformat(),
+        "delivery_date": order.delivery_date.isoformat() if order.delivery_date else None,
+        "workflow_stage": workflow["workflow_stage"],
+        "workflow_stage_display": workflow["workflow_stage_display"],
+        "holder_department": workflow["holder_department"],
+        "holder_name": workflow["holder_name"],
+        "holder_detail": workflow["holder_detail"],
+        "can_rollback": workflow["can_rollback"],
+        "rollback_label": workflow["rollback_label"],
+        "rollback_action": workflow["rollback_action"],
+        "can_edit": bool(user and can_edit_sale(user, order.source_sale)),
+        "created_at": order.created_at.isoformat(),
+    }
+    if include_installments:
+        data["installments"] = [
+            {
+                "id": i.id,
+                "amount": None if hide_money else int(i.amount),
+                "due_date": i.due_date.isoformat(),
+                "payment_method": i.payment_method,
+                "check_number": i.check_number,
+                "bank_name": i.bank_name,
+                "status": i.status,
+            }
+            for i in order.installments.filter(is_deleted=False)
+        ]
+    if include_lines:
+        data["line_items"] = [office_line_item_to_dict(i, user=user) for i in order.line_items.all()]
+    return data
+
+
+def factory_line_item_to_dict(item):
+    return {
+        "id": item.id,
+        "product_id": item.product_id,
+        "variant_id": item.variant_id,
+        "product_name": item.product_name,
+        "product_model": item.product_model or "",
+        "fabric": item.fabric or "",
+        "color_name": item.color_name or "",
+        "color_hex": item.color_hex or "",
+        "quantity": item.quantity,
+        "unit_price": None,
+        "line_total": None,
+        "prices_masked": True,
+    }
+
+
+def factory_order_to_dict(order, include_lines=False, user=None):
+    from auth.org_roles import is_executive_user, is_freight_supervisor
+    from auth.permissions import VIEW_FREIGHT_ORDERS, has_permission
+    from logic.branches import branch_labels
+    from logic.sale_workflow import WORKFLOW_STAGE_LABELS
+
+    BRANCH_LABELS = branch_labels()
+    show_customer = user and (
+        is_executive_user(user)
+        or is_freight_supervisor(user)
+        or has_permission(user, VIEW_FREIGHT_ORDERS)
+    )
+    data = {
+        "id": order.id,
+        "source_sale_id": order.source_sale_id,
+        "source_office_order_id": order.source_office_order_id,
+        "customer_id": None,
+        "customer_name": "—",
+        "customer_phone": "",
+        "customer_address": "",
+        "customer_masked": True,
+        "invoice_number": order.invoice_number,
+        "description": order.description,
+        "branch": order.branch or "",
+        "branch_label": BRANCH_LABELS.get(order.branch, "—"),
+        "order_kind": order.order_kind,
+        "delivery_date": order.delivery_date.isoformat() if order.delivery_date else None,
+        "workflow_stage": order.workflow_stage,
+        "workflow_stage_display": WORKFLOW_STAGE_LABELS.get(order.workflow_stage, order.workflow_stage),
+        "production_done_at": order.production_done_at.isoformat() if order.production_done_at else None,
+        "amounts_masked": True,
+        "final_amount": None,
+        "created_at": order.created_at.isoformat(),
+    }
+    if show_customer and order.customer_id:
+        customer = order.customer
+        data.update(
+            {
+                "customer_id": customer.id,
+                "customer_name": customer.full_name,
+                "customer_phone": customer.phone or "",
+                "customer_address": customer.address or "",
+                "customer_masked": False,
+            }
+        )
+    if include_lines:
+        data["line_items"] = [factory_line_item_to_dict(i) for i in order.line_items.all()]
+    return data
+
+
+def installment_to_dict(inst, user=None):
+    from auth.org_roles import should_mask_amounts_for_user, should_mask_prices_for_user
+
+    hide_money = user and (should_mask_prices_for_user(user) or should_mask_amounts_for_user(user))
     return {
         "id": inst.id,
         "sale_id": inst.sale_id,
         "customer_name": inst.sale.customer.full_name if inst.sale_id else "",
-        "amount": int(inst.amount),
+        "amount": None if hide_money else int(inst.amount),
         "due_date": inst.due_date.isoformat(),
         "payment_method": inst.payment_method,
         "payment_method_display": inst.get_payment_method_display(),
@@ -153,12 +349,12 @@ def attendance_to_dict(record):
     }
 
 
-def accounting_to_dict(entry):
+def accounting_to_dict(entry, user=None):
     from logic.accounting import entry_permissions, is_system_entry
 
     sale = entry.sale if entry.sale_id else None
     is_system = is_system_entry(entry)
-    perms = entry_permissions(entry)
+    perms = entry_permissions(entry, user=user)
     return {
         "id": entry.id,
         "entry_type": entry.entry_type,

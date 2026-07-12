@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from 'react'
 import { levelsApi } from '../api/client'
+import { useConfirm } from '../context/ConfirmContext'
 import MoneyInput from '../components/MoneyInput'
 import { Badge, Button, Card, EmptyState, Field, Modal } from '../components/ui'
 import { formatMoney } from '../utils/format'
@@ -17,6 +18,7 @@ const EMPTY_FORM = {
 }
 
 export default function Levels() {
+  const confirm = useConfirm()
   const [levels, setLevels] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -85,7 +87,12 @@ export default function Levels() {
   }
 
   const remove = async (level) => {
-    if (!confirm(`حذف سطح «${level.name}»؟`)) return
+    if (!await confirm({
+      title: 'حذف سطح',
+      message: `حذف سطح «${level.name}»؟`,
+      confirmText: 'بله، حذف شود',
+      variant: 'danger',
+    })) return
     await levelsApi.remove(level.id)
     load()
   }

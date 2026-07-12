@@ -10,6 +10,7 @@ from api.serializers import checks_report_to_dict, installment_to_dict
 from auth.permissions import MANAGE_INSTALLMENTS, VIEW_INSTALLMENTS, has_permission
 from backend.models import Sale, SaleInstallment
 from logic.installments import checks_report, pay_installment
+from logic.sales import normalize_payment_method
 from logic.audit import log_action
 
 
@@ -66,11 +67,16 @@ def installment_list(request):
     except (InvalidOperation, TypeError):
         return fail("Invalid amount", status=400)
 
+    try:
+        payment_method = normalize_payment_method(data.get("payment_method") or "cash")
+    except ValueError as exc:
+        return fail(str(exc), status=400)
+
     inst = SaleInstallment.objects.create(
         sale=sale,
         amount=amount,
         due_date=due_date,
-        payment_method=data.get("payment_method") or "cash",
+        payment_method=payment_method,
         check_number=(data.get("check_number") or "").strip(),
         bank_name=(data.get("bank_name") or "").strip(),
         notes=(data.get("notes") or "").strip(),
@@ -117,7 +123,13 @@ def installment_detail(request, pk):
         return fail("Cannot edit paid installment", status=400)
     for field in ("check_number", "bank_name", "notes", "payment_method"):
         if field in data:
-            setattr(inst, field, (data.get(field) or "").strip())
+            value = (data.get(field) or "").strip()
+            if field == "payment_method":
+                try:
+                    value = normalize_payment_method(value)
+                except ValueError as exc:
+                    return fail(str(exc), status=400)
+            setattr(inst, field, value)
     if "amount" in data:
         inst.amount = Decimal(str(data["amount"]))
     if "due_date" in data:

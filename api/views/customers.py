@@ -15,6 +15,7 @@ from auth.permissions import (
 )
 from logic.levels import update_customer_level
 from logic.audit import log_action
+from logic.analytics import top_repeat_buyers_year
 from logic.customers import apply_customer_filters
 
 
@@ -63,6 +64,7 @@ def customer_list(request):
         full_name=full_name,
         phone=phone,
         email=(data.get("email") or "").strip(),
+        address=(data.get("address") or "").strip(),
         notes=(data.get("notes") or "").strip(),
         membership_code=generate_membership_code(),
     )
@@ -116,7 +118,7 @@ def customer_detail(request, pk):
         birthday, has_birthday = _parse_birthday(data)
     except ValueError as exc:
         return fail(str(exc), status=400)
-    for field in ("full_name", "email", "notes"):
+    for field in ("full_name", "email", "notes", "address"):
         if field in data:
             setattr(customer, field, (data.get(field) or "").strip())
     if "phone" in data:
@@ -146,11 +148,11 @@ def customer_history(request, pk):
     except Customer.DoesNotExist:
         return fail("Customer not found", status=404)
 
-    sales = customer.sales.all()
+    sales = customer.sales.prefetch_related("line_items").order_by("-sold_at")
     history = customer.level_history.select_related("previous_level", "new_level").all()
     return success(
         {
-            "sales": [sale_to_dict(s) for s in sales],
+            "sales": [sale_to_dict(s, include_lines=True) for s in sales],
             "level_history": [level_history_to_dict(h) for h in history],
         }
     )
@@ -195,18 +197,19 @@ def customer_top_buyers(request):
     if not has_permission(request.user, VIEW_CUSTOMERS):
         return fail("Permission denied", status=403)
     try:
-        limit = min(max(int(request.GET.get("limit") or 5), 1), 20)
+        limit = min(max(int(request.GET.get("limit") or 20), 1), 50)
+        min_purchases = max(int(request.GET.get("min_purchases") or 2), 2)
+        days = max(int(request.GET.get("days") or 365), 1)
     except (TypeError, ValueError):
-        limit = 5
-    qs = (
-        Customer.objects.filter(is_active=True, total_purchases__gt=0)
-        .select_related("level")
-        .order_by("-total_purchases", "-last_purchase_at")[:limit]
-    )
-    results = [customer_to_dict(c) for c in qs]
+        limit, min_purchases, days = 20, 2, 365
+
+    results = top_repeat_buyers_year(limit=limit, min_purchases=min_purchases, days=days)
     return success(
         {
             "results": results,
             "top": results[0] if results else None,
+            "limit": limit,
+            "min_purchases": min_purchases,
+            "days": days,
         }
     )

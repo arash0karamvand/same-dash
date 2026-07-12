@@ -6,6 +6,7 @@ import PersianDateInput from '../components/PersianDateInput'
 import PersianMonthPicker from '../components/PersianMonthPicker'
 import Select from '../components/Select'
 import { Badge, Button, Card, EmptyState, Field, FilterBar } from '../components/ui'
+import { useConfig } from '../context/ConfigContext'
 import { formatMoney } from '../utils/format'
 import { currentJalali, isoToJalali, todayIso, toPersianDigits } from '../utils/jalali'
 
@@ -13,12 +14,6 @@ const PERIOD_OPTIONS = [
   { value: 'day', label: 'روز' },
   { value: 'month', label: 'ماه' },
   { value: 'year', label: 'سال' },
-]
-
-const BRANCHES = [
-  { value: '', label: 'همه شعب' },
-  { value: 'branch_1', label: 'کمرد' },
-  { value: 'branch_2', label: 'پاسداران' },
 ]
 
 function buildYearOptions(curYear) {
@@ -45,6 +40,8 @@ function buildParams(period, dayIso, monthYear, monthValue, yearValue, branch, j
 }
 
 export default function EmployeeRanking() {
+  const { branchOptions } = useConfig()
+  const branchFilterOptions = [{ value: '', label: 'همه شعب' }, ...branchOptions]
   const jNow = currentJalali()
   const [period, setPeriod] = useState('month')
   const [dayIso, setDayIso] = useState(todayIso())
@@ -126,7 +123,7 @@ export default function EmployeeRanking() {
             </Field>
           )}
           <Field label="فیلتر رتبه‌بندی">
-            <Select value={branch} onChange={setBranch} options={BRANCHES} />
+            <Select value={branch} onChange={setBranch} options={branchFilterOptions} />
           </Field>
           <div className="page-filters-actions">
             <Button type="button" onClick={load} disabled={loading}>

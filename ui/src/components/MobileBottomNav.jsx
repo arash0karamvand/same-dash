@@ -1,40 +1,28 @@
-// نوار پایین موبایل — دسترسی سریع به صفحات پرکاربرد
+// نوار پایین موبایل — چهار پورتال
 
-import { NAV_ITEMS } from './Layout'
-import { canSeeNavItem } from '../utils/permissions'
+import { canSeePortal } from '../utils/permissions'
 
-const MOBILE_PRIORITY = ['dashboard', 'customers', 'products', 'sales', 'ranking', 'sms', 'accounting', 'checks', 'levels']
-
-export default function MobileBottomNav({ user, current, onNavigate, onOpenMenu }) {
-  const shortcuts = MOBILE_PRIORITY
-    .map((key) => NAV_ITEMS.find((item) => item.key === key))
-    .filter((item) => item && canSeeNavItem(user, item))
-    .slice(0, 4)
-    .map((item) => ({ key: item.key, label: item.label.slice(0, 8), icon: item.icon }))
-
-  const items = [
-    ...shortcuts,
-    { key: '__menu__', label: 'منو', icon: '☰' },
-  ]
+export default function MobileBottomNav({ user, portals, currentPortal, onNavigate, onOpenMenu }) {
+  const items = (portals || []).filter((p) => canSeePortal(user, p)).slice(0, 4)
 
   return (
-    <nav className="mobile-bottom-nav" aria-label="ناوبری سریع">
-      {items.map((item) => {
-        const isMenu = item.key === '__menu__'
-        const active = !isMenu && current === item.key
-        return (
-          <button
-            key={item.key}
-            type="button"
-            className={`mobile-nav-item ${active ? 'active' : ''}`}
-            aria-current={active ? 'page' : undefined}
-            onClick={() => (isMenu ? onOpenMenu() : onNavigate(item.key))}
-          >
-            <span className="mobile-nav-icon" aria-hidden>{item.icon}</span>
-            <span className="mobile-nav-label">{item.label}</span>
-          </button>
-        )
-      })}
+    <nav className="mobile-bottom-nav portal-bottom-nav" aria-label="پورتال‌ها">
+      {items.map((p) => (
+        <button
+          key={p.id}
+          type="button"
+          className={`mobile-nav-item ${currentPortal === p.id ? 'active' : ''}`}
+          aria-current={currentPortal === p.id ? 'page' : undefined}
+          onClick={() => onNavigate(p.id)}
+        >
+          <span className="mobile-nav-icon" aria-hidden>{p.icon}</span>
+          <span className="mobile-nav-label">{p.label}</span>
+        </button>
+      ))}
+      <button type="button" className="mobile-nav-item" onClick={onOpenMenu}>
+        <span className="mobile-nav-icon" aria-hidden>☰</span>
+        <span className="mobile-nav-label">منو</span>
+      </button>
     </nav>
   )
 }

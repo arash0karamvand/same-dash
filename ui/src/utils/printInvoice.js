@@ -4,8 +4,6 @@ import { todayIso } from './jalali'
 const PAYMENT_LABELS = {
   cash: 'نقدی',
   card: 'کارت‌خوان',
-  online: 'آنلاین',
-  credit: 'اعتباری',
   check: 'چک',
 }
 
@@ -33,15 +31,19 @@ function displayLineItems(sale) {
 
 function lineItemsHtml(sale) {
   return displayLineItems(sale)
-    .map(
-      (item) => `
+    .map((item) => {
+      const specs = [item.fabric, item.color_name, item.product_model].filter(Boolean)
+      const specHtml = specs.length
+        ? `<div class="muted small">${escapeHtml(specs.join(' · '))}</div>`
+        : ''
+      return `
     <tr>
-      <td>${escapeHtml(item.product_name)}</td>
+      <td>${escapeHtml(item.product_name || '—')}${specHtml}</td>
       <td class="num">${formatNumber(item.quantity)}</td>
       <td class="num">${formatMoney(item.unit_price)}</td>
       <td class="num">${formatMoney(item.line_total)}</td>
-    </tr>`,
-    )
+    </tr>`
+    })
     .join('')
 }
 
@@ -79,6 +81,10 @@ export function buildInvoiceHtml(sale) {
   const invoiceNo = sale.invoice_number || `#${sale.id}`
   const payLabel = PAYMENT_LABELS[sale.payment_method] || sale.payment_method_display || '—'
   const sellerLabel = sale.seller_name || sale.recorded_by || '—'
+  const todayLabel = formatDate(todayIso())
+  const soldLabel = sale.sold_at ? formatDate(sale.sold_at) : todayLabel
+  const deliveryLabel = sale.delivery_date ? formatDate(sale.delivery_date) : '—'
+  const totalQty = displayLineItems(sale).reduce((sum, item) => sum + Number(item.quantity || 0), 0)
 
   return `<!DOCTYPE html>
 <html lang="fa" dir="rtl">
@@ -124,6 +130,8 @@ export function buildInvoiceHtml(sale) {
       background: #f8fafc;
     }
     .box h4 { margin: 0 0 8px; font-size: 12px; color: #64748b; font-weight: 600; }
+    .info-row { margin-bottom: 4px; }
+    .info-row .label { color: #64748b; margin-left: 6px; }
     table {
       width: 100%;
       border-collapse: collapse;
@@ -196,7 +204,8 @@ export function buildInvoiceHtml(sale) {
       <div class="muted">فاکتور فروش — شماره: <strong>${escapeHtml(invoiceNo)}</strong></div>
     </div>
     <div class="meta">
-      <div>تاریخ: ${escapeHtml(formatDate(sale.sold_at))}</div>
+      <div>تاریخ روز: <strong>${escapeHtml(todayLabel)}</strong></div>
+      <div>تاریخ ثبت: ${escapeHtml(soldLabel)}</div>
       <div>شعبه: ${escapeHtml(sale.branch_label || '—')}</div>
       <div>فروشنده: ${escapeHtml(sellerLabel)}</div>
     </div>
@@ -205,29 +214,38 @@ export function buildInvoiceHtml(sale) {
   <div class="grid">
     <div class="box">
       <h4>مشتری</h4>
-      <div><strong>${escapeHtml(sale.customer_name || '—')}</strong></div>
-      ${sale.customer_phone ? `<div class="ltr">${escapeHtml(sale.customer_phone)}</div>` : ''}
+      <div class="info-row"><span class="label">نام:</span> <strong>${escapeHtml(sale.customer_name || '—')}</strong></div>
+      <div class="info-row"><span class="label">شماره تماس:</span> <span class="ltr">${escapeHtml(sale.customer_phone || '—')}</span></div>
+      <div class="info-row"><span class="label">آدرس:</span> ${escapeHtml(sale.customer_address || '—')}</div>
     </div>
     <div class="box">
       <h4>پرداخت</h4>
       <div>وضعیت: ${escapeHtml(sale.payment_status_display || '—')}</div>
       <div>روش: ${escapeHtml(payLabel)}</div>
+      <div>تاریخ تحویل: ${escapeHtml(deliveryLabel)}</div>
     </div>
   </div>
 
   <h3>اقلام فاکتور</h3>
   <table>
     <thead>
-      <tr><th>شرح</th><th>تعداد</th><th>قیمت واحد</th><th>جمع</th></tr>
+      <tr><th>نام محصول</th><th>تعداد</th><th>فی قیمت</th><th>فی کل قیمت</th></tr>
     </thead>
     <tbody>${lineItemsHtml(sale)}</tbody>
+    <tfoot>
+      <tr>
+        <td colspan="1"><strong>جمع تعداد</strong></td>
+        <td class="num"><strong>${formatNumber(totalQty)}</strong></td>
+        <td colspan="2"></td>
+      </tr>
+    </tfoot>
   </table>
 
   <div class="totals">
-    <div><span>جمع اقلام</span><span class="num">${formatMoney(sale.amount)}</span></div>
+    <div><span>جمع کل</span><span class="num">${formatMoney(sale.amount)}</span></div>
     <div><span>تخفیف${sale.discount_type_display ? ` (${escapeHtml(sale.discount_type_display)})` : ''}</span><span class="num">${formatMoney(sale.discount)}</span></div>
-    <div class="final"><span>مبلغ نهایی</span><span class="num">${formatMoney(sale.final_amount)}</span></div>
-    <div><span>پرداخت‌شده</span><span class="num">${formatMoney(sale.paid_amount)}</span></div>
+    <div class="final"><span>قابل پرداخت</span><span class="num">${formatMoney(sale.final_amount)}</span></div>
+    <div><span>پیش‌پرداخت</span><span class="num">${formatMoney(sale.paid_amount)}</span></div>
     <div><span>مانده</span><span class="num">${formatMoney(sale.balance_due)}</span></div>
   </div>
 
@@ -235,7 +253,7 @@ export function buildInvoiceHtml(sale) {
 
   ${sale.description ? `<div class="notes"><h3 style="margin:0 0 6px;font-size:14px">توضیحات</h3><p style="margin:0">${escapeHtml(sale.description)}</p></div>` : ''}
 
-  <div class="footer">صادر شده از سام اکسون — ${escapeHtml(formatDate(todayIso()))}</div>
+  <div class="footer">صادر شده از سام اکسون — ${escapeHtml(todayLabel)}</div>
 </body>
 </html>`
 }

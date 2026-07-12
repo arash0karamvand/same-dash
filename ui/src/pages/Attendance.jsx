@@ -5,20 +5,19 @@ import { attendanceApi, staffApi } from '../api/client'
 import PersianDateInput from '../components/PersianDateInput'
 import Select from '../components/Select'
 import { Badge, Button, Card, EmptyState, Field, FilterBar, Modal } from '../components/ui'
+import { useConfirm } from '../context/ConfirmContext'
+import { useConfig } from '../context/ConfigContext'
 import { formatDate } from '../utils/format'
 import { todayIso } from '../utils/jalali'
-
-const BRANCHES = [
-  { value: 'branch_1', label: 'کمرد' },
-  { value: 'branch_2', label: 'پاسداران' },
-]
 
 const EMPTY = { seller_id: '', date: todayIso(), status: 'present', notes: '', work_branch: '' }
 
 export default function Attendance() {
+  const confirm = useConfirm()
+  const { branchOptions } = useConfig()
   const [records, setRecords] = useState([])
   const [sellers, setSellers] = useState([])
-  const [branch, setBranch] = useState('branch_1')
+  const [branch, setBranch] = useState('')
   const [selectedSellerId, setSelectedSellerId] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -27,7 +26,11 @@ export default function Attendance() {
   const [form, setForm] = useState(EMPTY)
   const [filterDate, setFilterDate] = useState('')
 
-  const branchLabel = BRANCHES.find((b) => b.value === branch)?.label
+  const branchLabel = branchOptions.find((b) => b.value === branch)?.label
+
+  useEffect(() => {
+    if (!branch && branchOptions.length) setBranch(branchOptions[0].value)
+  }, [branch, branchOptions])
 
   const loadSellers = async () => {
     const data = await staffApi.list(branch)
@@ -77,7 +80,12 @@ export default function Attendance() {
   }
 
   const remove = async (id) => {
-    if (!confirm('حذف این رکورد؟')) return
+    if (!await confirm({
+      title: 'حذف رکورد',
+      message: 'حذف این رکورد؟',
+      confirmText: 'بله، حذف شود',
+      variant: 'danger',
+    })) return
     await attendanceApi.remove(id)
     load()
   }
@@ -89,7 +97,7 @@ export default function Attendance() {
       }>
         {error && <div className="alert-error">{error}</div>}
         <div className="branch-tabs">
-          {BRANCHES.map((b) => (
+          {branchOptions.map((b) => (
             <button key={b.value} type="button" className={`branch-tab ${branch === b.value ? 'active' : ''}`} onClick={() => setBranch(b.value)}>
               {b.label}
             </button>
@@ -157,7 +165,7 @@ export default function Attendance() {
             <Select
               value={form.work_branch || branch}
               onChange={(v) => setForm({ ...form, work_branch: v })}
-              options={BRANCHES}
+              options={branchOptions}
             />
           </Field>
           <Field label="تاریخ"><PersianDateInput value={form.date} onChange={(v) => setForm({ ...form, date: v })} required /></Field>

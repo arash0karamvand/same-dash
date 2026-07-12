@@ -17,7 +17,7 @@ from auth.permissions import (
     VIEW_REPORTS,
     has_permission,
 )
-from logic.accounting import SYSTEM_ENTRY_TYPES, entry_permissions, is_system_entry
+from logic.accounting import SYSTEM_ENTRY_TYPES, delete_accounting_entry, entry_permissions, is_office_accounting_user, is_system_entry
 from logic.audit import log_action
 
 VALID_ENTRY_TYPES = {value for value, _ in AccountingEntry.ENTRY_TYPE_CHOICES}
@@ -92,7 +92,9 @@ def entry_list(request):
             return fail("Permission denied", status=403)
 
         qs = _apply_filters(
-            AccountingEntry.objects.select_related("sale", "sale__customer"),
+            AccountingEntry.objects.select_related("sale", "sale__customer").filter(
+                Q(sale__isnull=True) | Q(sale__is_deleted=False)
+            ),
             request.GET,
         )
 
@@ -112,7 +114,7 @@ def entry_list(request):
         results = qs[offset : offset + limit]
         return success(
             {
-                "results": [accounting_to_dict(e) for e in results],
+                "results": [accounting_to_dict(e, user=request.user) for e in results],
                 "total": total,
                 "offset": offset,
                 "limit": limit,
@@ -155,6 +157,36 @@ def entry_list(request):
         except Sale.DoesNotExist:
             return fail("Sale not found", status=404)
 
+    if entry_type == "payment" and sale:
+        try:
+            from logic.sales import balance_due, record_payment
+
+            amount_to_apply = effective_amount
+            due = balance_due(sale)
+            if amount_to_apply > due:
+                return fail(f"مبلغ پرداخت بیش از مانده فاکتور ({int(due)} تومان) است.", status=400)
+            record_payment(
+                sale,
+                amount_to_apply,
+                description=description,
+                recorded_by=request.user,
+            )
+            payment_entry = (
+                AccountingEntry.objects.filter(sale=sale, entry_type="payment")
+                .order_by("-id")
+                .first()
+            )
+            log_action(
+                request.user,
+                "create",
+                f"دریافت وجه فاکتور {sale.invoice_number or sale.pk} — {int(amount_to_apply)}",
+                entity_type="AccountingEntry",
+                entity_id=payment_entry.id if payment_entry else None,
+            )
+            return success(accounting_to_dict(payment_entry, user=request.user), status=201)
+        except ValueError as exc:
+            return fail(str(exc), status=400)
+
     entry_kwargs = {
         "entry_type": entry_type,
         "debit": debit,
@@ -162,7 +194,7 @@ def entry_list(request):
         "amount": effective_amount,
         "description": description,
         "sale": sale,
-        "is_approved": bool(data.get("is_approved", False)),
+        "is_approved": bool(data.get("is_approved", False)) or is_office_accounting_user(request.user),
     }
     if data.get("entry_date"):
         try:
@@ -178,7 +210,7 @@ def entry_list(request):
         entity_type="AccountingEntry",
         entity_id=entry.id,
     )
-    return success(accounting_to_dict(entry), status=201)
+    return success(accounting_to_dict(entry, user=request.user), status=201)
 
 
 @api_view("GET", "PUT", "DELETE")
@@ -191,7 +223,7 @@ def entry_detail(request, pk):
     if request.method == "GET":
         if not has_permission(request.user, VIEW_ACCOUNTING):
             return fail("Permission denied", status=403)
-        return success(accounting_to_dict(entry))
+        return success(accounting_to_dict(entry, user=request.user))
 
     if request.method == "DELETE":
         if not (
@@ -200,18 +232,21 @@ def entry_detail(request, pk):
         ):
             return fail("Permission denied", status=403)
         summary_text = f"{entry.get_entry_type_display()} — {int(entry.amount)}"
-        entry_id = entry.id
         sale_id = entry.sale_id
-        entry.delete()
+        try:
+            result = delete_accounting_entry(entry, user=request.user)
+        except ValueError as exc:
+            return fail(str(exc), status=400)
         log_action(
             request.user,
             "delete",
             f"حذف سند حسابداری {summary_text}"
-            + (f" (فاکتور #{sale_id})" if sale_id else ""),
+            + (f" (فاکتور #{sale_id})" if sale_id else "")
+            + (" — فاکتور از همه بخش‌ها حذف شد" if result.get("sale_deleted") else ""),
             entity_type="AccountingEntry",
-            entity_id=entry_id,
+            entity_id=result.get("entry_id"),
         )
-        return success({"deleted": True})
+        return success(result)
 
     # PUT — ویرایش سند
     if not (
@@ -219,11 +254,14 @@ def entry_detail(request, pk):
         or has_permission(request.user, CREATE_ACCOUNTING)
     ):
         return fail("Permission denied", status=403)
-    if entry.is_approved:
+    if entry.is_approved and not is_office_accounting_user(request.user):
         return fail("سند تاییدشده قابل ویرایش نیست؛ ابتدا تایید را لغو کنید.", status=400)
 
     data = parse_json(request)
-    partial = is_system_entry(entry)
+    perms = entry_permissions(entry, user=request.user)
+    if not perms["can_edit"]:
+        return fail("این سند قابل ویرایش نیست.", status=400)
+    partial = perms["edit_mode"] == "partial"
 
     if partial:
         # اسناد فاکتور: فقط شرح و تاریخ
@@ -238,6 +276,13 @@ def entry_detail(request, pk):
             except ValueError as exc:
                 return fail(str(exc), status=400)
         entry.save()
+        if entry.sale_id and entry.entry_type == "sale" and "description" in data:
+            sale = entry.sale
+            sale.description = entry.description
+            sale.save(update_fields=["description"])
+            from logic.order_queues import sync_workflow_orders_from_sale
+
+            sync_workflow_orders_from_sale(sale)
         log_action(
             request.user,
             "update",
@@ -245,7 +290,7 @@ def entry_detail(request, pk):
             entity_type="AccountingEntry",
             entity_id=entry.id,
         )
-        return success(accounting_to_dict(entry))
+        return success(accounting_to_dict(entry, user=request.user))
 
     if "entry_type" in data:
         entry_type = (data.get("entry_type") or "").strip()
@@ -289,7 +334,7 @@ def entry_detail(request, pk):
         entity_type="AccountingEntry",
         entity_id=entry.id,
     )
-    return success(accounting_to_dict(entry))
+    return success(accounting_to_dict(entry, user=request.user))
 
 
 @api_view("PUT", permission=APPROVE_ACCOUNTING)
@@ -308,7 +353,7 @@ def entry_approve(request, pk):
         entity_type="AccountingEntry",
         entity_id=entry.id,
     )
-    return success(accounting_to_dict(entry))
+    return success(accounting_to_dict(entry, user=request.user))
 
 
 @api_view("POST", permission=APPROVE_ACCOUNTING)
@@ -425,6 +470,6 @@ def customer_accounting(request, customer_id):
             "accounting_entries_count": entries_agg["count"] or 0,
             "accounting_total": int(entries_agg["total"] or 0),
             "sales": [sale_to_dict(s) for s in sales],
-            "entries": [accounting_to_dict(e) for e in entries],
+            "entries": [accounting_to_dict(e, user=request.user) for e in entries],
         }
     )
