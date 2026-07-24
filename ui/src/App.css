@@ -2229,13 +2229,14 @@
   }
 
   /* Accounting mobile */
-  .accounting-page .accounting-toolbar {
+  .accounting-page .accounting-toolbar:not(:empty) {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 8px;
   }
 
-  .accounting-page .accounting-toolbar > .btn-primary {
+  .accounting-page .accounting-toolbar > .btn-primary,
+  .accounting-page .accounting-toolbar > .btn:only-child {
     grid-column: 1 / -1;
   }
 
@@ -2264,6 +2265,69 @@
 
   .accounting-page .accounting-stats .stat-hint {
     font-size: 11px;
+  }
+
+  .accounting-page .accounting-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    gap: 6px;
+    margin-inline: -12px;
+    padding-inline: 12px;
+    padding-bottom: 4px;
+  }
+
+  .accounting-page .accounting-tab {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    padding: 10px 14px;
+    font-size: 13px;
+    min-height: 44px;
+  }
+
+  .accounting-page .accounting-models-intro {
+    font-size: 13px;
+  }
+
+  .accounting-page .form-actions-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .accounting-page .form-actions-row .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .accounting-page .form-grid-2,
+  .accounting-page .entry-amount-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .accounting-page .chart-subsidiary-block {
+    padding: 10px 12px;
+  }
+
+  .accounting-page .chart-account-head,
+  .accounting-page .chart-subsidiary-title {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .accounting-page .accounting-import-form {
+    max-width: none;
+  }
+
+  .accounting-page .accounting-doc-line-card .attach-code-input {
+    max-width: none;
+    text-align: right;
+  }
+
+  .accounting-page .ledger-drill-panel-minimized {
+    min-width: 0;
+    max-width: none;
+    width: 100%;
   }
 
   .page-filters {
@@ -2737,6 +2801,8 @@
   .checks-cards-mobile,
   .dashboard-cards-mobile,
   .accounting-cards-mobile,
+  .accounting-doc-cards-mobile,
+  .accounting-drill-cards-mobile,
   .customers-cards-mobile,
   .wallet-cards-mobile,
   .sms-cards-mobile,
@@ -2830,6 +2896,8 @@
   .checks-table-desktop,
   .dashboard-table-desktop,
   .accounting-table-desktop,
+  .accounting-doc-table-desktop,
+  .accounting-drill-table-desktop,
   .customers-table-desktop,
   .wallet-table-desktop,
   .sms-table-desktop,
@@ -2841,6 +2909,8 @@
   .checks-cards-mobile,
   .dashboard-cards-mobile,
   .accounting-cards-mobile,
+  .accounting-doc-cards-mobile,
+  .accounting-drill-cards-mobile,
   .customers-cards-mobile,
   .wallet-cards-mobile,
   .sms-cards-mobile,
@@ -3388,6 +3458,130 @@
 @media (max-width: 900px) {
   .form-grid-3 {
     grid-template-columns: 1fr;
+  }
+
+  .form-grid-2,
+  .entry-amount-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Accounting responsive extras */
+.accounting-cards-mobile,
+.accounting-doc-cards-mobile,
+.accounting-drill-cards-mobile {
+  display: none;
+}
+
+.accounting-amount-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.accounting-amount-section-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.accounting-trial-card .accounting-entry-desc {
+  margin: 4px 0 0;
+}
+
+.accounting-totals-card {
+  border-color: color-mix(in srgb, var(--primary) 35%, var(--border));
+  background: color-mix(in srgb, var(--primary) 5%, var(--surface));
+}
+
+.accounting-doc-line-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.accounting-doc-mobile-totals {
+  margin-top: 4px;
+}
+
+.accounting-doc-mobile-totals .accounting-footer-summary {
+  margin-top: 10px;
+  text-align: center;
+}
+
+.accounting-drill-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  text-align: right;
+  cursor: pointer;
+}
+
+.accounting-drill-card:hover {
+  background: color-mix(in srgb, var(--primary) 6%, var(--surface));
+}
+
+.accounting-drill-card.drill-row-selected {
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--border));
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface));
+}
+
+.accounting-drill-card-name {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.accounting-drill-card-balance {
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.accounting-toolbar:empty {
+  display: none;
+}
+
+@media (max-width: 1100px) {
+  .accounting-page .accounting-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+    gap: 6px;
+    padding-bottom: 4px;
+  }
+
+  .accounting-page .accounting-tab {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 900px) {
+  .accounting-page .ledger-drill-layout-has-maximized {
+    flex-direction: column;
+  }
+
+  .accounting-page .ledger-drill-panel-maximized {
+    width: 100%;
+  }
+
+  .accounting-page .ledger-drill-layout-has-maximized .ledger-drill-panel-maximized .ledger-drill-table-wrap,
+  .accounting-page .ledger-drill-layout-has-maximized .ledger-drill-panel-maximized .accounting-ledger-wrap {
+    max-height: min(60vh, 520px);
   }
 }
 

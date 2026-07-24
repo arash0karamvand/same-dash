@@ -48,6 +48,34 @@ function renderAmount(value) {
   return value ? formatRial(value) : '—'
 }
 
+function TrialBalanceAmountGrid({ row }) {
+  return (
+    <div className="accounting-amount-sections">
+      <div className="accounting-amount-section">
+        <span className="accounting-amount-section-label">{TERMS.openingBalance}</span>
+        <div className="m-card-grid">
+          <div><span className="muted">{TERMS.debit}</span><strong>{renderAmount(row.opening_debit)}</strong></div>
+          <div><span className="muted">{TERMS.credit}</span><strong>{renderAmount(row.opening_credit)}</strong></div>
+        </div>
+      </div>
+      <div className="accounting-amount-section">
+        <span className="accounting-amount-section-label">{TERMS.turnover}</span>
+        <div className="m-card-grid">
+          <div><span className="muted">{TERMS.debit}</span><strong>{renderAmount(row.turnover_debit)}</strong></div>
+          <div><span className="muted">{TERMS.credit}</span><strong>{renderAmount(row.turnover_credit)}</strong></div>
+        </div>
+      </div>
+      <div className="accounting-amount-section">
+        <span className="accounting-amount-section-label">{TERMS.balance}</span>
+        <div className="m-card-grid">
+          <div><span className="muted">{TERMS.debit}</span><strong>{renderAmount(row.balance_debit)}</strong></div>
+          <div><span className="muted">{TERMS.credit}</span><strong>{renderAmount(row.balance_credit)}</strong></div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function TrialBalanceTable({ rows, totals, loading, onRowClick, selectedKey, getRowKey }) {
   if (loading) return <div className="loading">در حال بارگذاری…</div>
   if (!rows.length) return <EmptyState text="ردیفی یافت نشد." />
@@ -56,7 +84,7 @@ function TrialBalanceTable({ rows, totals, loading, onRowClick, selectedKey, get
 
   return (
     <>
-      <div className="table-wrap accounting-ledger-wrap">
+      <div className="table-wrap accounting-ledger-wrap accounting-table-desktop">
         <table className="table accounting-ledger-table">
           <thead>
             <tr>
@@ -112,6 +140,40 @@ function TrialBalanceTable({ rows, totals, loading, onRowClick, selectedKey, get
           )}
         </table>
       </div>
+
+      <div className="accounting-cards-mobile">
+        {rows.map((row) => {
+          const key = getRowKey ? getRowKey(row) : `${row.account_code}-${row.account_name}`
+          const selected = selectedKey != null && selectedKey === key
+          return (
+            <div
+              key={key}
+              className={`m-card accounting-trial-card${onRowClick ? ' entry-row-clickable' : ''}${selected ? ' drill-row-selected' : ''}`}
+              onClick={() => onRowClick?.(row)}
+              onKeyDown={onRowClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRowClick(row) } } : undefined}
+              role={onRowClick ? 'button' : undefined}
+              tabIndex={onRowClick ? 0 : undefined}
+            >
+              <div className="m-card-head accounting-entry-card-head">
+                <div>
+                  <strong>{row.account_code}</strong>
+                  <p className="accounting-entry-desc">{row.account_name}</p>
+                </div>
+              </div>
+              <TrialBalanceAmountGrid row={row} />
+            </div>
+          )
+        })}
+        {totals && Object.keys(totals).length > 0 && (
+          <div className="m-card accounting-trial-card accounting-totals-card">
+            <div className="m-card-head">
+              <strong>{TERMS.total}</strong>
+            </div>
+            <TrialBalanceAmountGrid row={totals} />
+          </div>
+        )}
+      </div>
+
       {totals?.turnover_balanced != null && (
         <p className={`accounting-footer-summary ${balanced ? 'doc-balanced' : 'doc-unbalanced'}`}>
           گردش دوره: {TERMS.debit} {formatRial(totals.raw_turnover_debit || totals.turnover_debit)}
@@ -211,36 +273,60 @@ function DrillTrialPanel({
       ) : !rows.length ? (
         <EmptyState text="حسابی یافت نشد." />
       ) : (
-        <div className="table-wrap ledger-drill-table-wrap">
-          <table className="table ledger-drill-table">
-            <thead>
-              <tr>
-                <th>{TERMS.accountCode}</th>
-                <th>{TERMS.accountTitle}</th>
-                <th>{TERMS.balance}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => {
-                const rowId = row[idKey]
-                const selected = selectedId != null && String(selectedId) === String(rowId)
-                const balance = row.balance_debit || row.balance_credit
-                const side = row.balance_debit ? TERMS.debit : TERMS.credit
-                return (
-                  <tr
-                    key={rowId || row.account_code}
-                    className={`entry-row-clickable${selected ? ' drill-row-selected' : ''}`}
-                    onClick={() => onSelect(row)}
-                  >
-                    <td><strong>{row.account_code}</strong></td>
-                    <td className="text-cell">{row.account_name}</td>
-                    <td>{balance ? `${renderAmount(balance)} (${side})` : '—'}</td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+        <>
+          <div className="table-wrap ledger-drill-table-wrap accounting-drill-table-desktop">
+            <table className="table ledger-drill-table">
+              <thead>
+                <tr>
+                  <th>{TERMS.accountCode}</th>
+                  <th>{TERMS.accountTitle}</th>
+                  <th>{TERMS.balance}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => {
+                  const rowId = row[idKey]
+                  const selected = selectedId != null && String(selectedId) === String(rowId)
+                  const balance = row.balance_debit || row.balance_credit
+                  const side = row.balance_debit ? TERMS.debit : TERMS.credit
+                  return (
+                    <tr
+                      key={rowId || row.account_code}
+                      className={`entry-row-clickable${selected ? ' drill-row-selected' : ''}`}
+                      onClick={() => onSelect(row)}
+                    >
+                      <td><strong>{row.account_code}</strong></td>
+                      <td className="text-cell">{row.account_name}</td>
+                      <td>{balance ? `${renderAmount(balance)} (${side})` : '—'}</td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="accounting-drill-cards-mobile">
+            {rows.map((row) => {
+              const rowId = row[idKey]
+              const selected = selectedId != null && String(selectedId) === String(rowId)
+              const balance = row.balance_debit || row.balance_credit
+              const side = row.balance_debit ? TERMS.debit : TERMS.credit
+              return (
+                <button
+                  key={rowId || row.account_code}
+                  type="button"
+                  className={`accounting-drill-card${selected ? ' drill-row-selected' : ''}`}
+                  onClick={() => onSelect(row)}
+                >
+                  <strong>{row.account_code}</strong>
+                  <span className="accounting-drill-card-name">{row.account_name}</span>
+                  <span className="accounting-drill-card-balance">
+                    {balance ? `${renderAmount(balance)} (${side})` : '—'}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </>
       )}
     </DrillPanelShell>
   )
@@ -257,7 +343,7 @@ function DetailLedgerTable({ ledger, loading }) {
         <p><span className="muted">{TERMS.subsidiaryAccount}:</span> {ledger.header.subsidiary_name}</p>
         <p><span className="muted">{TERMS.detailedAccount}:</span> {ledger.header.detailed_code} — {ledger.header.detailed_name}</p>
       </div>
-      <div className="table-wrap accounting-ledger-wrap">
+      <div className="table-wrap accounting-ledger-wrap accounting-table-desktop">
         <table className="table accounting-ledger-table">
           <thead>
             <tr>
@@ -286,6 +372,28 @@ function DetailLedgerTable({ ledger, loading }) {
             ))}
           </tbody>
         </table>
+      </div>
+      <div className="accounting-cards-mobile">
+        {ledger.lines.map((line, idx) => (
+          <div key={line.id || `opening-${idx}`} className="m-card">
+            <div className="m-card-head accounting-entry-card-head">
+              <div>
+                <strong>{formatDate(line.entry_date)}</strong>
+                <p className="accounting-entry-meta muted">
+                  {TERMS.documentNumber}: {line.document_number ? formatNumber(line.document_number) : '—'}
+                  {line.attach_code ? ` · ${TERMS.attachCode}: ${line.attach_code}` : ''}
+                </p>
+              </div>
+              <span className="accounting-entry-amount">{line.balance_side_label}</span>
+            </div>
+            {line.description && <p className="accounting-entry-desc">{line.description}</p>}
+            <div className="m-card-grid">
+              <div><span className="muted">{TERMS.debit}</span><strong>{renderAmount(line.debit)}</strong></div>
+              <div><span className="muted">{TERMS.credit}</span><strong>{renderAmount(line.credit)}</strong></div>
+              <div><span className="muted">{TERMS.balance}</span><strong>{formatRial(line.balance)}</strong></div>
+            </div>
+          </div>
+        ))}
       </div>
     </>
   )
@@ -823,7 +931,7 @@ export default function Accounting() {
                 />
               </Field>
             </div>
-            <div className="table-wrap accounting-ledger-wrap">
+            <div className="table-wrap accounting-ledger-wrap accounting-doc-table-desktop">
               <table className="table accounting-ledger-table accounting-doc-table">
                 <thead>
                   <tr>
@@ -902,6 +1010,77 @@ export default function Accounting() {
                 </tfoot>
               </table>
             </div>
+
+            <div className="accounting-doc-cards-mobile">
+              {docLines.map((line, index) => (
+                <div key={index} className="m-card accounting-doc-line-card">
+                  <div className="m-card-head accounting-entry-card-head">
+                    <strong>ردیف {formatNumber(index + 1)}</strong>
+                    <button type="button" className="link danger" onClick={() => removeDocLine(index)}>حذف</button>
+                  </div>
+                  <div className="form accounting-doc-line-fields">
+                    <Field label={TERMS.detailedAccount}>
+                      <Select
+                        value={line.detailed_id}
+                        onChange={(v) => updateDocLine(index, 'detailed_id', v)}
+                        options={[{ value: '', label: '—' }, ...detailOptions]}
+                        placeholder={TERMS.detailedAccount}
+                      />
+                    </Field>
+                    <Field label={TERMS.subsidiaryAccount}>
+                      <Select
+                        value={line.subsidiary_id}
+                        onChange={(v) => updateDocLine(index, 'subsidiary_id', v)}
+                        options={[{ value: '', label: '—' }, ...subsidiaryOptions]}
+                        placeholder={TERMS.subsidiaryAccount}
+                        disabled={Boolean(line.detailed_id)}
+                      />
+                    </Field>
+                    <Field label={TERMS.generalAccount}>
+                      <Select
+                        value={line.account_id}
+                        onChange={(v) => updateDocLine(index, 'account_id', v)}
+                        options={[{ value: '', label: '—' }, ...accountOptions]}
+                        placeholder={TERMS.generalAccount}
+                        disabled={Boolean(line.detailed_id || line.subsidiary_id)}
+                      />
+                    </Field>
+                    <Field label={TERMS.description}>
+                      <input
+                        value={line.description}
+                        onChange={(e) => updateDocLine(index, 'description', e.target.value)}
+                        placeholder="شرح…"
+                      />
+                    </Field>
+                    <Field label={TERMS.attachCode}>
+                      <input
+                        className="attach-code-input"
+                        value={line.attach_code}
+                        onChange={(e) => updateDocLine(index, 'attach_code', e.target.value)}
+                      />
+                    </Field>
+                    <div className="form-grid-2 entry-amount-grid">
+                      <Field label={TERMS.debit}>
+                        <MoneyInput min="0" value={line.debit} onChange={(e) => updateDocLine(index, 'debit', e.target.value)} unit={TERMS.currency} />
+                      </Field>
+                      <Field label={TERMS.credit}>
+                        <MoneyInput min="0" value={line.credit} onChange={(e) => updateDocLine(index, 'credit', e.target.value)} unit={TERMS.currency} />
+                      </Field>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              <div className={`m-card accounting-doc-mobile-totals ${docTotals.balanced ? 'doc-balanced' : 'doc-unbalanced'}`}>
+                <div className="m-card-grid">
+                  <div><span className="muted">{TERMS.debit}</span><strong>{formatRial(docTotals.debit)}</strong></div>
+                  <div><span className="muted">{TERMS.credit}</span><strong>{formatRial(docTotals.credit)}</strong></div>
+                </div>
+                <p className="accounting-footer-summary">
+                  {docTotals.balanced ? `✓ ${TERMS.balanced}` : TERMS.unbalanced}
+                </p>
+              </div>
+            </div>
+
             <div className="form-actions-row">
               <Button type="button" variant="ghost" onClick={addDocLine}>+ ردیف</Button>
               <Button type="submit" disabled={docSaving || !docTotals.balanced || !canCreate}>
