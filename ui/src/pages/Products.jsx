@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { productsApi } from '../api/client'
+import { materialsApi, productsApi } from '../api/client'
 import MoneyInput from '../components/MoneyInput'
 import Select from '../components/Select'
 import { Badge, Button, Card, EmptyState, Field, FilterBar, Modal } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmContext'
 import { formatMoney } from '../utils/format'
+import { parseRoute } from '../utils/routing'
 
-import { hasPermission } from '../utils/permissions'
+import { hasAnyPermission, hasPermission } from '../utils/permissions'
 
 const COLOR_PRESETS = [
   { name: 'قرمز', hex: '#ef4444' },
@@ -24,6 +25,7 @@ const COLOR_PRESETS = [
 
 const EMPTY_CATEGORY = { name: '', description: '', color: '#6366f1', icon: '📦', sort_order: 0, is_active: true }
 const EMPTY_VARIANT = { color_name: '', color_hex: '#cccccc', sku: '', stock: '', is_active: true }
+const EMPTY_PRODUCT_MATERIAL = { id: null, material_id: '', quantity: '1' }
 const EMPTY_PRODUCT = {
   name: '',
   sku: '',
@@ -37,12 +39,30 @@ const EMPTY_PRODUCT = {
   is_active: true,
   attributes: {},
   variants: [{ ...EMPTY_VARIANT }],
+  materials: [],
+}
+
+function useProductMode() {
+  const { portal } = parseRoute()
+  if (portal === 'factory') return 'factory'
+  if (portal === 'office') return 'office'
+  return 'sales'
 }
 
 export default function Products() {
   const { user } = useAuth()
   const confirm = useConfirm()
-  const canManage = hasPermission(user, 'manage_products')
+  const mode = useProductMode()
+  const isFactory = mode === 'factory'
+  const isOffice = mode === 'office'
+  const canManage = hasAnyPermission(user, ['manage_products', 'manage_factory_products'])
+  const canManageSales = hasPermission(user, 'manage_products')
+  const canManageFactory = hasPermission(user, 'manage_factory_products')
+  const canDelete = canManageSales
+  const showSalesPrice = !isFactory
+  const showCosts = isOffice || (hasPermission(user, 'view_materials') && hasPermission(user, 'view_products'))
+  const canEditMaterials = canManageFactory
+  const canManageCategories = canManageSales || canManageFactory
 
   const [categories, setCategories] = useState([])
   const [products, setProducts] = useState([])
@@ -60,11 +80,14 @@ export default function Products() {
   const [categoryForm, setCategoryForm] = useState(EMPTY_CATEGORY)
   const [saving, setSaving] = useState(false)
   const [topSelling, setTopSelling] = useState([])
+  const [materialCatalog, setMaterialCatalog] = useState([])
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [cats, prods, topData] = await Promise.all([
+      const loadTopSelling = mode === 'sales' && hasPermission(user, 'view_products')
+      const loadMaterials = showCosts || canEditMaterials
+      const requests = [
         productsApi.categories({ active: canManage ? undefined : true }),
         productsApi.list({
           search: search.trim(),
@@ -72,18 +95,35 @@ export default function Products() {
           limit: 100,
           include_inactive: canManage,
         }),
-        productsApi.topSelling(20).catch(() => ({ results: [] })),
-      ])
-      setCategories(cats.results || [])
-      setProducts(prods.results || [])
-      setTopSelling(topData.results || [])
+      ]
+      if (loadTopSelling) {
+        requests.push(productsApi.topSelling(20).catch(() => ({ results: [] })))
+      }
+      if (loadMaterials) {
+        requests.push(materialsApi.list({ limit: 200, approved_only: true }).catch(() => ({ results: [] })))
+      }
+      const results = await Promise.all(requests)
+      let i = 0
+      setCategories(results[i].results || [])
+      i += 1
+      setProducts(results[i].results || [])
+      i += 1
+      if (loadTopSelling) {
+        setTopSelling(results[i]?.results || [])
+        i += 1
+      } else {
+        setTopSelling([])
+      }
+      if (loadMaterials) {
+        setMaterialCatalog(results[i]?.results || [])
+      }
       setError('')
     } catch (e) {
       setError(e.message)
     } finally {
       setLoading(false)
     }
-  }, [search, categoryFilter, canManage])
+  }, [search, categoryFilter, canManage, mode, showCosts, canEditMaterials, user])
 
   useEffect(() => { load() }, [load])
 
@@ -92,9 +132,17 @@ export default function Products() {
     [categories],
   )
 
+  const materialOptions = useMemo(
+    () => materialCatalog.map((m) => ({
+      value: String(m.id),
+      label: m.color_name ? `${m.name} (${m.color_name})` : m.name,
+    })),
+    [materialCatalog],
+  )
+
   const openCreateProduct = () => {
     setEditingProduct(null)
-    setProductForm({ ...EMPTY_PRODUCT, variants: [{ ...EMPTY_VARIANT }] })
+    setProductForm({ ...EMPTY_PRODUCT, variants: [{ ...EMPTY_VARIANT }], materials: [] })
     setProductModal(true)
   }
 
@@ -119,6 +167,11 @@ export default function Products() {
         sku: v.sku || '',
         stock: v.stock != null ? String(v.stock) : '',
         is_active: v.is_active !== false,
+      })),
+      materials: (p.materials || []).map((pm) => ({
+        id: pm.id,
+        material_id: String(pm.material_id),
+        quantity: String(pm.quantity ?? 1),
       })),
     })
     setProductModal(true)
@@ -161,6 +214,24 @@ export default function Products() {
     }))
   }
 
+  const updateProductMaterial = (idx, key, val) => {
+    setProductForm((f) => ({
+      ...f,
+      materials: f.materials.map((m, i) => (i === idx ? { ...m, [key]: val } : m)),
+    }))
+  }
+
+  const addProductMaterial = () => {
+    setProductForm((f) => ({ ...f, materials: [...f.materials, { ...EMPTY_PRODUCT_MATERIAL }] }))
+  }
+
+  const removeProductMaterial = (idx) => {
+    setProductForm((f) => ({
+      ...f,
+      materials: f.materials.filter((_, i) => i !== idx),
+    }))
+  }
+
   const applyColorPreset = (idx, preset) => {
     updateVariant(idx, 'color_name', preset.name)
     updateVariant(idx, 'color_hex', preset.hex)
@@ -179,7 +250,6 @@ export default function Products() {
         description: productForm.description.trim(),
         unit: productForm.unit.trim() || 'عدد',
         category_id: productForm.category_id ? Number(productForm.category_id) : null,
-        default_price: Number(productForm.default_price) || 0,
         is_active: productForm.is_active,
         attributes: productForm.attributes,
         variants: productForm.variants
@@ -192,6 +262,18 @@ export default function Products() {
             stock: v.stock === '' ? null : Number(v.stock),
             is_active: v.is_active !== false,
           })),
+      }
+      if (canManageSales) {
+        payload.default_price = Number(productForm.default_price) || 0
+      }
+      if (canEditMaterials) {
+        payload.materials = productForm.materials
+          .filter((m) => m.material_id)
+          .map((m) => ({
+            id: m.id,
+            material_id: Number(m.material_id),
+            quantity: Number(m.quantity) || 1,
+          }))
       }
       if (editingProduct) {
         await productsApi.update(editingProduct.id, payload)
@@ -265,11 +347,17 @@ export default function Products() {
       <div className="products-page-header">
         <div>
           <h1 className="page-title">محصولات</h1>
-          <p className="muted">مدیریت کاتالوگ، دسته‌بندی و رنگ‌بندی محصولات</p>
+          <p className="muted">
+            {isFactory && 'تعریف محصول برای کارخانه — بدون قیمت فروش'}
+            {isOffice && 'نمای کامل محصول — قیمت فروش، متریال و سود'}
+            {!isFactory && !isOffice && 'مدیریت کاتالوگ، دسته‌بندی و رنگ‌بندی محصولات'}
+          </p>
         </div>
         {canManage && (
           <div className="products-header-actions">
-            <Button type="button" variant="ghost" onClick={openCreateCategory}>+ دسته</Button>
+            {canManageCategories && (
+              <Button type="button" variant="ghost" onClick={openCreateCategory}>+ دسته</Button>
+            )}
             <Button type="button" onClick={openCreateProduct}>+ محصول</Button>
           </div>
         )}
@@ -385,16 +473,48 @@ export default function Products() {
                 )}
 
                 <div className="product-card-meta">
-                  <strong>{formatMoney(p.display_price)}</strong>
+                  {showSalesPrice && p.display_price != null && (
+                    <strong>{formatMoney(p.display_price)}</strong>
+                  )}
+                  {showCosts && p.material_cost_total != null && (
+                    <span className="muted small">
+                      تمام‌شده: {formatMoney(p.material_cost_total)}
+                    </span>
+                  )}
+                  {isOffice && p.profit_margin != null && (
+                    <span className={`small${p.profit_margin >= 0 ? ' text-success' : ' text-danger'}`}>
+                      سود: {formatMoney(p.profit_margin)}
+                    </span>
+                  )}
+                  {isFactory && p.material_cost_total != null && (
+                    <strong>تمام‌شده: {formatMoney(p.material_cost_total)}</strong>
+                  )}
                   <span className="muted">{p.variants?.length || 0} رنگ</span>
+                  {showCosts && p.materials?.length > 0 && (
+                    <span className="muted">{p.materials.length} متریال</span>
+                  )}
                 </div>
+
+                {showCosts && p.materials?.length > 0 && (
+                  <ul className="product-materials-preview muted small">
+                    {p.materials.map((pm) => (
+                      <li key={pm.id}>
+                        {pm.material?.name}
+                        {pm.material?.color_name ? ` (${pm.material.color_name})` : ''}
+                        {' × '}{pm.quantity}
+                      </li>
+                    ))}
+                  </ul>
+                )}
 
                 {p.description && <p className="product-card-desc muted">{p.description}</p>}
 
                 {canManage && (
                   <div className="product-card-actions">
                     <button type="button" className="link" onClick={() => openEditProduct(p)}>ویرایش</button>
-                    <button type="button" className="link danger" onClick={() => removeProduct(p)}>حذف</button>
+                    {canDelete && (
+                      <button type="button" className="link danger" onClick={() => removeProduct(p)}>حذف</button>
+                    )}
                   </div>
                 )}
               </article>
@@ -403,7 +523,7 @@ export default function Products() {
         )}
       </Card>
 
-      {canManage && categories.length > 0 && (
+      {canManageCategories && categories.length > 0 && (
         <Card title="دسته‌بندی‌ها">
           <div className="category-manage-list">
             {categories.map((c) => (
@@ -457,9 +577,11 @@ export default function Products() {
             <Field label="واحد">
               <input value={productForm.unit} onChange={(e) => setProductForm({ ...productForm, unit: e.target.value })} placeholder="عدد" />
             </Field>
-            <Field label="قیمت (تومان)">
-              <MoneyInput min="0" value={productForm.default_price} onChange={(e) => setProductForm({ ...productForm, default_price: e.target.value })} required />
-            </Field>
+            {canManageSales && (
+              <Field label="قیمت فروش (تومان)">
+                <MoneyInput min="0" value={productForm.default_price} onChange={(e) => setProductForm({ ...productForm, default_price: e.target.value })} required />
+              </Field>
+            )}
           </div>
 
           <Field label="توضیحات">
@@ -502,6 +624,52 @@ export default function Products() {
               </div>
             ))}
           </div>
+
+          {(showCosts || canEditMaterials) && (
+            <div className="product-variants-section">
+              <div className="section-head">
+                <h4>متریال</h4>
+                {canEditMaterials && (
+                  <Button type="button" variant="ghost" onClick={addProductMaterial}>+ متریال</Button>
+                )}
+              </div>
+              {(productForm.materials || []).length === 0 && !canEditMaterials && (
+                <p className="muted small">متریالی تعریف نشده.</p>
+              )}
+              {(productForm.materials || []).map((m, idx) => (
+                <div key={idx} className="variant-row product-material-row">
+                  <div className="form-grid-2 variant-fields">
+                    <Field label="متریال">
+                      {canEditMaterials ? (
+                        <Select
+                          value={m.material_id}
+                          onChange={(v) => updateProductMaterial(idx, 'material_id', v)}
+                          options={[{ value: '', label: 'انتخاب…' }, ...materialOptions]}
+                          placeholder="انتخاب متریال"
+                        />
+                      ) : (
+                        <input disabled value={materialOptions.find((o) => o.value === m.material_id)?.label || '—'} />
+                      )}
+                    </Field>
+                    <Field label="مقدار مصرف">
+                      <input
+                        className="ltr"
+                        type="number"
+                        min="0.001"
+                        step="0.001"
+                        value={m.quantity}
+                        onChange={(e) => updateProductMaterial(idx, 'quantity', e.target.value)}
+                        disabled={!canEditMaterials}
+                      />
+                    </Field>
+                  </div>
+                  {canEditMaterials && (
+                    <button type="button" className="link danger variant-remove" onClick={() => removeProductMaterial(idx)}>حذف</button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
 
           <label className="checkbox-row">
             <input type="checkbox" checked={productForm.is_active} onChange={(e) => setProductForm({ ...productForm, is_active: e.target.checked })} />

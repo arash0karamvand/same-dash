@@ -550,6 +550,94 @@ class ProductVariant(models.Model):
         return f"{self.product.name} — {self.color_name}"
 
 
+class Material(SoftDeleteModel):
+    """متریال / مواد اولیه — قیمت تمام‌شده و موجودی."""
+
+    name = models.CharField("نام متریال", max_length=150)
+    color_name = models.CharField("نام رنگ", max_length=50, blank=True)
+    color_hex = models.CharField("کد رنگ", max_length=7, default="#cccccc")
+    sku = models.CharField("کد", max_length=50, blank=True, db_index=True)
+    unit = models.CharField("واحد", max_length=20, default="متر")
+    unit_cost = models.DecimalField("قیمت واحد (تمام‌شده)", default=0, **MONEY_KWARGS)
+    stock = models.DecimalField("موجودی", max_digits=12, decimal_places=2, null=True, blank=True)
+    description = models.TextField("توضیحات", blank=True)
+    is_active = models.BooleanField("فعال", default=True)
+    APPROVAL_PENDING = "pending"
+    APPROVAL_APPROVED = "approved"
+    APPROVAL_REJECTED = "rejected"
+    APPROVAL_CHOICES = [
+        (APPROVAL_PENDING, "در انتظار تایید اداری"),
+        (APPROVAL_APPROVED, "تایید شده"),
+        (APPROVAL_REJECTED, "رد شده"),
+    ]
+    approval_status = models.CharField(
+        "وضعیت تایید",
+        max_length=16,
+        choices=APPROVAL_CHOICES,
+        default=APPROVAL_APPROVED,
+        db_index=True,
+    )
+    submitted_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="ثبت‌کننده",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="submitted_materials",
+    )
+    approved_at = models.DateTimeField("تاریخ تایید", null=True, blank=True)
+    approved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        verbose_name="تاییدکننده",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="approved_materials",
+    )
+    rejection_reason = models.TextField("دلیل رد", blank=True)
+    inventory_accounted_at = models.DateTimeField("ثبت حسابداری موجودی", null=True, blank=True)
+    created_at = models.DateTimeField("تاریخ ثبت", auto_now_add=True)
+    updated_at = models.DateTimeField("آخرین بروزرسانی", auto_now=True)
+
+    class Meta:
+        verbose_name = "متریال"
+        verbose_name_plural = "متریال‌ها"
+        ordering = ["name"]
+
+    def __str__(self):
+        if self.color_name:
+            return f"{self.name} ({self.color_name})"
+        return self.name
+
+
+class ProductMaterial(models.Model):
+    """ارتباط محصول با متریال — مقدار مصرف به ازای هر واحد محصول."""
+
+    product = models.ForeignKey(
+        Product,
+        verbose_name="محصول",
+        on_delete=models.CASCADE,
+        related_name="product_materials",
+    )
+    material = models.ForeignKey(
+        Material,
+        verbose_name="متریال",
+        on_delete=models.CASCADE,
+        related_name="product_links",
+    )
+    quantity = models.DecimalField("مقدار مصرف", max_digits=12, decimal_places=3, default=1)
+    sort_order = models.PositiveIntegerField("ترتیب", default=0)
+
+    class Meta:
+        verbose_name = "متریال محصول"
+        verbose_name_plural = "متریال‌های محصول"
+        ordering = ["sort_order", "id"]
+        unique_together = [("product", "material")]
+
+    def __str__(self):
+        return f"{self.product.name} ← {self.material.name} x{self.quantity}"
+
+
 class SaleLineItem(models.Model):
     sale = models.ForeignKey(Sale, verbose_name="فروش", on_delete=models.CASCADE, related_name="line_items")
     product = models.ForeignKey(
@@ -794,6 +882,7 @@ class FactoryOrder(SoftDeleteModel):
         related_name="factory_received_orders",
     )
     production_done_at = models.DateTimeField("پایان ساخت", null=True, blank=True)
+    materials_deducted_at = models.DateTimeField("کسر متریال", null=True, blank=True)
     freight_received_at = models.DateTimeField("دریافت باربری", null=True, blank=True)
     freight_received_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -903,22 +992,149 @@ class StaffAttendance(SoftDeleteModel):
 CustomerAttendance = StaffAttendance
 
 
+class Account(models.Model):
+    """حساب دفتر کل — طرح حساب."""
+
+    CLASS_CHOICES = [
+        ("asset", "دارایی"),
+        ("liability", "بدهی"),
+        ("equity", "سرمایه"),
+        ("revenue", "درآمد"),
+        ("expense", "هزینه"),
+    ]
+    NORMAL_BALANCE_CHOICES = [
+        ("debit", "بدهکار"),
+        ("credit", "بستانکار"),
+    ]
+
+    slug = models.SlugField("شناسه", max_length=60, unique=True)
+    code = models.CharField("کد حساب کل", max_length=10, blank=True, db_index=True)
+    name = models.CharField("نام حساب", max_length=120)
+    account_class = models.CharField("طبقه", max_length=20, choices=CLASS_CHOICES)
+    normal_balance = models.CharField("ماهیت", max_length=10, choices=NORMAL_BALANCE_CHOICES)
+    sort_order = models.PositiveSmallIntegerField("ترتیب", default=0)
+    legacy_entry_type = models.CharField("نوع سند قدیمی", max_length=20, blank=True)
+    is_active = models.BooleanField("فعال", default=True)
+
+    class Meta:
+        verbose_name = "حساب کل"
+        verbose_name_plural = "حساب‌های کل"
+        ordering = ["sort_order", "name"]
+
+    def __str__(self):
+        return self.name
+
+
+class SubsidiaryAccount(models.Model):
+    """حساب معین — زیرمجموعه حساب کل."""
+
+    account = models.ForeignKey(
+        Account,
+        verbose_name="حساب کل",
+        on_delete=models.PROTECT,
+        related_name="subsidiaries",
+    )
+    code = models.CharField("کد معین", max_length=10)
+    name = models.CharField("عنوان حساب", max_length=120)
+    is_active = models.BooleanField("فعال", default=True)
+
+    class Meta:
+        verbose_name = "حساب معین"
+        verbose_name_plural = "حساب‌های معین"
+        ordering = ["account__sort_order", "code"]
+        constraints = [
+            models.UniqueConstraint(fields=["account", "code"], name="uniq_subsidiary_account_code"),
+        ]
+
+    @property
+    def full_code(self):
+        base = (self.account.code or str(self.account.sort_order)).strip()
+        return f"{base}/{self.code}"
+
+    def __str__(self):
+        return self.name
+
+
+class DetailedAccount(models.Model):
+    """حساب تفصیلی — زیرمجموعه حساب معین."""
+
+    subsidiary = models.ForeignKey(
+        SubsidiaryAccount,
+        verbose_name="حساب معین",
+        on_delete=models.PROTECT,
+        related_name="details",
+    )
+    code = models.CharField("کد تفصیلی", max_length=10)
+    name = models.CharField("عنوان حساب", max_length=120)
+    is_active = models.BooleanField("فعال", default=True)
+
+    class Meta:
+        verbose_name = "حساب تفصیلی"
+        verbose_name_plural = "حساب‌های تفصیلی"
+        ordering = ["subsidiary__account__sort_order", "subsidiary__code", "code"]
+        constraints = [
+            models.UniqueConstraint(fields=["subsidiary", "code"], name="uniq_detailed_account_code"),
+        ]
+
+    @property
+    def full_code(self):
+        return f"{self.subsidiary.full_code}/{self.code}"
+
+    def __str__(self):
+        return self.name
+
+
 class AccountingEntry(models.Model):
     ENTRY_TYPE_CHOICES = [
+        ("manual", "دستی"),
         ("sale", "فروش"),
-        ("receivable", "مطالبات (بدهکار مشتری)"),
-        ("payment", "دریافت قسط/پرداخت"),
-        ("refund", "مرجوعی"),
-        ("adjustment", "اصلاح"),
+        ("receivable", "دریافتنی"),
+        ("payment", "دریافت / پرداخت"),
+        ("refund", "برگشت"),
+        ("adjustment", "تعدیل"),
         ("other", "سایر"),
     ]
 
     entry_type = models.CharField(
         "نوع سند", max_length=20, choices=ENTRY_TYPE_CHOICES, default="sale"
     )
+    account = models.ForeignKey(
+        Account,
+        verbose_name="حساب کل",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="entries",
+    )
+    subsidiary = models.ForeignKey(
+        SubsidiaryAccount,
+        verbose_name="حساب معین",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="entries",
+    )
+    detailed = models.ForeignKey(
+        DetailedAccount,
+        verbose_name="حساب تفصیلی",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="entries",
+    )
     debit = models.DecimalField("بدهکار", default=0, **MONEY_KWARGS)
     credit = models.DecimalField("بستانکار", default=0, **MONEY_KWARGS)
     amount = models.DecimalField("مبلغ", default=0, **MONEY_KWARGS)
+    document_code = models.CharField("کد سند", max_length=30, blank=True, db_index=True)
+    document_number = models.PositiveIntegerField("شماره سند", null=True, blank=True, db_index=True)
+    attach_code = models.CharField("ع", max_length=10, blank=True)
+    general_account = models.CharField("حساب کل", max_length=120, blank=True)
+    subsidiary_account = models.CharField("حساب معین", max_length=120, blank=True)
+    detailed_account = models.CharField("حساب تفصیلی", max_length=120, blank=True)
+    opening_debit = models.DecimalField("مانده ابتدای دوره (بدهکار)", default=0, **MONEY_KWARGS)
+    opening_credit = models.DecimalField("مانده ابتدای دوره (بستانکار)", default=0, **MONEY_KWARGS)
+    balance_debit = models.DecimalField("مانده بدهکار", default=0, **MONEY_KWARGS)
+    balance_credit = models.DecimalField("مانده بستانکار", default=0, **MONEY_KWARGS)
     entry_date = models.DateTimeField("تاریخ سند", default=timezone.now)
     description = models.CharField("توضیحات", max_length=255, blank=True)
     sale = models.ForeignKey(

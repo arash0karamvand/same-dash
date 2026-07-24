@@ -13,13 +13,15 @@ SUPPRESSED_ROLE_CATEGORY = "suppressed_role"
 
 
 def is_role_suppressed(slug):
+    from django.db.utils import OperationalError, ProgrammingError
+
     try:
         return LookupOption.objects.filter(
             category=SUPPRESSED_ROLE_CATEGORY,
             code=slug,
             is_active=True,
         ).exists()
-    except OperationalError:
+    except (OperationalError, ProgrammingError):
         return False
 
 
@@ -106,9 +108,9 @@ def seed_builtin_roles():
     try:
         remove_legacy_builtin_roles()
         _ensure_pending_group()
-        from logic.config_seed import seed_org_ranks, seed_org_roles
-        seed_org_ranks()
-        seed_org_roles()
+        from logic.config_seed import seed_config_defaults
+
+        seed_config_defaults()
 
         for rd in RoleDefinition.objects.filter(is_builtin=False):
             cleaned = sanitize_role_permissions(rd.slug, rd.permissions or [])

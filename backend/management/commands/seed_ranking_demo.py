@@ -10,9 +10,10 @@ from django.utils import timezone
 
 from auth import roles
 from auth.branches import BRANCH_1, BRANCH_2
-from backend.models import Customer, RoleDefinition, Sale, Seller, StaffAttendance, StaffProfile
+from backend.models import Customer, RoleDefinition, Seller, StaffAttendance, StaffProfile
 from logic.jalali import date_to_jalali
 from logic.role_definitions import seed_builtin_roles, sync_group_for_role
+from logic.sales import record_sale
 
 User = get_user_model()
 
@@ -100,26 +101,20 @@ class Command(BaseCommand):
                     },
                 )
 
-            Sale.objects.create(
-                customer=customer,
-                amount=Decimal(2_000_000 + idx * 500_000),
-                final_amount=Decimal(2_000_000 + idx * 500_000),
-                paid_amount=Decimal(2_000_000 + idx * 500_000),
+            record_sale(
+                customer,
+                Decimal(2_000_000 + idx * 500_000),
                 payment_status="paid",
                 recorded_by=user,
                 branch=spec["home_branch"],
-                sold_at=timezone.now(),
                 description=f"فروش نمونه {spec['full_name']} — شعبه اصلی",
             )
-            Sale.objects.create(
-                customer=customer,
-                amount=Decimal(1_200_000),
-                final_amount=Decimal(1_200_000),
-                paid_amount=Decimal(1_200_000),
+            record_sale(
+                customer,
+                Decimal(1_200_000),
                 payment_status="paid",
                 recorded_by=user,
                 branch=BRANCH_2 if spec["home_branch"] == BRANCH_1 else BRANCH_1,
-                sold_at=timezone.now(),
                 description=f"فروش نمونه {spec['full_name']} — شعبه دیگر",
             )
 

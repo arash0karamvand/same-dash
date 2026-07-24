@@ -15,7 +15,7 @@ export default function Layout({ portal, page, onNavigate, children }) {
   const [passwordOpen, setPasswordOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const isMobile = useMediaQuery('(max-width: 767px)')
-  const isCompactNav = useMediaQuery('(max-width: 1023px)')
+  const isCompactNav = useMediaQuery('(max-width: 1440px)')
   const visiblePortals = getVisiblePortals(user)
   const activePortal = getPortal(portal)
   const pageTitle = activePortal
@@ -48,7 +48,7 @@ export default function Layout({ portal, page, onNavigate, children }) {
   }, [])
 
   useEffect(() => {
-    const mq = window.matchMedia('(min-width: 1024px)')
+    const mq = window.matchMedia('(min-width: 1441px)')
     const closeIfDesktop = () => {
       if (mq.matches) setMenuOpen(false)
     }
@@ -94,7 +94,7 @@ export default function Layout({ portal, page, onNavigate, children }) {
           ))}
         </nav>
 
-        {activePortal && !isMobile && (
+        {activePortal && !isCompactNav && (
           <nav className="portal-sidebar-sub" aria-label="زیرمنو">
             {(activePortal.children || [])
               .filter((c) => canSeeNavItem(user, c))
@@ -152,7 +152,7 @@ export default function Layout({ portal, page, onNavigate, children }) {
           </div>
         </header>
 
-        {isMobile && portal && (
+        {isCompactNav && portal && (
           <PortalNav user={user} portalId={portal} currentPage={page} onNavigate={navigateSub} />
         )}
 

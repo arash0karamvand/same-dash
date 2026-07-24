@@ -283,6 +283,9 @@ def factory_order_to_dict(order, include_lines=False, user=None):
         )
     if include_lines:
         data["line_items"] = [factory_line_item_to_dict(i) for i in order.line_items.all()]
+        from logic.materials import factory_order_materials_summary
+
+        data.update(factory_order_materials_summary(order))
     return data
 
 
@@ -350,15 +353,46 @@ def attendance_to_dict(record):
 
 
 def accounting_to_dict(entry, user=None):
-    from logic.accounting import entry_permissions, is_system_entry
+    from logic.accounting import entry_permissions, is_system_entry, resolve_entry_accounts
 
     sale = entry.sale if entry.sale_id else None
     is_system = is_system_entry(entry)
     perms = entry_permissions(entry, user=user)
+    account = entry.account if getattr(entry, "account_id", None) else None
+    general, subsidiary, detailed = resolve_entry_accounts(
+        account,
+        general=entry.general_account,
+        subsidiary=entry.subsidiary_account,
+        detailed=entry.detailed_account,
+    )
+    subsidiary_ref = entry.subsidiary if getattr(entry, "subsidiary_id", None) else None
+    detailed_ref = entry.detailed if getattr(entry, "detailed_id", None) else None
     return {
         "id": entry.id,
         "entry_type": entry.entry_type,
         "entry_type_display": entry.get_entry_type_display(),
+        "account_id": account.id if account else None,
+        "account_code": account.code if account else "",
+        "account_slug": account.slug if account else None,
+        "account_name": account.name if account else entry.get_entry_type_display(),
+        "account_class": account.account_class if account else None,
+        "account_class_label": account.get_account_class_display() if account else None,
+        "subsidiary_id": subsidiary_ref.id if subsidiary_ref else None,
+        "subsidiary_code": subsidiary_ref.full_code if subsidiary_ref else "",
+        "detailed_id": detailed_ref.id if detailed_ref else None,
+        "detailed_code": detailed_ref.full_code if detailed_ref else "",
+        "document_code": entry.document_code or "",
+        "document_number": entry.document_number,
+        "attach_code": entry.attach_code or "",
+        "general_account": general,
+        "subsidiary_account": subsidiary,
+        "detailed_account": detailed,
+        "opening_debit": int(entry.opening_debit),
+        "opening_credit": int(entry.opening_credit),
+        "turnover_debit": int(entry.debit),
+        "turnover_credit": int(entry.credit),
+        "balance_debit": int(entry.balance_debit),
+        "balance_credit": int(entry.balance_credit),
         "debit": int(entry.debit),
         "credit": int(entry.credit),
         "amount": int(entry.amount),

@@ -124,6 +124,26 @@ export const productsApi = {
   topSelling: (limit = 20) => get(`/api/products/top-selling/?limit=${limit}`),
 }
 
+export const materialsApi = {
+  list: (opts = {}) => {
+    const p = new URLSearchParams()
+    if (opts.search) p.set('search', opts.search)
+    if (opts.limit) p.set('limit', opts.limit)
+    if (opts.include_inactive) p.set('include_inactive', '1')
+    if (opts.include_pending) p.set('include_pending', '1')
+    if (opts.approved_only) p.set('approved_only', '1')
+    if (opts.approval_status) p.set('approval_status', opts.approval_status)
+    const q = p.toString()
+    return get(`/api/materials/${q ? `?${q}` : ''}`)
+  },
+  get: (id) => get(`/api/materials/${id}/`),
+  create: (data) => post('/api/materials/', data),
+  update: (id, data) => put(`/api/materials/${id}/`, data),
+  remove: (id) => del(`/api/materials/${id}/`),
+  approve: (id) => post(`/api/materials/${id}/approve/`),
+  reject: (id, reason = '') => post(`/api/materials/${id}/reject/`, { reason }),
+}
+
 export const auditApi = {
   list: (opts = {}) => {
     const p = new URLSearchParams()
@@ -254,6 +274,8 @@ export const levelsApi = {
 function accountingParams(opts = {}) {
   const p = new URLSearchParams()
   if (opts.type) p.set('type', opts.type)
+  if (opts.accountId) p.set('account_id', opts.accountId)
+  if (opts.accountClass) p.set('account_class', opts.accountClass)
   if (opts.approved != null && opts.approved !== '') p.set('approved', opts.approved)
   if (opts.dateFrom) p.set('date_from', opts.dateFrom)
   if (opts.dateTo) p.set('date_to', opts.dateTo)
@@ -275,10 +297,101 @@ export const accountingApi = {
   salesReport: () => get('/api/accounting/sales-report/'),
   customer: (customerId) => get(`/api/accounting/customer/${customerId}/`),
   create: (data) => post('/api/accounting/', data),
+  get: (id) => get(`/api/accounting/${id}/`),
   update: (id, data) => put(`/api/accounting/${id}/`, data),
   remove: (id) => del(`/api/accounting/${id}/`),
   approve: (id, isApproved) => put(`/api/accounting/${id}/approve/`, { is_approved: isApproved }),
   bulkApprove: (ids) => post('/api/accounting/bulk-approve/', ids ? { ids } : {}),
+  accounts: () => get('/api/accounting/accounts/'),
+  models: (opts = {}) => {
+    const p = new URLSearchParams()
+    if (opts.accountClass) p.set('account_class', opts.accountClass)
+    if (opts.approved != null && opts.approved !== '') p.set('approved', opts.approved)
+    if (opts.dateFrom) p.set('date_from', opts.dateFrom)
+    if (opts.dateTo) p.set('date_to', opts.dateTo)
+    if (opts.search) p.set('search', opts.search)
+    const q = p.toString()
+    return get(`/api/accounting/models/${q ? `?${q}` : ''}`)
+  },
+  ledger: (opts = {}) => {
+    const p = new URLSearchParams()
+    if (opts.accountClass) p.set('account_class', opts.accountClass)
+    if (opts.dateFrom) p.set('date_from', opts.dateFrom)
+    if (opts.dateTo) p.set('date_to', opts.dateTo)
+    if (opts.approvedOnly) p.set('approved_only', 'true')
+    if (opts.limit) p.set('limit', opts.limit)
+    const q = p.toString()
+    return get(`/api/accounting/ledger/${q ? `?${q}` : ''}`)
+  },
+  trialBalance: (opts = {}) => {
+    const p = new URLSearchParams()
+    if (opts.level) p.set('level', opts.level)
+    if (opts.accountClass) p.set('account_class', opts.accountClass)
+    if (opts.accountId) p.set('account_id', opts.accountId)
+    if (opts.subsidiaryId) p.set('subsidiary_id', opts.subsidiaryId)
+    if (opts.dateFrom) p.set('date_from', opts.dateFrom)
+    if (opts.dateTo) p.set('date_to', opts.dateTo)
+    if (opts.approvedOnly) p.set('approved_only', 'true')
+    const q = p.toString()
+    return get(`/api/accounting/trial-balance/${q ? `?${q}` : ''}`)
+  },
+  detailLedger: (opts = {}) => {
+    const p = new URLSearchParams()
+    if (opts.detailedId) p.set('detailed_id', opts.detailedId)
+    if (opts.subsidiaryId) p.set('subsidiary_id', opts.subsidiaryId)
+    if (opts.accountId) p.set('account_id', opts.accountId)
+    if (opts.dateFrom) p.set('date_from', opts.dateFrom)
+    if (opts.dateTo) p.set('date_to', opts.dateTo)
+    if (opts.docFrom) p.set('doc_from', opts.docFrom)
+    if (opts.docTo) p.set('doc_to', opts.docTo)
+    if (opts.approvedOnly) p.set('approved_only', 'true')
+    const q = p.toString()
+    return get(`/api/accounting/detail-ledger/${q ? `?${q}` : ''}`)
+  },
+  createDocument: (data) => post('/api/accounting/documents/', data),
+  subsidiaries: (opts = {}) => {
+    const p = new URLSearchParams()
+    if (opts.accountId) p.set('account_id', opts.accountId)
+    const q = p.toString()
+    return get(`/api/accounting/subsidiaries/${q ? `?${q}` : ''}`)
+  },
+  createSubsidiary: (data) => post('/api/accounting/subsidiaries/', data),
+  details: (opts = {}) => {
+    const p = new URLSearchParams()
+    if (opts.subsidiaryId) p.set('subsidiary_id', opts.subsidiaryId)
+    if (opts.accountId) p.set('account_id', opts.accountId)
+    const q = p.toString()
+    return get(`/api/accounting/details/${q ? `?${q}` : ''}`)
+  },
+  createDetailed: (data) => post('/api/accounting/details/', data),
+  importExcel: async (file, opts = {}) => {
+    const form = new FormData()
+    form.append('file', file)
+    if (opts.dryRun) form.append('dry_run', 'true')
+    if (opts.approve) form.append('approve', 'true')
+    if (opts.force) form.append('force', 'true')
+    const response = await fetch('/api/accounting/import-excel/', {
+      method: 'POST',
+      credentials: 'include',
+      body: form,
+    })
+    const text = await response.text()
+    let payload = null
+    if (text) {
+      try {
+        payload = JSON.parse(text)
+      } catch {
+        payload = { ok: false, error: text }
+      }
+    }
+    if (!response.ok) {
+      const error = new Error((payload && payload.error) || 'خطا در آپلود فایل')
+      error.status = response.status
+      error.data = payload && payload.data ? payload.data : payload
+      throw error
+    }
+    return payload && Object.prototype.hasOwnProperty.call(payload, 'data') ? payload.data : payload
+  },
 }
 
 export const smsApi = {

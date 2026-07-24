@@ -293,6 +293,9 @@ def rollback_factory_receive(factory_order, user, reason=""):
 def rollback_factory_production_done(factory_order, user, reason=""):
     if factory_order.workflow_stage != factory_order.WORKFLOW_STAGE_PRODUCTION_DONE:
         raise ValueError("این سفارش آماده باربری نیست.")
+    from logic.materials import restore_materials_for_factory_order
+
+    restore_materials_for_factory_order(factory_order)
     factory_order.workflow_stage = factory_order.WORKFLOW_STAGE_IN_PRODUCTION
     factory_order.production_done_at = None
     factory_order.save(update_fields=["workflow_stage", "production_done_at"])
@@ -425,6 +428,9 @@ def receive_factory_order(factory_order, user):
 def complete_factory_production(factory_order, user):
     if factory_order.workflow_stage != factory_order.WORKFLOW_STAGE_IN_PRODUCTION:
         raise ValueError("این سفارش در مرحله ساخت کارخانه نیست.")
+    from logic.materials import deduct_materials_for_factory_order
+
+    deduct_materials_for_factory_order(factory_order)
     factory_order.workflow_stage = factory_order.WORKFLOW_STAGE_PRODUCTION_DONE
     factory_order.production_done_at = timezone.now()
     factory_order.save(update_fields=["workflow_stage", "production_done_at"])
@@ -443,6 +449,9 @@ def receive_factory_freight(factory_order, user):
         raise ValueError("فقط سفارش‌های با تاریخ تحویل امروز قابل دریافت هستند.")
     if factory_order.workflow_stage != factory_order.WORKFLOW_STAGE_PRODUCTION_DONE:
         raise ValueError("این سفارش هنوز آماده باربری نیست.")
+    from logic.materials import deduct_materials_for_factory_order
+
+    deduct_materials_for_factory_order(factory_order)
     factory_order.workflow_stage = factory_order.WORKFLOW_STAGE_IN_FREIGHT
     factory_order.freight_received_at = timezone.now()
     factory_order.freight_received_by = user

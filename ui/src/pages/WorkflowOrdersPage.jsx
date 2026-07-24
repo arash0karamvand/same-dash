@@ -33,6 +33,7 @@ export default function WorkflowOrdersPage({
   showProductionDate = false,
   showStatus = false,
   showWorkflowHolder = false,
+  showMaterials = false,
   onEditOrder = null,
   emptyTitle = 'سفارشی در این مرحله نیست',
 }) {
@@ -88,8 +89,91 @@ export default function WorkflowOrdersPage({
     actions.filter((a) => !a.permission || hasPermission(user, a.permission))
       .filter((a) => !a.when || a.when(order))
 
+  const renderOrderActions = (o) => (
+    <>
+      {onEditOrder && o.can_edit && hasPermission(user, 'edit_sale') && (
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          disabled={busyId === o.id}
+          onClick={() => onEditOrder(o)}
+        >
+          اصلاح فاکتور
+        </Button>
+      )}
+      {visibleActions(o).map((a) => (
+        <Button
+          key={a.key}
+          type="button"
+          size="sm"
+          variant={a.variant || 'primary'}
+          disabled={busyId === o.id}
+          onClick={() => runAction(o, a.run)}
+        >
+          {typeof a.label === 'function' ? a.label(o) : a.label}
+        </Button>
+      ))}
+    </>
+  )
+
+  const renderLineItems = (o) =>
+    (o.line_items || []).map((li) => (
+      <div key={li.id}>
+        {li.product_name} × {li.quantity}
+        {li.fabric ? ` — ${li.fabric}` : ''}
+      </div>
+    ))
+
+  const renderMaterialRequirements = (o) => {
+    const items = o.material_requirements || []
+    if (!items.length) {
+      return <span className="muted">—</span>
+    }
+    return (
+      <div className="order-materials-list">
+        {items.map((item) => (
+          <div
+            key={item.material_id}
+            className={`order-material-row${item.sufficient === false ? ' shortage' : ''}`}
+          >
+            <span className="order-material-name">
+              {item.material?.name}
+              {item.material?.color_name ? ` (${item.material.color_name})` : ''}
+            </span>
+            <span className="order-material-qty">
+              نیاز: <strong>{item.required_quantity}</strong> {item.unit}
+              {item.unit_cost != null && (
+                <> × {formatMoney(item.unit_cost)}</>
+              )}
+              {item.available_stock != null && (
+                <> — موجود: <strong>{item.available_stock}</strong></>
+              )}
+            </span>
+            {item.line_cost != null && item.line_cost > 0 && (
+              <span className="order-material-cost muted small">
+                بهای ردیف: <strong>{formatMoney(item.line_cost)}</strong>
+              </span>
+            )}
+            {item.sufficient === false && (
+              <Badge color="#ef4444">کمبود {item.shortage}</Badge>
+            )}
+          </div>
+        ))}
+        {o.materials_deducted && (
+          <div className="muted small order-materials-deducted">✓ متریال کسر شده</div>
+        )}
+        {o.material_cost_total > 0 && (
+          <div className="order-material-total">
+            جمع بهای متریال: <strong>{formatMoney(o.material_cost_total)}</strong>
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
-    <div className="page">
+    <div className="page workflow-orders-page">
       <div className="page-head">
         <div>
           <h1>{title}</h1>
@@ -108,7 +192,8 @@ export default function WorkflowOrdersPage({
         ) : orders.length === 0 ? (
           <EmptyState text={emptyTitle} />
         ) : (
-          <div className="table-wrap">
+          <>
+          <div className="table-wrap workflow-table-desktop">
             <table className="table">
               <thead>
                 <tr>
@@ -116,6 +201,7 @@ export default function WorkflowOrdersPage({
                   {showBranch && <th>شعبه</th>}
                   {showCustomer && <th>مشتری</th>}
                   <th>کالاها</th>
+                  {showMaterials && <th>متریال</th>}
                   <th>تاریخ تحویل</th>
                   {showProductionDate && <th>تاریخ پایان ساخت</th>}
                   {showStatus && <th>وضعیت</th>}
@@ -137,14 +223,8 @@ export default function WorkflowOrdersPage({
                         {o.customer_address && <div className="muted">{o.customer_address}</div>}
                       </td>
                     )}
-                    <td>
-                      {(o.line_items || []).map((li) => (
-                        <div key={li.id}>
-                          {li.product_name} × {li.quantity}
-                          {li.fabric ? ` — ${li.fabric}` : ''}
-                        </div>
-                      ))}
-                    </td>
+                    <td>{renderLineItems(o)}</td>
+                    {showMaterials && <td>{renderMaterialRequirements(o)}</td>}
                     <td>{o.delivery_date ? formatDate(o.delivery_date) : '—'}</td>
                     {showProductionDate && (
                       <td>{o.production_done_at ? formatDate(o.production_done_at) : '—'}</td>
@@ -173,29 +253,7 @@ export default function WorkflowOrdersPage({
                     )}
                     <td>
                       <div className="row-actions">
-                        {onEditOrder && o.can_edit && hasPermission(user, 'edit_sale') && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            disabled={busyId === o.id}
-                            onClick={() => onEditOrder(o)}
-                          >
-                            اصلاح فاکتور
-                          </Button>
-                        )}
-                        {visibleActions(o).map((a) => (
-                          <Button
-                            key={a.key}
-                            type="button"
-                            size="sm"
-                            variant={a.variant || 'primary'}
-                            disabled={busyId === o.id}
-                            onClick={() => runAction(o, a.run)}
-                          >
-                            {typeof a.label === 'function' ? a.label(o) : a.label}
-                          </Button>
-                        ))}
+                        {renderOrderActions(o)}
                       </div>
                     </td>
                   </tr>
@@ -203,6 +261,64 @@ export default function WorkflowOrdersPage({
               </tbody>
             </table>
           </div>
+
+          <div className="workflow-cards-mobile">
+            {orders.map((o) => (
+              <div key={o.id} className="m-card workflow-order-card">
+                <div className="m-card-head">
+                  <div>
+                    <strong>{o.customer_name || '—'}</strong>
+                    <div className="muted small ltr">{o.invoice_number || `#${o.id}`}</div>
+                    {showBranch && (
+                      <div className="muted small">{o.branch_label || o.branch || '—'}</div>
+                    )}
+                  </div>
+                  {showStage && (
+                    <Badge color={stageColor(o.workflow_stage)}>
+                      {o.workflow_stage_display || o.workflow_stage}
+                    </Badge>
+                  )}
+                </div>
+                <div className="m-card-grid">
+                  {showCustomer && o.customer_phone && (
+                    <div><span className="muted">تلفن</span><span className="ltr">{o.customer_phone}</span></div>
+                  )}
+                  {showAmounts && (
+                    <div><span className="muted">مبلغ</span><strong>{o.amounts_masked ? '—' : formatMoney(o.final_amount)}</strong></div>
+                  )}
+                  <div><span className="muted">تحویل</span>{o.delivery_date ? formatDate(o.delivery_date) : '—'}</div>
+                  {showProductionDate && (
+                    <div><span className="muted">پایان ساخت</span>{o.production_done_at ? formatDate(o.production_done_at) : '—'}</div>
+                  )}
+                  {showStatus && (
+                    <div><span className="muted">وضعیت</span>{o.status_display || o.status || '—'}</div>
+                  )}
+                  {showWorkflowHolder && (
+                    <div><span className="muted">دست</span>{o.holder_department || '—'}{o.holder_name ? ` — ${o.holder_name}` : ''}</div>
+                  )}
+                </div>
+                {(o.line_items || []).length > 0 && (
+                  <div className="muted small" style={{ marginTop: 8 }}>{renderLineItems(o)}</div>
+                )}
+                {showMaterials && (o.material_requirements || []).length > 0 && (
+                  <div className="order-materials-mobile" style={{ marginTop: 8 }}>
+                    <div className="muted small" style={{ marginBottom: 4 }}>متریال</div>
+                    {renderMaterialRequirements(o)}
+                  </div>
+                )}
+                {showStage && o.holder_detail && (
+                  <div className="muted small workflow-holder-detail">{o.holder_detail}</div>
+                )}
+                {showCustomer && o.customer_address && (
+                  <div className="muted small" style={{ marginTop: 6 }}>{o.customer_address}</div>
+                )}
+                <div className="m-card-actions row-actions">
+                  {renderOrderActions(o)}
+                </div>
+              </div>
+            ))}
+          </div>
+          </>
         )}
       </Card>
     </div>

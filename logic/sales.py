@@ -6,6 +6,7 @@ from decimal import Decimal, ROUND_HALF_UP
 from django.db import transaction
 
 from backend.models import AccountingEntry, Sale
+from logic.accounting import create_accounting_entry
 from logic.levels import update_customer_level
 
 
@@ -105,17 +106,27 @@ def _payment_status_from_paid(final_amount, paid_amount):
 
 
 def _record_deposit_payment(sale, amount, description="", recorded_by=None):
-    """ثبت دریافت بیعانه — بدون سند درآمد/مطالبات برای پیش‌فاکتور در انتظار."""
+    """ثبت دریافت بیعانه — بدهکار بانک/صندوق."""
     amount = Decimal(amount)
     if amount <= 0:
         return
-    AccountingEntry.objects.create(
+    from logic.accounting import assign_document_code, assign_document_number, generate_document_code, next_document_number
+    from logic.accounting_accounts import payment_account_for_sale
+
+    doc_num = next_document_number(entry_date=sale.sold_at)
+    doc_code = generate_document_code(entry_date=sale.sold_at)
+    create_accounting_entry(
         entry_type="payment",
-        credit=amount,
+        account=payment_account_for_sale(sale),
+        debit=amount,
         amount=amount,
         description=description or f"بیعانه فاکتور {sale.invoice_number or sale.pk}",
         sale=sale,
         is_approved=True,
+        document_code=doc_code,
+        document_number=doc_num,
+        entry_date=sale.sold_at,
+        currency="toman",
     )
     _apply_purchase_to_customer(
         sale.customer,
@@ -186,27 +197,59 @@ def _refresh_customer_last_purchase(customer, exclude_sale_id=None):
 
 
 def _create_sale_accounting(sale, outstanding):
-    """سند درآمد (بستانکار) + در صورت مانده، سند مطالبات (بدهکار مشتری)."""
+    """سند فروش — بستانکار درآمد (7240) + بدهکار مطالبات (1310) و/یا بانک (1210)."""
     if is_pre_invoice_pending(sale):
         return
     if AccountingEntry.objects.filter(sale=sale, entry_type="sale").exists():
         return
-    AccountingEntry.objects.create(
+
+    from logic.accounting import generate_document_code, next_document_number
+    from logic.accounting_accounts import payment_account_for_sale
+
+    doc_num = next_document_number(entry_date=sale.sold_at)
+    doc_code = generate_document_code(entry_date=sale.sold_at)
+    paid = Decimal(sale.paid_amount or 0)
+    final_amount = Decimal(sale.final_amount or 0)
+    outstanding = Decimal(outstanding or 0)
+
+    create_accounting_entry(
         entry_type="sale",
-        credit=sale.final_amount,
-        amount=sale.final_amount,
+        credit=final_amount,
+        amount=final_amount,
         description=f"درآمد فروش فاکتور {sale.invoice_number or sale.pk}",
         sale=sale,
         is_approved=True,
+        document_code=doc_code,
+        document_number=doc_num,
+        entry_date=sale.sold_at,
+        currency="toman",
     )
     if outstanding > 0:
-        AccountingEntry.objects.create(
+        create_accounting_entry(
             entry_type="receivable",
             debit=outstanding,
             amount=outstanding,
             description=f"مطالبات مشتری فاکتور {sale.invoice_number or sale.pk}",
             sale=sale,
             is_approved=True,
+            document_code=doc_code,
+            document_number=doc_num,
+            entry_date=sale.sold_at,
+            currency="toman",
+        )
+    if paid > 0:
+        create_accounting_entry(
+            entry_type="payment",
+            account=payment_account_for_sale(sale),
+            debit=paid,
+            amount=paid,
+            description=f"دریافت وجه فاکتور {sale.invoice_number or sale.pk}",
+            sale=sale,
+            is_approved=True,
+            document_code=doc_code,
+            document_number=doc_num,
+            entry_date=sale.sold_at,
+            currency="toman",
         )
 
 
@@ -223,26 +266,30 @@ def _create_pre_invoice_deposit_accounting(sale, paid_amount, recorded_by=None):
 
 def _sync_receivable_entry(sale):
     """به‌روزرسانی سند مطالبات بر اساس مانده فعلی."""
+    from logic.accounting_money import to_rial_from_toman
+
     if is_pre_invoice_pending(sale) or is_order_cancelled(sale):
         return
     outstanding = balance_due(sale)
+    outstanding_rial = to_rial_from_toman(outstanding)
     receivable = AccountingEntry.objects.filter(sale=sale, entry_type="receivable").first()
     if outstanding <= 0:
         if receivable:
             receivable.delete()
         return
     if receivable:
-        receivable.debit = outstanding
-        receivable.amount = outstanding
+        receivable.debit = outstanding_rial
+        receivable.amount = outstanding_rial
         receivable.save(update_fields=["debit", "amount"])
     else:
-        AccountingEntry.objects.create(
+        create_accounting_entry(
             entry_type="receivable",
             debit=outstanding,
             amount=outstanding,
             description=f"مطالبات مشتری فاکتور {sale.invoice_number or sale.pk}",
             sale=sale,
             is_approved=True,
+            currency="toman",
         )
 
 
@@ -475,7 +522,7 @@ def delete_sale(sale, user=None):
 
 
 @transaction.atomic
-def record_payment(sale, amount, description="", recorded_by=None):
+def record_payment(sale, amount, description="", recorded_by=None, account=None):
     """ثبت پرداخت/قسط جدید روی فروش — کاهش مطالبات و به‌روزرسانی سطح مشتری."""
     if is_order_cancelled(sale):
         raise ValueError("این سفارش لغو شده و قابل پرداخت نیست.")
@@ -503,13 +550,17 @@ def record_payment(sale, amount, description="", recorded_by=None):
         )
         return sale
 
-    AccountingEntry.objects.create(
+    from logic.accounting_accounts import payment_account_for_sale
+
+    create_accounting_entry(
         entry_type="payment",
-        credit=amount,
+        account=account or payment_account_for_sale(sale),
+        debit=amount,
         amount=amount,
         description=description or f"دریافت پرداخت فاکتور {sale.invoice_number or sale.pk}",
         sale=sale,
         is_approved=True,
+        currency="toman",
     )
     _sync_receivable_entry(sale)
     _apply_purchase_to_customer(
@@ -593,12 +644,13 @@ def cancel_order(sale, recorded_by=None):
             inst.save(update_fields=["status"])
 
     if paid > 0:
-        AccountingEntry.objects.create(
+        create_accounting_entry(
             entry_type="refund",
             debit=paid,
             amount=paid,
             description=f"بازگشت بیعانه — فاکتور {sale.invoice_number or sale.pk}",
             sale=sale,
+            currency="toman",
         )
         _reverse_purchase_from_customer(customer, paid)
         AccountingEntry.objects.filter(sale=sale, entry_type="payment").delete()

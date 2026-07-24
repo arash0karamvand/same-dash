@@ -5,9 +5,18 @@ from decimal import Decimal, InvalidOperation
 from django.db.models import Q
 
 from api.helpers import api_view, fail, parse_json, success
-from auth.permissions import MANAGE_PRODUCTS, VIEW_PRODUCTS, has_permission
+from auth.permissions import (
+    MANAGE_FACTORY_PRODUCTS,
+    MANAGE_MATERIALS,
+    MANAGE_PRODUCTS,
+    VIEW_FACTORY_PRODUCTS,
+    VIEW_MATERIALS,
+    VIEW_PRODUCTS,
+    has_permission,
+)
 from backend.models import Product, ProductCategory
 from logic.audit import log_action
+from logic.analytics import best_selling_products
 from logic.products import (
     category_to_dict,
     create_category,
@@ -17,15 +26,50 @@ from logic.products import (
     update_category,
     update_product,
 )
-from logic.analytics import best_selling_products
 
 
-def _can_view(user):
+def _can_view_sales(user):
     return has_permission(user, VIEW_PRODUCTS)
 
 
-def _can_manage(user):
+def _can_view_factory(user):
+    return has_permission(user, VIEW_FACTORY_PRODUCTS)
+
+
+def _can_view(user):
+    return _can_view_sales(user) or _can_view_factory(user)
+
+
+def _can_manage_sales(user):
     return has_permission(user, MANAGE_PRODUCTS)
+
+
+def _can_manage_factory(user):
+    return has_permission(user, MANAGE_FACTORY_PRODUCTS)
+
+
+def _can_manage(user):
+    return _can_manage_sales(user) or _can_manage_factory(user)
+
+
+def _product_audience(user):
+    if _can_view_sales(user) and has_permission(user, VIEW_MATERIALS):
+        return "full"
+    if _can_view_sales(user):
+        return "sales"
+    if _can_view_factory(user):
+        return "factory"
+    return "sales"
+
+
+def _product_write_flags(user):
+    allow_sales_price = _can_manage_sales(user)
+    allow_materials = _can_manage_factory(user) or has_permission(user, MANAGE_MATERIALS)
+    return allow_sales_price, allow_materials
+
+
+def _serialize_product(user, product):
+    return product_to_dict(product, audience=_product_audience(user))
 
 
 @api_view("GET", "POST")
@@ -86,8 +130,7 @@ def category_detail(request, pk):
 
 @api_view("GET", "POST")
 def product_list(request):
-    can_view = _can_view(request.user)
-    if not can_view:
+    if not _can_view(request.user):
         return fail("Permission denied", status=403)
 
     if request.method == "GET":
@@ -95,33 +138,43 @@ def product_list(request):
         category_id = request.GET.get("category_id")
         active_only = request.GET.get("include_inactive") != "1" or not _can_manage(request.user)
         if request.GET.get("include_inactive") == "1" and _can_manage(request.user):
-            qs = Product.objects.filter(is_deleted=False).select_related("category").prefetch_related("variants")
+            qs = Product.objects.filter(is_deleted=False).select_related("category").prefetch_related(
+                "variants", "product_materials__material"
+            )
             if search:
                 q = Q(name__icontains=search) | Q(sku__icontains=search) | Q(brand__icontains=search)
                 qs = qs.filter(q).distinct()
             if category_id:
                 qs = qs.filter(category_id=category_id)
         else:
-            qs = filter_products(Product.objects.all(), search=search, category_id=category_id, active_only=True)
+            qs = filter_products(Product.objects.all(), search=search, category_id=category_id, active_only=active_only)
         limit = min(int(request.GET.get("limit") or 50), 200)
-        return success({"results": [product_to_dict(p) for p in qs[:limit]]})
+        audience = _product_audience(request.user)
+        return success({"results": [product_to_dict(p, audience=audience) for p in qs[:limit]]})
 
     if not _can_manage(request.user):
         return fail("Permission denied", status=403)
 
+    allow_sales_price, allow_materials = _product_write_flags(request.user)
     try:
-        product = create_product(parse_json(request))
+        product = create_product(
+            parse_json(request),
+            allow_sales_price=allow_sales_price,
+            allow_materials=allow_materials,
+        )
     except ValueError as exc:
         return fail(str(exc), status=400)
 
     log_action(request.user, "create", f"محصول: {product.name}", entity_type="Product", entity_id=product.id)
-    return success(product_to_dict(product), status=201)
+    return success(_serialize_product(request.user, product), status=201)
 
 
 @api_view("GET", "PUT", "DELETE")
 def product_detail(request, pk):
     try:
-        product = Product.objects.select_related("category").prefetch_related("variants").get(pk=pk, is_deleted=False)
+        product = Product.objects.select_related("category").prefetch_related(
+            "variants", "product_materials__material"
+        ).get(pk=pk, is_deleted=False)
     except Product.DoesNotExist:
         return fail("Product not found", status=404)
 
@@ -129,29 +182,37 @@ def product_detail(request, pk):
         return fail("Permission denied", status=403)
 
     if request.method == "GET":
-        return success(product_to_dict(product))
+        return success(_serialize_product(request.user, product))
 
     if not _can_manage(request.user):
         return fail("Permission denied", status=403)
 
     if request.method == "DELETE":
+        if not _can_manage_sales(request.user):
+            return fail("Permission denied", status=403)
         product.soft_delete()
         log_action(request.user, "delete", f"حذف محصول: {product.name}", entity_type="Product", entity_id=product.id)
         return success({"deleted": True})
 
+    allow_sales_price, allow_materials = _product_write_flags(request.user)
     try:
-        product = update_product(product, parse_json(request))
+        product = update_product(
+            product,
+            parse_json(request),
+            allow_sales_price=allow_sales_price,
+            allow_materials=allow_materials,
+        )
     except ValueError as exc:
         return fail(str(exc), status=400)
 
     log_action(request.user, "update", f"ویرایش محصول: {product.name}", entity_type="Product", entity_id=product.id)
-    return success(product_to_dict(product))
+    return success(_serialize_product(request.user, product))
 
 
 # سازگاری با endpoint قبلی — POST سریع از فروش
 @api_view("POST")
 def product_quick_create(request):
-    if not has_permission(request.user, MANAGE_PRODUCTS) and not has_permission(request.user, VIEW_PRODUCTS):
+    if not _can_manage_sales(request.user) and not _can_view_sales(request.user):
         return fail("Permission denied", status=403)
 
     data = parse_json(request)
@@ -172,12 +233,12 @@ def product_quick_create(request):
         product.is_active = True
         product.save()
     log_action(request.user, "create", f"محصول: {name}", entity_type="Product", entity_id=product.id)
-    return success(product_to_dict(product), status=201 if created else 200)
+    return success(_serialize_product(request.user, product), status=201 if created else 200)
 
 
 @api_view("GET")
 def product_top_selling(request):
-    if not _can_view(request.user):
+    if not _can_view_sales(request.user):
         return fail("Permission denied", status=403)
     try:
         limit = min(max(int(request.GET.get("limit") or 20), 1), 50)

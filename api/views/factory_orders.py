@@ -71,7 +71,10 @@ def _has_factory_oversight(user):
 def _base_queryset():
     return (
         FactoryOrder.objects.select_related("customer", "source_sale")
-        .prefetch_related("line_items")
+        .prefetch_related(
+            "line_items",
+            "line_items__product__product_materials__material",
+        )
         .filter(source_sale__is_deleted=False)
     )
 

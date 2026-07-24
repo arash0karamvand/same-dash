@@ -7,10 +7,12 @@
 from django.contrib import admin
 
 from .models import (
+    Account,
     AccountingEntry,
     AuditLog,
     Customer,
     CustomerLevelHistory,
+    DetailedAccount,
     LoyaltyLevel,
     Product,
     Sale,
@@ -20,6 +22,7 @@ from .models import (
     SMSLog,
     StaffAttendance,
     StaffProfile,
+    SubsidiaryAccount,
 )
 
 
@@ -56,10 +59,31 @@ class SaleAdmin(admin.ModelAdmin):
     readonly_fields = ("recorded_by", "created_at")
 
 
+@admin.register(Account)
+class AccountAdmin(admin.ModelAdmin):
+    list_display = ("code", "name", "slug", "account_class", "normal_balance", "sort_order", "is_active")
+    list_filter = ("account_class", "is_active")
+    search_fields = ("name", "slug", "code")
+    ordering = ("sort_order", "name")
+
+
+@admin.register(SubsidiaryAccount)
+class SubsidiaryAccountAdmin(admin.ModelAdmin):
+    list_display = ("code", "name", "account", "is_active")
+    list_filter = ("account__account_class", "is_active")
+    search_fields = ("name", "code", "account__name")
+
+
+@admin.register(DetailedAccount)
+class DetailedAccountAdmin(admin.ModelAdmin):
+    list_display = ("code", "name", "subsidiary", "is_active")
+    search_fields = ("name", "code", "subsidiary__name")
+
+
 @admin.register(AccountingEntry)
 class AccountingEntryAdmin(admin.ModelAdmin):
-    list_display = ("entry_type", "debit", "credit", "amount", "entry_date", "is_approved")
-    list_filter = ("entry_type", "is_approved")
+    list_display = ("document_number", "entry_type", "account", "debit", "credit", "entry_date", "is_approved")
+    list_filter = ("entry_type", "account__account_class", "is_approved")
     search_fields = ("description",)
     list_editable = ("is_approved",)
 

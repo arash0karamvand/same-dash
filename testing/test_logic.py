@@ -69,8 +69,10 @@ class SalesLogicTest(TestCase):
         self.customer.refresh_from_db()
         self.assertEqual(self.customer.total_purchases, Decimal("10000000"))
         self.assertEqual(self.customer.level.name, "نقره‌ای")
-        entry = AccountingEntry.objects.get()
-        self.assertEqual(entry.credit, Decimal("10000000"))
+        entry = AccountingEntry.objects.get(entry_type="sale")
+        self.assertEqual(entry.credit, Decimal("100000000"))
+        payment = AccountingEntry.objects.get(entry_type="payment")
+        self.assertEqual(payment.debit, Decimal("100000000"))
 
     def test_unpaid_sale_does_not_update_customer_totals(self):
         record_sale(self.customer, Decimal("5000000"), payment_status="unpaid")
@@ -89,7 +91,7 @@ class SalesLogicTest(TestCase):
         self.customer.refresh_from_db()
         self.assertEqual(self.customer.total_purchases, Decimal("4000000"))
         receivable = AccountingEntry.objects.get(entry_type="receivable", sale=sale)
-        self.assertEqual(receivable.debit, Decimal("6000000"))
+        self.assertEqual(receivable.debit, Decimal("60000000"))
 
     def test_record_payment_settles_balance(self):
         sale = record_sale(

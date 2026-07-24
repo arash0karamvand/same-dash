@@ -458,6 +458,31 @@ class AccountingApiTest(TestCase):
         self.assertEqual(body["data"]["open_invoices_count"], 1)
         self.assertEqual(body["data"]["pending_count"], 1)
 
+    def test_excel_import_endpoint(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        from backend.models import DetailedAccount
+        from testing.test_accounting_excel_import import _build_sample_workbook
+
+        buffer = _build_sample_workbook()
+        resp = self.client.post(
+            "/api/accounting/import-excel/",
+            {
+                "file": SimpleUploadedFile(
+                    "accounting.xlsx",
+                    buffer.getvalue(),
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                ),
+                "approve": "true",
+            },
+        )
+        body = parse(resp)
+        self.assertEqual(resp.status_code, 201, msg=body)
+        self.assertTrue(body["ok"])
+        self.assertTrue(body["data"]["committed"])
+        self.assertGreater(DetailedAccount.objects.count(), 0)
+        self.assertGreater(body["data"]["stats"]["entries_created"], 0)
+
 
 class UserManagementTest(TestCase):
     def setUp(self):

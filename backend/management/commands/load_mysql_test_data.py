@@ -13,7 +13,10 @@ from auth import roles
 from auth.roles import ROLE_LABELS
 from auth.views import apply_user_access, ensure_staff_profile
 from backend.models import (
+    AccountingEntry,
     Customer,
+    FactoryOrder,
+    Material,
     OrgRank,
     Product,
     ProductCategory,
@@ -24,7 +27,10 @@ from backend.models import (
     StaffAttendance,
 )
 from logic.membership import generate_membership_code
+from logic.order_queues import migrate_office_to_factory_if_needed, migrate_sale_to_office_if_needed
 from logic.role_definitions import seed_builtin_roles
+from logic.seed_defaults import seed_system_defaults
+from logic.seed_defaults import seed_demo_materials
 from logic.sale_workflow import (
     STAGE_ACCOUNTING_APPROVED,
     STAGE_BRANCH_APPROVED,
@@ -91,8 +97,8 @@ EMPLOYEES = [
         }
         for i in range(1, 11)
     ],
-    {"username": "demo_acct1", "name": "پریسا رضایی", "role": roles.ACCOUNTING_FINANCE, "branch": "", "rank": "حسابداری و مالی"},
-    {"username": "demo_acct2", "name": "امیر موسوی", "role": roles.ACCOUNTING_FINANCE, "branch": "", "rank": "حسابداری و مالی"},
+    {"username": "demo_acct1", "name": "پریسا رضایی", "role": roles.ACCOUNTING_FINANCE, "branch": "", "rank": "اداری"},
+    {"username": "demo_acct2", "name": "امیر موسوی", "role": roles.ACCOUNTING_FINANCE, "branch": "", "rank": "اداری"},
     {"username": "demo_fact1", "name": "رضا کارخانه", "role": roles.FACTORY_SUPERVISOR, "branch": "", "rank": "سرپرست کارخانه"},
     {"username": "demo_freight1", "name": "کریم باربری", "role": roles.FREIGHT_SUPERVISOR, "branch": "", "rank": "سرپرست باربری"},
 ]
@@ -121,6 +127,7 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        seed_system_defaults()
         seed_builtin_roles()
         now = timezone.now()
         today = timezone.localdate()
@@ -131,6 +138,8 @@ class Command(BaseCommand):
         users_by_role = self._ensure_employees()
         products = self._ensure_products()
         customers = self._ensure_customers()
+        factory_user = users_by_role.get("factory", [None])[0]
+        seed_demo_materials(user=factory_user, link_products=True)
         sales_created = self._create_sales(users_by_role, customers, products, now, today)
 
         self.stdout.write(self.style.SUCCESS("\n=== داده تست بارگذاری شد ==="))
@@ -171,10 +180,16 @@ class Command(BaseCommand):
         self.stdout.write(f"    تحویل امروز (باربری): {freight_today}")
 
     def _clear_business_data(self):
+        AccountingEntry.objects.all().delete()
+        FactoryOrder.all_objects.all().delete()
+        from backend.models import OfficeOrder
+
+        OfficeOrder.all_objects.all().delete()
         SaleLineItem.objects.all().delete()
         Sale.all_objects.all().delete()
         Customer.all_objects.all().delete()
-        self.stdout.write("سفارش‌ها و مشتریان قبلی پاک شد.")
+        Material.all_objects.all().delete()
+        self.stdout.write("سفارش‌ها، مشتریان، متریال و اسناد حسابداری قبلی پاک شد.")
 
     def _ensure_employees(self):
         users_by_role = {roles.SALES_EXPERT: [], roles.BRANCH_SUPERVISOR: []}
@@ -254,8 +269,8 @@ class Command(BaseCommand):
         rank_name = spec.get("rank")
         if rank_name:
             org_rank = OrgRank.objects.filter(name=rank_name, is_active=True).first()
-            if not org_rank and rank_name in ("مدیرعامل", "معاون مدیرعامل", "سرپرست شعبه", "حسابداری و مالی"):
-                org_rank = OrgRank.objects.filter(name__icontains=rank_name[:6], is_active=True).first()
+            if not org_rank and rank_name in ("مدیرعامل", "معاون مدیرعامل", "سرپرست شعبه", "اداری"):
+                org_rank = OrgRank.objects.filter(name__icontains=rank_name[:4], is_active=True).first()
             if org_rank:
                 profile.org_rank = org_rank
         profile.save()
@@ -387,6 +402,7 @@ class Command(BaseCommand):
             if stage != STAGE_PENDING_BRANCH:
                 sale.branch_approved_at = sold_at + timedelta(hours=2)
                 sale.branch_approved_by = bs_user
+                sale.office_released_at = sale.office_released_at or sold_at + timedelta(hours=3)
             if stage in {
                 STAGE_ACCOUNTING_APPROVED,
                 STAGE_IN_PRODUCTION,
@@ -396,6 +412,8 @@ class Command(BaseCommand):
             }:
                 sale.accounting_approved_at = sold_at + timedelta(hours=6)
                 sale.accounting_approved_by = acct_user
+                sale.office_released_at = sold_at + timedelta(hours=5)
+                sale.factory_released_at = sold_at + timedelta(hours=6)
             if stage in {STAGE_IN_PRODUCTION, STAGE_PRODUCTION_DONE, STAGE_IN_FREIGHT, STAGE_COMPLETED}:
                 if fact_user:
                     sale.factory_received_at = sold_at + timedelta(hours=12)
@@ -424,6 +442,11 @@ class Command(BaseCommand):
                 unit_price=unit_price,
                 line_total=amount,
             )
+
+            office = migrate_sale_to_office_if_needed(sale)
+            if office:
+                migrate_office_to_factory_if_needed(office)
+
             created += 1
 
         return created

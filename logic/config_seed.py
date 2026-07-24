@@ -7,16 +7,21 @@ from auth import roles
 from auth.permissions import (
     ALL_PERMISSIONS,
     APPROVE_ACCOUNTING,
+    APPROVE_MATERIALS,
     APPROVE_SALE_ACCOUNTING,
     APPROVE_SALE_BRANCH,
     CREATE_ACCOUNTING,
     CREATE_CUSTOMER,
+    CREATE_MATERIALS,
     CREATE_SALE,
     EDIT_ACCOUNTING,
     EDIT_CUSTOMER,
     EDIT_SALE,
     MANAGE_FACTORY_ORDERS,
     MANAGE_FREIGHT_ORDERS,
+    MANAGE_FACTORY_PRODUCTS,
+    MANAGE_MATERIALS,
+    MANAGE_PRODUCTS,
     MENU_SECTIONS,
     PERMISSION_GROUPS,
     PERMISSION_LABELS,
@@ -29,10 +34,12 @@ from auth.permissions import (
     VIEW_DASHBOARD,
     VIEW_EMPLOYEE_RANKING,
     VIEW_FACTORY_ORDERS,
+    VIEW_FACTORY_PRODUCTS,
     VIEW_FREIGHT_ORDERS,
     VIEW_INSTALLMENTS,
     VIEW_LOYALTY,
     VIEW_MANAGERS,
+    VIEW_MATERIALS,
     VIEW_ORG_CHART,
     VIEW_OWN_SALES,
     VIEW_PRODUCTS,
@@ -115,7 +122,7 @@ ORG_BUILTIN_ROLES = [
         "sort_order": 2,
         "permissions": sorted([
             VIEW_DASHBOARD, VIEW_ACCOUNTING, VIEW_REPORTS, VIEW_INSTALLMENTS, SEND_SMS,
-            VIEW_SALES, CREATE_SALE, EDIT_SALE, APPROVE_SALE_BRANCH,
+            VIEW_SALES,
         ]),
     },
     {
@@ -142,7 +149,8 @@ ORG_BUILTIN_ROLES = [
         "permissions": sorted([
             VIEW_DASHBOARD, VIEW_ACCOUNTING, CREATE_ACCOUNTING, EDIT_ACCOUNTING,
             APPROVE_ACCOUNTING, APPROVE_SALE_ACCOUNTING, EDIT_SALE, VIEW_REPORTS, VIEW_INSTALLMENTS,
-            VIEW_CUSTOMERS, EDIT_CUSTOMER, VIEW_PRODUCTS,
+            VIEW_CUSTOMERS, EDIT_CUSTOMER, VIEW_PRODUCTS, MANAGE_PRODUCTS,
+            VIEW_MATERIALS, CREATE_MATERIALS, APPROVE_MATERIALS,
             VIEW_FACTORY_ORDERS, VIEW_FREIGHT_ORDERS,
         ]),
     },
@@ -167,7 +175,11 @@ ORG_BUILTIN_ROLES = [
         "needs_branch": False,
         "color": "#78716c",
         "sort_order": 6,
-        "permissions": sorted([VIEW_DASHBOARD, VIEW_FACTORY_ORDERS, MANAGE_FACTORY_ORDERS]),
+        "permissions": sorted([
+            VIEW_DASHBOARD, VIEW_FACTORY_ORDERS, MANAGE_FACTORY_ORDERS,
+            VIEW_FACTORY_PRODUCTS, MANAGE_FACTORY_PRODUCTS,
+            VIEW_MATERIALS, CREATE_MATERIALS,
+        ]),
     },
     {
         "slug": roles.FREIGHT_SUPERVISOR,
@@ -298,13 +310,15 @@ def _role_defaults(spec, perms, parent):
 
 
 def _is_role_suppressed(slug):
+    from django.db.utils import OperationalError, ProgrammingError
+
     try:
         return LookupOption.objects.filter(
             category="suppressed_role",
             code=slug,
             is_active=True,
         ).exists()
-    except OperationalError:
+    except (OperationalError, ProgrammingError):
         return False
 
 

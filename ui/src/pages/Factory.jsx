@@ -28,6 +28,7 @@ export default function Factory() {
       showStage
       showCustomer={false}
       showAmounts={false}
+      showMaterials
       filters={(
         <div className="workflow-filter-bar">
           <span className="workflow-filter-label">فیلتر ساخت:</span>

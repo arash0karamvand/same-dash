@@ -1,10 +1,177 @@
 """منطق دسترسی و کمک‌تابع‌های حسابداری."""
 
 from django.db import transaction
+from django.utils import timezone
 
 from backend.models import AccountingEntry
 
 SYSTEM_ENTRY_TYPES = {"sale", "receivable", "payment"}
+PAYMENT_ACCOUNT_SLUGS = {"cash_documents", "petty_cash", "bank", "collection_at_bank"}
+
+
+def generate_document_code(*, entry_date=None):
+    """کد خودکار سند — S-{سال}-{شماره}."""
+    when = entry_date or timezone.now()
+    if timezone.is_naive(when):
+        when = timezone.make_aware(when)
+    year = timezone.localtime(when).year
+    prefix = f"S-{year}-"
+    last = (
+        AccountingEntry.objects.filter(document_code__startswith=prefix)
+        .order_by("-document_code")
+        .values_list("document_code", flat=True)
+        .first()
+    )
+    seq = 1
+    if last:
+        try:
+            seq = int(last.rsplit("-", 1)[-1]) + 1
+        except (TypeError, ValueError):
+            seq = AccountingEntry.objects.filter(document_code__startswith=prefix).count() + 1
+    return f"{prefix}{seq:05d}"
+
+
+def assign_document_code(entry):
+    if entry.document_code:
+        return entry.document_code
+    entry.document_code = generate_document_code(entry_date=entry.entry_date)
+    entry.save(update_fields=["document_code"])
+    return entry.document_code
+
+
+def next_document_number(*, entry_date=None):
+    """شماره سند عددی — یکتا در هر سال میلادی (مثل 1 تا 2115)."""
+    when = entry_date or timezone.now()
+    if timezone.is_naive(when):
+        when = timezone.make_aware(when)
+    year = timezone.localtime(when).year
+    last = (
+        AccountingEntry.objects.filter(document_number__isnull=False, entry_date__year=year)
+        .order_by("-document_number")
+        .values_list("document_number", flat=True)
+        .first()
+    )
+    return (last or 0) + 1
+
+
+def assign_document_number(entry):
+    if entry.document_number:
+        return entry.document_number
+    entry.document_number = next_document_number(entry_date=entry.entry_date)
+    entry.save(update_fields=["document_number"])
+    return entry.document_number
+
+
+def default_accounts_for_model(account):
+    if not account:
+        return "", "", ""
+    return account.get_account_class_display(), account.name, ""
+
+
+def resolve_entry_accounts(account, *, general="", subsidiary="", detailed=""):
+    general = (general or "").strip()
+    subsidiary = (subsidiary or "").strip()
+    detailed = (detailed or "").strip()
+    if account:
+        if not general:
+            general = account.get_account_class_display()
+        if not subsidiary:
+            subsidiary = account.name
+    return general, subsidiary, detailed
+
+
+def create_accounting_entry(
+    *,
+    entry_type,
+    sale=None,
+    debit=0,
+    credit=0,
+    amount=0,
+    description="",
+    is_approved=True,
+    account=None,
+    account_slug=None,
+    subsidiary_ref=None,
+    detailed_ref=None,
+    document_code="",
+    document_number=None,
+    attach_code="",
+    opening_debit=0,
+    opening_credit=0,
+    balance_debit=0,
+    balance_credit=0,
+    entry_date=None,
+    general_account="",
+    subsidiary_account="",
+    detailed_account="",
+    currency="rial",
+):
+    from logic.accounting_accounts import payment_account_for_sale, resolve_account_for_entry
+    from logic.accounting_money import to_rial, to_rial_from_toman
+
+    convert = to_rial_from_toman if currency == "toman" else to_rial
+    debit = convert(debit)
+    credit = convert(credit)
+    amount = convert(amount) if amount else 0
+    opening_debit = convert(opening_debit)
+    opening_credit = convert(opening_credit)
+    balance_debit = convert(balance_debit)
+    balance_credit = convert(balance_credit)
+
+    if account is None:
+        if account_slug:
+            account = resolve_account_for_entry(account_slug=account_slug)
+        elif entry_type == "payment" and sale is not None:
+            account = payment_account_for_sale(sale)
+        else:
+            account = resolve_account_for_entry(entry_type=entry_type)
+
+    if detailed_ref and not subsidiary_ref:
+        subsidiary_ref = detailed_ref.subsidiary
+    if subsidiary_ref and not account:
+        account = subsidiary_ref.account
+
+    effective_amount = amount or debit or credit
+    general, subsidiary_text, detailed_text = resolve_entry_accounts(
+        account,
+        general=general_account,
+        subsidiary=subsidiary_account or (subsidiary_ref.name if subsidiary_ref else ""),
+        detailed=detailed_account or (detailed_ref.name if detailed_ref else ""),
+    )
+    entry = AccountingEntry.objects.create(
+        entry_type=entry_type,
+        account=account,
+        subsidiary=subsidiary_ref,
+        detailed=detailed_ref,
+        debit=debit,
+        credit=credit,
+        amount=effective_amount,
+        description=description,
+        sale=sale,
+        is_approved=is_approved,
+        document_code=(document_code or "").strip(),
+        document_number=document_number,
+        attach_code=(attach_code or "").strip(),
+        general_account=general,
+        subsidiary_account=subsidiary_text,
+        detailed_account=detailed_text,
+        opening_debit=opening_debit,
+        opening_credit=opening_credit,
+        balance_debit=balance_debit,
+        balance_credit=balance_credit,
+    )
+    if entry_date is not None:
+        entry.entry_date = entry_date
+        entry.save(update_fields=["entry_date"])
+    if not entry.document_code:
+        assign_document_code(entry)
+    if not entry.document_number:
+        assign_document_number(entry)
+    return entry
+
+
+def is_payment_account(account):
+    return account and account.slug in PAYMENT_ACCOUNT_SLUGS
 
 
 def is_system_entry(entry):
@@ -81,16 +248,20 @@ def delete_accounting_entry(entry, user=None):
         }
 
     if sale and entry_type == "payment":
+        from decimal import Decimal
+
+        from logic.accounting_money import TOMAN_TO_RIAL
         from logic.sales import reverse_payment
 
-        reverse_payment(sale, amount, user=user)
+        amount_toman = Decimal(amount or 0) / TOMAN_TO_RIAL
+        reverse_payment(sale, amount_toman, user=user)
         entry.delete()
         return {
             "deleted": True,
             "entry_id": entry_id,
             "sale_deleted": False,
             "sale_id": sale.id,
-            "payment_reversed": int(amount or 0),
+            "payment_reversed": int(amount_toman),
         }
 
     if sale and entry_type == "receivable":

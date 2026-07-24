@@ -75,10 +75,15 @@ export function amountToWords(value) {
   return getAmountWords(value, 'تومان')
 }
 
-// قالب‌بندی مبلغ به تومان با جداکننده هزارگان فارسی
-export function formatMoney(value) {
+// قالب‌بندی مبلغ با واحد دلخواه (پیش‌فرض: تومان)
+export function formatMoney(value, unit = 'تومان') {
   const number = Number(value || 0)
-  return number.toLocaleString('fa-IR') + ' تومان'
+  return number.toLocaleString('fa-IR') + (unit ? ` ${unit}` : '')
+}
+
+/** قالب‌بندی مبلغ حسابداری — همیشه ریال */
+export function formatRial(value) {
+  return formatMoney(value, 'ریال')
 }
 
 // قالب‌بندی عدد ساده با ارقام فارسی

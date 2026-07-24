@@ -67,6 +67,12 @@ VIEW_ORG_CHART = "view_org_chart"
 MANAGE_REMINDERS = "manage_reminders"
 VIEW_PRODUCTS = "view_products"
 MANAGE_PRODUCTS = "manage_products"
+VIEW_FACTORY_PRODUCTS = "view_factory_products"
+MANAGE_FACTORY_PRODUCTS = "manage_factory_products"
+VIEW_MATERIALS = "view_materials"
+CREATE_MATERIALS = "create_materials"
+APPROVE_MATERIALS = "approve_materials"
+MANAGE_MATERIALS = "manage_materials"
 
 PERMISSION_LABELS = {
     VIEW_CUSTOMERS: "مشاهده مشتریان",
@@ -122,6 +128,12 @@ PERMISSION_LABELS = {
     MANAGE_REMINDERS: "یادآوری دوره‌ای باشگاه",
     VIEW_PRODUCTS: "مشاهده محصولات",
     MANAGE_PRODUCTS: "مدیریت محصولات",
+    VIEW_FACTORY_PRODUCTS: "مشاهده محصولات کارخانه",
+    MANAGE_FACTORY_PRODUCTS: "مدیریت محصولات کارخانه",
+    VIEW_MATERIALS: "مشاهده متریال",
+    CREATE_MATERIALS: "ثبت متریال (کارخانه)",
+    APPROVE_MATERIALS: "تایید و حذف متریال (اداری)",
+    MANAGE_MATERIALS: "مدیریت کامل متریال",
 }
 
 ALL_PERMISSIONS = {
@@ -178,6 +190,12 @@ ALL_PERMISSIONS = {
     MANAGE_REMINDERS,
     VIEW_PRODUCTS,
     MANAGE_PRODUCTS,
+    VIEW_FACTORY_PRODUCTS,
+    MANAGE_FACTORY_PRODUCTS,
+    VIEW_MATERIALS,
+    CREATE_MATERIALS,
+    APPROVE_MATERIALS,
+    MANAGE_MATERIALS,
 }
 
 ROLE_PERMISSIONS = {
@@ -254,7 +272,16 @@ PERMISSION_GROUPS = [
     {
         "id": "products",
         "label": "محصولات",
-        "permissions": [VIEW_PRODUCTS, MANAGE_PRODUCTS],
+        "permissions": [
+            VIEW_PRODUCTS,
+            MANAGE_PRODUCTS,
+            VIEW_FACTORY_PRODUCTS,
+            MANAGE_FACTORY_PRODUCTS,
+            VIEW_MATERIALS,
+            CREATE_MATERIALS,
+            APPROVE_MATERIALS,
+            MANAGE_MATERIALS,
+        ],
     },
     {
         "id": "sms",
@@ -353,8 +380,11 @@ MENU_SECTIONS = [
             VIEW_CUSTOMERS,
             EDIT_CUSTOMER,
             VIEW_PRODUCTS,
+            MANAGE_PRODUCTS,
+            VIEW_MATERIALS,
             VIEW_FACTORY_ORDERS,
             VIEW_FREIGHT_ORDERS,
+            APPROVE_MATERIALS,
         ],
     },
     {
@@ -366,6 +396,10 @@ MENU_SECTIONS = [
         "section_permissions": [
             VIEW_FACTORY_ORDERS,
             MANAGE_FACTORY_ORDERS,
+            VIEW_FACTORY_PRODUCTS,
+            MANAGE_FACTORY_PRODUCTS,
+            VIEW_MATERIALS,
+            CREATE_MATERIALS,
         ],
     },
 ]

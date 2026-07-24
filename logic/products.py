@@ -5,7 +5,8 @@ from decimal import Decimal, InvalidOperation
 from django.db import transaction
 from django.db.models import Q
 
-from backend.models import Product, ProductCategory, ProductVariant
+from backend.models import Material, Product, ProductCategory, ProductVariant
+from logic.materials import compute_product_material_cost, product_material_to_dict, sync_product_materials
 
 
 def category_to_dict(cat):
@@ -35,11 +36,13 @@ def variant_to_dict(v):
     }
 
 
-def product_to_dict(p, include_variants=True):
+def product_to_dict(p, include_variants=True, *, audience="sales"):
+    """audience: sales | factory | full — کنترل نمایش قیمت فروش و متریال."""
     variants = []
     if include_variants:
         variants = [variant_to_dict(v) for v in p.variants.filter(is_active=True).order_by("sort_order", "id")]
-    return {
+
+    data = {
         "id": p.id,
         "name": p.name,
         "sku": p.sku,
@@ -49,8 +52,6 @@ def product_to_dict(p, include_variants=True):
         "description": p.description,
         "unit": p.unit,
         "attributes": p.attributes or {},
-        "default_price": int(p.default_price),
-        "display_price": int(p.display_price),
         "is_active": p.is_active,
         "category_id": p.category_id,
         "category": category_to_dict(p.category) if p.category_id else None,
@@ -58,6 +59,31 @@ def product_to_dict(p, include_variants=True):
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "updated_at": p.updated_at.isoformat() if getattr(p, "updated_at", None) else None,
     }
+
+    show_sales_price = audience in {"sales", "full"}
+    show_materials = audience in {"factory", "full"}
+
+    if show_sales_price:
+        data["default_price"] = int(p.default_price)
+        data["display_price"] = int(p.display_price)
+
+    if show_materials:
+        materials = [
+            product_material_to_dict(pm)
+            for pm in p.product_materials.select_related("material").filter(
+                material__is_deleted=False,
+                material__is_active=True,
+                material__approval_status=Material.APPROVAL_APPROVED,
+            ).order_by("sort_order", "id")
+        ]
+        material_cost = compute_product_material_cost(p)
+        data["materials"] = materials
+        data["material_cost_total"] = int(material_cost)
+        if audience == "full" and show_sales_price:
+            sales_price = Decimal(p.default_price or 0)
+            data["profit_margin"] = int(sales_price - material_cost)
+
+    return data
 
 
 def _parse_variants(raw_variants):
@@ -150,14 +176,16 @@ def update_category(category, data):
 
 
 @transaction.atomic
-def create_product(data):
+def create_product(data, *, allow_sales_price=True, allow_materials=False):
     name = (data.get("name") or "").strip()
     if not name:
         raise ValueError("نام محصول الزامی است.")
-    try:
-        default_price = Decimal(str(data.get("default_price") or 0))
-    except (InvalidOperation, TypeError):
-        raise ValueError("قیمت نامعتبر است.")
+    default_price = Decimal(0)
+    if allow_sales_price and "default_price" in data:
+        try:
+            default_price = Decimal(str(data.get("default_price") or 0))
+        except (InvalidOperation, TypeError):
+            raise ValueError("قیمت نامعتبر است.")
 
     category = None
     category_id = data.get("category_id")
@@ -187,11 +215,15 @@ def create_product(data):
     variants_data = _parse_variants(data.get("variants"))
     if variants_data:
         _sync_variants(product, variants_data)
+
+    if allow_materials and "materials" in data:
+        sync_product_materials(product, data.get("materials"))
+
     return product
 
 
 @transaction.atomic
-def update_product(product, data):
+def update_product(product, data, *, allow_sales_price=True, allow_materials=False):
     if "name" in data:
         name = (data.get("name") or "").strip()
         if not name:
@@ -214,7 +246,7 @@ def update_product(product, data):
         if attrs is not None and not isinstance(attrs, dict):
             raise ValueError("ویژگی‌های سفارشی باید شیء JSON باشد.")
         product.attributes = attrs or {}
-    if "default_price" in data:
+    if allow_sales_price and "default_price" in data:
         try:
             product.default_price = Decimal(str(data.get("default_price") or 0))
         except (InvalidOperation, TypeError):
@@ -240,6 +272,9 @@ def update_product(product, data):
                 item["id"] = raw["id"]
         _sync_variants(product, variants_data)
 
+    if allow_materials and "materials" in data:
+        sync_product_materials(product, data.get("materials"))
+
     return product
 
 
@@ -259,7 +294,7 @@ def filter_products(queryset, *, search="", category_id=None, active_only=True):
         q = Q(name__icontains=search) | Q(sku__icontains=search) | Q(brand__icontains=search)
         q |= Q(variants__color_name__icontains=search)
         queryset = queryset.filter(q).distinct()
-    return queryset.select_related("category").prefetch_related("variants")
+    return queryset.select_related("category").prefetch_related("variants", "product_materials__material")
 
 
 def resolve_line_item_from_catalog(item):

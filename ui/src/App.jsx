@@ -11,6 +11,7 @@ import { navigateToRoute, parseRoute, resolvePage } from './utils/routing'
 import Dashboard from './pages/Dashboard'
 import Customers from './pages/Customers'
 import Products from './pages/Products'
+import Materials from './pages/Materials'
 import Shop from './pages/Shop'
 import Office from './pages/Office'
 import Factory from './pages/Factory'
@@ -41,6 +42,7 @@ const PAGES = {
   freight: FreightOrders,
   customers: Customers,
   products: Products,
+  materials: Materials,
   accounting: Accounting,
   levels: Levels,
   sms: Sms,
