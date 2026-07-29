@@ -24,7 +24,7 @@ import PersianMonthPicker from '../components/PersianMonthPicker'
 import { formatDate, formatMoney } from '../utils/format'
 import { hasAnyPermission, hasPermission, isBranchSupervisor, isExecutiveUser, isSystemAdmin, canApproveSaleBranch } from '../utils/permissions'
 
-import { currentJalali, formatJalali, jalaliToIso, PERSIAN_MONTHS, todayIso, toPersianDigits } from '../utils/jalali'
+import { currentJalali, formatJalali, jalaliToIso, PERSIAN_MONTHS, todayIso, toPersianDigits, addYearsToIso } from '../utils/jalali'
 
 
 
@@ -39,20 +39,6 @@ const PAYMENT_METHODS = [
 ]
 
 
-
-const PAYMENT_STATUSES = [
-
-  { value: 'paid', label: 'پرداخت‌شده' },
-
-  { value: 'unpaid', label: 'پرداخت‌نشده' },
-
-  { value: 'installment', label: 'قسطی' },
-
-]
-
-
-
-const STATUS_COLORS = { paid: '#10b981', unpaid: '#ef4444', installment: '#f59e0b', partial: '#f59e0b' }
 
 const ORDER_KINDS = [
   { value: 'normal', label: 'فروش عادی' },
@@ -85,8 +71,6 @@ const EMPTY_FORM = {
 
   payment_method: 'cash',
 
-  payment_status: 'paid',
-
   order_kind: 'normal',
 
   delivery_date: '',
@@ -111,9 +95,16 @@ const EMPTY_EDIT = {
   paid_amount: '',
 }
 
-function showInstallmentSection(form) {
-  if (form.order_kind !== 'normal') return false
-  return form.payment_status === 'installment' || form.payment_method === 'check'
+function showInstallmentSection(form, isShop) {
+  if (form.order_kind !== 'normal' || isShop) return false
+  return form.payment_method === 'check'
+}
+
+function resolvePaymentStatus(form, isShop) {
+  if (isPreInvoice(form) || isDeposit(form)) return 'unpaid'
+  if (isShop) return 'paid'
+  if (form.payment_method === 'check') return 'installment'
+  return 'paid'
 }
 
 function isPreInvoice(form) {
@@ -186,13 +177,9 @@ export default function Sales({ portal = 'sales' }) {
   const confirm = useConfirm()
   const { choices, branchOptions } = useConfig()
   const paymentMethods = choices('payment_method').length ? choices('payment_method') : PAYMENT_METHODS
-  const paymentStatuses = choices('payment_status').length ? choices('payment_status') : PAYMENT_STATUSES
   const orderKinds = choices('order_kind').length ? choices('order_kind') : ORDER_KINDS
   const orderStatusColors = Object.fromEntries(
     (choices('order_status').length ? choices('order_status') : []).map((o) => [o.value, o.meta?.color || '#6366f1'])
-  )
-  const statusColors = Object.fromEntries(
-    paymentStatuses.map((o) => [o.value, o.meta?.color || STATUS_COLORS[o.value] || '#6366f1'])
   )
   const resolvedOrderStatusColors = Object.keys(orderStatusColors).length ? orderStatusColors : ORDER_STATUS_COLORS
 
@@ -288,7 +275,7 @@ export default function Sales({ portal = 'sales' }) {
 
   const [form, setForm] = useState(EMPTY_FORM)
 
-  const [filters, setFilters] = useState({ payment_status: '', payment_method: '', date_from: '', date_to: '', search: '' })
+  const [filters, setFilters] = useState({ payment_method: '', date_from: '', date_to: '', search: '' })
 
   useEffect(() => {
     if (summaryOnly) setPersonalCollapsed(false)
@@ -487,24 +474,10 @@ export default function Sales({ portal = 'sales' }) {
     }
   }
 
-  const setPaymentStatus = (value) => {
-    setForm((f) => {
-      const next = { ...f, payment_status: value }
-      if (value === 'installment') {
-        next.payment_method = 'check'
-        if (!next.installments.length) {
-          next.installments = [{ ...EMPTY_INSTALLMENT }]
-        }
-      }
-      return next
-    })
-  }
-
   const setPaymentMethod = (value) => {
     setForm((f) => {
       const next = { ...f, payment_method: value }
       if (value === 'check') {
-        next.payment_status = 'installment'
         if (next.paid_amount === '') next.paid_amount = '0'
         if (!next.installments.length) {
           next.installments = [{ ...EMPTY_INSTALLMENT }]
@@ -582,17 +555,15 @@ export default function Sales({ portal = 'sales' }) {
   const setOrderKind = (value) => {
     setForm((f) => {
       const next = { ...f, order_kind: value }
-      if (value === 'pre_invoice') {
-        next.payment_status = 'unpaid'
+      if (value === 'pre_invoice' || value === 'deposit') {
         next.installments = []
       }
       if (value === 'deposit') {
-        next.payment_status = 'unpaid'
-        next.installments = []
         if (next.paid_amount === '') next.paid_amount = '0'
       }
       if (value === 'normal') {
         next.delivery_date = ''
+        if (isShop) next.payment_method = 'cash'
       }
       return next
     })
@@ -622,9 +593,9 @@ export default function Sales({ portal = 'sales' }) {
           amount: Number(form.amount),
           discount_type: form.discount_type || 'amount',
           discount_value: Number(form.discount_value) || 0,
-          payment_method: form.payment_method,
+          payment_method: isShop && !isPreInvoice(form) && !isDeposit(form) ? 'cash' : form.payment_method,
           order_kind: form.order_kind || 'normal',
-          payment_status: form.payment_status,
+          payment_status: resolvePaymentStatus(form, isShop),
           invoice_number: form.invoice_number,
           description: form.description,
         }
@@ -644,12 +615,10 @@ export default function Sales({ portal = 'sales' }) {
           }
           payload.delivery_date = form.delivery_date
           payload.paid_amount = Number(form.paid_amount || 0)
-          payload.payment_status = 'unpaid'
         }
 
         if (isPreInvoice(form)) {
           payload.paid_amount = Number(form.paid_amount || 0)
-          payload.payment_status = 'unpaid'
         }
 
         if (form.line_items?.length) {
@@ -705,11 +674,11 @@ export default function Sales({ portal = 'sales' }) {
           return
         }
 
-        if (form.payment_status === 'installment' && !isPreInvoice(form) && !isDeposit(form)) {
+        if (form.payment_method === 'check' && !isPreInvoice(form) && !isDeposit(form) && !isShop) {
           payload.paid_amount = Number(form.paid_amount || 0)
         }
 
-        if (showInstallmentSection(form) && form.installments.length) {
+        if (showInstallmentSection(form, isShop) && form.installments.length) {
           payload.installments = form.installments
             .filter((i) => Number(i.amount) > 0)
             .map((i) => ({
@@ -722,13 +691,20 @@ export default function Sales({ portal = 'sales' }) {
             }))
         }
 
-        if (form.payment_status === 'installment' && !isPreInvoice(form) && !isDeposit(form) && form.paid_amount === '') {
-          setError('برای فروش قسطی، پرداخت اولیه را وارد کنید (۰ اگر پرداختی نبود).')
+        if (form.payment_method === 'check' && !isPreInvoice(form) && !isDeposit(form) && !isShop && form.paid_amount === '') {
+          setError('برای فروش با چک، پرداخت اولیه را وارد کنید (۰ اگر پرداختی نبود).')
           return
         }
 
         if (!isDeposit(form) && form.delivery_date) {
           payload.delivery_date = form.delivery_date
+        }
+
+        if (isShop && form.delivery_date) {
+          if (form.delivery_date < shopDeliveryMinIso || form.delivery_date > shopDeliveryMaxIso) {
+            setError(`تاریخ تحویل باید بین ${formatJalali(shopDeliveryMinIso)} و ${formatJalali(shopDeliveryMaxIso)} باشد.`)
+            return
+          }
         }
 
         await salesApi.create(payload)
@@ -803,6 +779,11 @@ export default function Sales({ portal = 'sales' }) {
 
 
   const jNow = currentJalali()
+  const shopDeliveryMinIso = todayIso()
+  const shopDeliveryMaxIso = addYearsToIso(shopDeliveryMinIso, 3)
+  const shopDeliveryDateProps = isShop
+    ? { minIso: shopDeliveryMinIso, maxIso: shopDeliveryMaxIso }
+    : {}
   const walletBalance = selectedCustomer?.wallet_balance ?? editing?.customer_wallet_balance ?? 0
   const customerSelected = Boolean(selectedCustomer?.id || editing?.customer_id)
 
@@ -891,14 +872,6 @@ export default function Sales({ portal = 'sales' }) {
         ) : null}
         <form onSubmit={applyFilters} className={shopBranchSupervisor ? 'sales-filters-branch-queue' : ''}>
           <FilterBar>
-            <Field label="وضعیت پرداخت">
-              <Select
-                value={filters.payment_status}
-                onChange={(v) => setFilters({ ...filters, payment_status: v })}
-                options={[{ value: '', label: 'همه' }, ...paymentStatuses]}
-                placeholder="همه"
-              />
-            </Field>
             <Field label="روش پرداخت">
               <Select
                 value={filters.payment_method}
@@ -959,7 +932,7 @@ export default function Sales({ portal = 'sales' }) {
                 {isShop && branchQueueView && <th>شعبه</th>}
                 <th>مشتری</th><th>نوع</th>
                 {!hideWorkflowStage && <th>مرحله</th>}
-                <th>نهایی</th><th>پرداخت‌شده</th><th>مانده</th><th>وضعیت</th><th>تاریخ</th><th>فاکتور</th>
+                <th>نهایی</th><th>پرداخت‌شده</th><th>مانده</th><th>تاریخ</th><th>فاکتور</th>
 
                 {showActionsColumn && <th>عملیات</th>}
 
@@ -1001,8 +974,6 @@ export default function Sales({ portal = 'sales' }) {
                   <td>{s.amounts_masked ? '—' : formatMoney(s.paid_amount)}</td>
 
                   <td>{s.amounts_masked ? '—' : formatMoney(s.balance_due)}</td>
-
-                  <td><Badge color={statusColors[s.payment_status] || '#6366f1'}>{s.payment_status_display}</Badge></td>
 
                   <td>{formatDate(s.sold_at)}</td>
 
@@ -1074,8 +1045,9 @@ export default function Sales({ portal = 'sales' }) {
                       <div className="muted small">{s.branch_label || s.branch || '—'}</div>
                     )}
                   </div>
-                  <Badge color={resolvedOrderStatusColors[s.order_status] || statusColors[s.payment_status] || '#6366f1'}>
-                    {s.order_kind !== 'normal' ? s.order_kind_display : s.payment_status_display}
+                  <Badge color={resolvedOrderStatusColors[s.order_status] || '#6366f1'}>
+                    {s.order_kind_display}
+                    {!hideWorkflowStage && s.order_status === 'pending' ? ' — در انتظار' : ''}
                   </Badge>
                 </div>
                 <div className="m-card-grid">
@@ -1228,6 +1200,12 @@ export default function Sales({ portal = 'sales' }) {
                 </p>
               )}
 
+              {isShop && !isPreInvoice(form) && !isDeposit(form) && (
+                <p className="muted small">
+                  فروش عادی فروشگاه: مشتری کالا را نقد می‌خرد و مبلغ نهایی همان لحظه تسویه می‌شود.
+                </p>
+              )}
+
               <ProductLines
                 lines={form.line_items}
                 onChange={(line_items) => {
@@ -1261,6 +1239,7 @@ export default function Sales({ portal = 'sales' }) {
                       value={form.delivery_date}
                       onChange={(v) => setForm({ ...form, delivery_date: v })}
                       required
+                      {...shopDeliveryDateProps}
                     />
                   </Field>
                   <Field label="بیعانه اولیه">
@@ -1277,23 +1256,14 @@ export default function Sales({ portal = 'sales' }) {
                 </Field>
               )}
 
-              {!isPreInvoice(form) && !isDeposit(form) && (
-              <Field label="وضعیت پرداخت">
-                <Select
-                  value={form.payment_status}
-                  onChange={(v) => setPaymentStatus(v)}
-                  options={paymentStatuses}
-                />
-              </Field>
-              )}
-
-              {!isPreInvoice(form) && !isDeposit(form) && form.payment_status === 'installment' && (
+              {!isPreInvoice(form) && !isDeposit(form) && !isShop && form.payment_method === 'check' && (
                 <Field label="پرداخت اولیه">
                   <MoneyInput min="0" value={form.paid_amount} onChange={(e) => setForm({ ...form, paid_amount: e.target.value })} required />
                   <span className="muted">مبلغی که همین الان دریافت شده (۰ اگر نبود)</span>
                 </Field>
               )}
 
+              {!isPreInvoice(form) && !isDeposit(form) && !(isShop && form.order_kind === 'normal') && (
               <Field label="روش پرداخت">
                 <Select
                   value={form.payment_method}
@@ -1301,8 +1271,9 @@ export default function Sales({ portal = 'sales' }) {
                   options={paymentMethods}
                 />
               </Field>
+              )}
 
-              {showInstallmentSection(form) && (
+              {showInstallmentSection(form, isShop) && (
                 <InstallmentLines
                   installments={form.installments}
                   onChange={(installments) => setForm({ ...form, installments })}
@@ -1317,6 +1288,7 @@ export default function Sales({ portal = 'sales' }) {
                   <PersianDateInput
                     value={form.delivery_date}
                     onChange={(v) => setForm({ ...form, delivery_date: v })}
+                    {...shopDeliveryDateProps}
                   />
                   <span className="muted">اختیاری — روی فاکتور نمایش داده می‌شود</span>
                 </Field>

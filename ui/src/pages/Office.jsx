@@ -7,9 +7,11 @@ import InstallmentLines, { EMPTY_INSTALLMENT } from '../components/InstallmentLi
 import MoneyInput from '../components/MoneyInput'
 import PersianDateInput from '../components/PersianDateInput'
 import ProductLines from '../components/ProductLines'
+import RecordFilterPanel from '../components/RecordFilterPanel'
+import { OFFICE_APPROVE_FILTER } from '../config/recordFilterSections'
 import SaleDiscountFields, { saleBalanceDue } from '../components/SaleDiscountFields'
 import Select from '../components/Select'
-import { Button, Field, Modal } from '../components/ui'
+import { Button, Card, Field, Modal } from '../components/ui'
 import WorkflowOrdersPage from './WorkflowOrdersPage'
 
 const ORDER_KINDS = [
@@ -23,6 +25,8 @@ const PAYMENT_STATUSES = [
   { value: 'unpaid', label: 'پرداخت‌نشده' },
   { value: 'installment', label: 'قسطی' },
 ]
+
+const OFFICE_QUEUE_FILTER_DEFAULTS = OFFICE_APPROVE_FILTER.initialFilters
 
 const EMPTY_EDIT = {
   description: '',
@@ -231,6 +235,15 @@ export default function Office() {
 
   return (
     <>
+      <Card title={OFFICE_APPROVE_FILTER.title} className="section-record-filter office-approve-filter">
+        <RecordFilterPanel
+          scope={OFFICE_APPROVE_FILTER.scope}
+          lockModel={OFFICE_APPROVE_FILTER.lockModel}
+          compact
+          liveSearch
+          initialFilters={OFFICE_QUEUE_FILTER_DEFAULTS}
+        />
+      </Card>
       <WorkflowOrdersPage
         key={reloadKey}
         title="اداری"

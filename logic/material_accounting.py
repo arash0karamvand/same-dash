@@ -42,8 +42,6 @@ def post_material_inventory_receipt(material):
         description=f"ورود موجودی متریال — {detail}",
         document_code=doc,
         document_number=doc_num,
-        is_approved=True,
-        currency="toman",
     )
     create_accounting_entry(
         entry_type="adjustment",
@@ -53,8 +51,6 @@ def post_material_inventory_receipt(material):
         description=f"بابت خرید/ثبت متریال — {detail}",
         document_code=doc,
         document_number=doc_num,
-        is_approved=True,
-        currency="toman",
     )
 
     from django.utils import timezone
@@ -91,7 +87,6 @@ def post_factory_material_consumption(factory_order, requirements):
             document_code=doc,
             document_number=doc_num,
             is_approved=True,
-            currency="toman",
         )
         create_accounting_entry(
             entry_type="adjustment",
@@ -103,7 +98,6 @@ def post_factory_material_consumption(factory_order, requirements):
             document_code=doc,
             document_number=doc_num,
             is_approved=True,
-            currency="toman",
         )
 
 
@@ -132,7 +126,6 @@ def reverse_factory_material_consumption(factory_order, requirements):
             document_code=doc,
             document_number=doc_num,
             is_approved=True,
-            currency="toman",
         )
         create_accounting_entry(
             entry_type="adjustment",
@@ -144,5 +137,4 @@ def reverse_factory_material_consumption(factory_order, requirements):
             document_code=doc,
             document_number=doc_num,
             is_approved=True,
-            currency="toman",
         )

@@ -578,7 +578,7 @@ export default function Products() {
               <input value={productForm.unit} onChange={(e) => setProductForm({ ...productForm, unit: e.target.value })} placeholder="عدد" />
             </Field>
             {canManageSales && (
-              <Field label="قیمت فروش (تومان)">
+              <Field label="قیمت فروش (ریال)">
                 <MoneyInput min="0" value={productForm.default_price} onChange={(e) => setProductForm({ ...productForm, default_price: e.target.value })} required />
               </Field>
             )}

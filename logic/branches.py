@@ -76,3 +76,46 @@ def branch_to_dict(branch):
 
 def invalidate_branch_cache():
     _invalidate_cache()
+
+
+def list_all_branches():
+    return list(Branch.objects.order_by("sort_order", "label"))
+
+
+def create_branch(*, code, label, color="#6366f1", sort_order=0, is_active=True):
+    code = (code or "").strip()
+    label = (label or "").strip()
+    if not code or not label:
+        raise ValueError("کد و نام شعبه الزامی است.")
+    if Branch.objects.filter(code=code).exists():
+        raise ValueError("این کد شعبه قبلاً ثبت شده.")
+    branch = Branch.objects.create(
+        code=code,
+        label=label,
+        color=(color or "#6366f1").strip()[:20],
+        sort_order=int(sort_order or 0),
+        is_active=bool(is_active),
+    )
+    invalidate_branch_cache()
+    return branch
+
+
+def update_branch(branch, data):
+    if "label" in data:
+        branch.label = (data.get("label") or branch.label).strip()
+    if "color" in data:
+        branch.color = (data.get("color") or branch.color).strip()[:20]
+    if "sort_order" in data:
+        branch.sort_order = int(data.get("sort_order") or branch.sort_order)
+    if "is_active" in data:
+        branch.is_active = bool(data.get("is_active"))
+    branch.save()
+    invalidate_branch_cache()
+    return branch
+
+
+def deactivate_branch(branch):
+    branch.is_active = False
+    branch.save(update_fields=["is_active"])
+    invalidate_branch_cache()
+    return branch

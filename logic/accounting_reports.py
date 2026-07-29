@@ -2,9 +2,9 @@
 
 from decimal import Decimal
 
-from django.db.models import Q, Sum
+from django.db.models import Count, F, Q, Sum
 
-from backend.models import Account, AccountingEntry, DetailedAccount, SubsidiaryAccount
+from backend.models import Account, AccountingEntry, Customer, DetailedAccount, Sale, SubsidiaryAccount
 
 from logic.accounting_accounts import seed_accounts
 
@@ -323,3 +323,174 @@ def detail_ledger(
 
     opening_balance = _money(abs(Decimal(opening_agg["debit"] or 0) - Decimal(opening_agg["credit"] or 0)))
     return {"header": header, "lines": lines, "opening_balance": opening_balance}
+
+
+def report_params_from_dict(params):
+    """استخراج پارامترهای مشترک گزارش از dict (مثلاً request.GET)."""
+    account_id = (params.get("account_id") or "").strip()
+    subsidiary_id = (params.get("subsidiary_id") or "").strip()
+    return {
+        "date_from": (params.get("date_from") or "").strip() or None,
+        "date_to": (params.get("date_to") or "").strip() or None,
+        "account_class": (params.get("account_class") or "").strip() or None,
+        "approved_only": (params.get("approved_only") or "").strip().lower() in ("true", "1"),
+        "account_id": int(account_id) if account_id.isdigit() else None,
+        "subsidiary_id": int(subsidiary_id) if subsidiary_id.isdigit() else None,
+    }
+
+
+def trial_balance_for_level(params):
+    """تراز آزمایشی بر اساس سطح (general / subsidiary / detailed)."""
+    level = (params.get("level") or "general").strip().lower()
+    common_params = report_params_from_dict(params)
+    common = {
+        "date_from": common_params["date_from"],
+        "date_to": common_params["date_to"],
+        "account_class": common_params["account_class"],
+        "approved_only": common_params["approved_only"],
+    }
+    if level == "subsidiary":
+        rows, totals = trial_balance_subsidiary(**common, account_id=common_params["account_id"])
+    elif level == "detailed":
+        rows, totals = trial_balance_detailed(
+            **common,
+            account_id=common_params["account_id"],
+            subsidiary_id=common_params["subsidiary_id"],
+        )
+    else:
+        rows, totals = trial_balance_general(**common)
+    return {"level": level, "results": rows, "totals": totals, "total": len(rows)}
+
+
+def detail_ledger_from_params(params):
+    """دفتر ریز از پارامترهای query — حداقل یکی از حساب‌ها لازم است."""
+    common = report_params_from_dict(params)
+    detailed_id = (params.get("detailed_id") or "").strip()
+    subsidiary_id = (params.get("subsidiary_id") or "").strip()
+    account_id = (params.get("account_id") or "").strip()
+    doc_from = (params.get("doc_from") or "").strip()
+    doc_to = (params.get("doc_to") or "").strip()
+
+    kwargs = {
+        "date_from": common["date_from"],
+        "date_to": common["date_to"],
+        "approved_only": common["approved_only"],
+    }
+    if doc_from.isdigit():
+        kwargs["doc_from"] = int(doc_from)
+    if doc_to.isdigit():
+        kwargs["doc_to"] = int(doc_to)
+    if detailed_id.isdigit():
+        kwargs["detailed_id"] = int(detailed_id)
+    elif subsidiary_id.isdigit():
+        kwargs["subsidiary_id"] = int(subsidiary_id)
+    elif account_id.isdigit():
+        kwargs["account_id"] = int(account_id)
+    else:
+        raise ValueError("حساب تفصیلی، معین یا کل را انتخاب کنید.")
+
+    return detail_ledger(**kwargs)
+
+
+def accounting_summary(params):
+    """خلاصه آمار اسناد و مانده فاکتورها."""
+    from logic.accounting_entries import apply_entry_filters
+
+    entries = apply_entry_filters(AccountingEntry.objects.all(), params)
+    agg = entries.aggregate(
+        total_debit=Sum("debit"),
+        total_credit=Sum("credit"),
+        total_amount=Sum("amount"),
+        count=Count("id"),
+        approved_count=Count("id", filter=Q(is_approved=True)),
+        pending_count=Count("id", filter=Q(is_approved=False)),
+        total_receivables=Sum(
+            "debit",
+            filter=Q(account__slug="receivables") | Q(entry_type="receivable"),
+        ),
+        total_payments=Sum(
+            "credit",
+            filter=Q(
+                account__slug__in=["bank", "cash_documents", "petty_cash", "collection_at_bank"]
+            )
+            | Q(entry_type="payment"),
+        ),
+        total_refunds=Sum("amount", filter=Q(entry_type="refund")),
+    )
+
+    due_agg = Sale.objects.filter(final_amount__gt=F("paid_amount")).aggregate(
+        total=Sum(F("final_amount") - F("paid_amount")),
+        open_invoices=Count("id"),
+    )
+
+    return {
+        "total_debit": int(agg["total_debit"] or 0),
+        "total_credit": int(agg["total_credit"] or 0),
+        "total_amount": int(agg["total_amount"] or 0),
+        "total_receivables": int(agg["total_receivables"] or 0),
+        "total_payments": int(agg["total_payments"] or 0),
+        "total_refunds": int(agg["total_refunds"] or 0),
+        "total_balance_due": int(due_agg["total"] or 0),
+        "open_invoices_count": due_agg["open_invoices"] or 0,
+        "entry_count": agg["count"] or 0,
+        "approved_count": agg["approved_count"] or 0,
+        "pending_count": agg["pending_count"] or 0,
+    }
+
+
+def sales_report_data(params):
+    """گزارش فروش — aggregates + queryset محدود برای سریالایز در view."""
+    qs = Sale.objects.select_related("customer").all()
+    payment_status = params.get("payment_status")
+    if payment_status:
+        qs = qs.filter(payment_status=payment_status)
+
+    agg = qs.aggregate(
+        count=Count("id"),
+        total_amount=Sum("amount"),
+        total_discount=Sum("discount"),
+        total_final=Sum("final_amount"),
+    )
+    return {
+        "count": agg["count"] or 0,
+        "total_amount": int(agg["total_amount"] or 0),
+        "total_discount": int(agg["total_discount"] or 0),
+        "total_final": int(agg["total_final"] or 0),
+        "sales": list(qs[:100]),
+    }
+
+
+def customer_accounting_data(customer_id):
+    """خلاصه حسابداری یک مشتری + لیست فروش و اسناد برای سریالایز در view."""
+    try:
+        customer = Customer.objects.get(pk=customer_id)
+    except Customer.DoesNotExist as exc:
+        raise LookupError("Customer not found") from exc
+
+    sales = Sale.objects.filter(customer=customer)
+    sale_ids = sales.values_list("id", flat=True)
+    entries = AccountingEntry.objects.filter(sale_id__in=sale_ids)
+
+    sales_agg = sales.aggregate(
+        total=Sum("final_amount"),
+        count=Count("id"),
+        paid=Sum("paid_amount"),
+        balance=Sum(
+            F("final_amount") - F("paid_amount"),
+            filter=Q(final_amount__gt=F("paid_amount")),
+        ),
+    )
+    entries_agg = entries.aggregate(total=Sum("amount"), count=Count("id"))
+
+    return {
+        "customer_id": customer.id,
+        "customer_name": customer.full_name,
+        "sales_count": sales_agg["count"] or 0,
+        "sales_total": int(sales_agg["total"] or 0),
+        "paid_total": int(sales_agg["paid"] or 0),
+        "balance_due": int(sales_agg["balance"] or 0),
+        "accounting_entries_count": entries_agg["count"] or 0,
+        "accounting_total": int(entries_agg["total"] or 0),
+        "sales": list(sales),
+        "entries": list(entries),
+    }

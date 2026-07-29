@@ -32,7 +32,7 @@ def create_accounting_document(
     is_approved=False,
     entry_type="manual",
 ):
-    """ثبت سند چندردیفی — مجموع بدهکار باید برابر مجموع بستانکار باشد."""
+    """ثبت سند چندردیفی (تراز بودن اختیاری است)."""
     if not lines:
         raise ValueError("حداقل یک ردیف سند لازم است.")
 
@@ -70,9 +70,6 @@ def create_accounting_document(
         )
         total_debit += debit
         total_credit += credit
-
-    if total_debit != total_credit:
-        raise ValueError("سند تراز نیست — مجموع بدهکار و بستانکار باید برابر باشد.")
 
     when = entry_date or timezone.now()
     doc_number = document_number or next_document_number(entry_date=when)
@@ -118,4 +115,5 @@ def create_accounting_document(
         "entries": created,
         "total_debit": int(total_debit),
         "total_credit": int(total_credit),
+        "balanced": total_debit == total_credit,
     }

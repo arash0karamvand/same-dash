@@ -5,6 +5,8 @@ import { customersApi } from '../api/client'
 import PersianDateInput from '../components/PersianDateInput'
 import MoneyInput from '../components/MoneyInput'
 import Select from '../components/Select'
+import RecordFilterPanel from '../components/RecordFilterPanel'
+import { OFFICE_CUSTOMERS_FILTER } from '../config/recordFilterSections'
 import { Badge, Button, Card, EmptyState, Field, FilterBar, Modal } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmContext'
@@ -15,7 +17,7 @@ import { hasAnyPermission } from '../utils/permissions'
 const EMPTY_FORM = { full_name: '', phone: '', email: '', address: '', notes: '', birthday: '' }
 const EMPTY_WALLET_FORM = { action: 'deposit', amount: '', description: '' }
 
-export default function Customers() {
+export default function Customers({ portal }) {
   const { user } = useAuth()
   const confirm = useConfirm()
   const canEdit = hasAnyPermission(user, ['create_customer', 'edit_customer', 'delete_customer'])
@@ -203,6 +205,18 @@ export default function Customers() {
         </Card>
       )}
 
+      {portal === 'office' && (
+        <Card title={OFFICE_CUSTOMERS_FILTER.title} className="section-record-filter">
+          <RecordFilterPanel
+            scope={OFFICE_CUSTOMERS_FILTER.scope}
+            lockModel={OFFICE_CUSTOMERS_FILTER.lockModel}
+            compact
+            liveSearch
+            initialFilters={OFFICE_CUSTOMERS_FILTER.initialFilters}
+          />
+        </Card>
+      )}
+
       <Card
         title="فهرست مشتریان"
         actions={canEdit ? <Button onClick={openCreate}>+ مشتری جدید</Button> : null}
@@ -377,7 +391,7 @@ export default function Customers() {
                   ]}
                 />
               </Field>
-              <Field label="مبلغ (تومان)">
+              <Field label="مبلغ (ریال)">
                 <MoneyInput
                   min="1"
                   value={walletForm.amount}

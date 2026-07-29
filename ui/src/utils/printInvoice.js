@@ -220,7 +220,6 @@ export function buildInvoiceHtml(sale) {
     </div>
     <div class="box">
       <h4>پرداخت</h4>
-      <div>وضعیت: ${escapeHtml(sale.payment_status_display || '—')}</div>
       <div>روش: ${escapeHtml(payLabel)}</div>
       <div>تاریخ تحویل: ${escapeHtml(deliveryLabel)}</div>
     </div>

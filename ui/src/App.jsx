@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { AuthProvider, useAuth } from './context/AuthContext'
-import { ConfigProvider } from './context/ConfigContext'
+import { ConfigProvider, useConfig } from './context/ConfigContext'
 import { ConfirmProvider } from './context/ConfirmContext'
 import Layout from './components/Layout'
 import Login from './pages/Login'
@@ -14,6 +14,7 @@ import Products from './pages/Products'
 import Materials from './pages/Materials'
 import Shop from './pages/Shop'
 import Office from './pages/Office'
+import OfficeOrders from './pages/OfficeOrders'
 import Factory from './pages/Factory'
 import FactoryBuilt from './pages/FactoryBuilt'
 import FreightOrders from './pages/FreightOrders'
@@ -29,6 +30,7 @@ import Managers from './pages/Managers'
 import Roles from './pages/Roles'
 import EmployeeRanking from './pages/EmployeeRanking'
 import OrgChart from './pages/OrgChart'
+import RecordFilter from './pages/RecordFilter'
 import Settings from './pages/Settings'
 import './App.css'
 
@@ -37,6 +39,7 @@ const PAGES = {
   orders: Shop,
   shop: Shop,
   office: Office,
+  'office-orders': OfficeOrders,
   factory: Factory,
   'factory-built': FactoryBuilt,
   freight: FreightOrders,
@@ -54,6 +57,7 @@ const PAGES = {
   attendance: Attendance,
   checks: Checks,
   logs: Logs,
+  filter: RecordFilter,
   sellers: Sellers,
   managers: Managers,
 }
@@ -78,6 +82,7 @@ function PendingScreen() {
 
 function Shell() {
   const { user, loading } = useAuth()
+  const { portals } = useConfig()
   const [route, setRoute] = useState(() => {
     const parsed = parseRoute()
     return {
@@ -107,29 +112,29 @@ function Shell() {
     const parsed = parseRoute()
     let { portal, page } = parsed
     if (!portal) {
-      const first = getFirstAccessibleRoute(user)
+      const first = getFirstAccessibleRoute(user, portals)
       portal = first.portal
       page = first.page
     } else {
       page = resolvePage(portal, page)
     }
-    if (!canAccessRoute(user, portal, page)) {
-      const first = getFirstAccessibleRoute(user)
+    if (!canAccessRoute(user, portal, page, portals)) {
+      const first = getFirstAccessibleRoute(user, portals)
       setRouteWithUrl(first.portal, first.page)
       return
     }
     if (portal !== route.portal || page !== route.page) {
       setRouteWithUrl(portal, page)
     }
-  }, [user?.role])
+  }, [user?.role, portals])
 
   useEffect(() => {
     if (!user || user.role === 'pending') return
-    if (!canAccessRoute(user, route.portal, route.page)) {
-      const first = getFirstAccessibleRoute(user)
+    if (!canAccessRoute(user, route.portal, route.page, portals)) {
+      const first = getFirstAccessibleRoute(user, portals)
       setRouteWithUrl(first.portal, first.page)
     }
-  }, [route.portal, route.page, user])
+  }, [route.portal, route.page, user, portals])
 
   if (loading) {
     return <div className="fullscreen-loading">در حال بارگذاری…</div>
@@ -139,7 +144,7 @@ function Shell() {
   if (user.role === 'pending') return <PendingScreen />
 
   const PageComponent = PAGES[route.page] || Dashboard
-  const allowed = canAccessRoute(user, route.portal, route.page)
+  const allowed = canAccessRoute(user, route.portal, route.page, portals)
 
   return (
     <Layout
@@ -148,7 +153,7 @@ function Shell() {
       onNavigate={setRouteWithUrl}
     >
       {allowed ? (
-        <PageComponent />
+        <PageComponent portal={route.portal} />
       ) : (
         <div className="page">
           <div className="alert-error">دسترسی به این بخش را ندارید.</div>

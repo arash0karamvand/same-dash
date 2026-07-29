@@ -13,6 +13,8 @@ export default function CustomerSearch({ value, onSelect, onCreateNew }) {
   const [newPhone, setNewPhone] = useState('')
   const [newAddress, setNewAddress] = useState('')
   const [newBirthday, setNewBirthday] = useState('')
+  const [newName, setNewName] = useState('')
+  const [registerOpen, setRegisterOpen] = useState(false)
 
   useEffect(() => {
     if (!value) {
@@ -21,6 +23,8 @@ export default function CustomerSearch({ value, onSelect, onCreateNew }) {
       setNewPhone('')
       setNewAddress('')
       setNewBirthday('')
+      setNewName('')
+      setRegisterOpen(false)
     } else if (value.id) {
       setQuery(value.full_name || '')
       setSelected(value)
@@ -54,10 +58,17 @@ export default function CustomerSearch({ value, onSelect, onCreateNew }) {
     setNewPhone('')
     setNewAddress('')
     setNewBirthday('')
+    setRegisterOpen(false)
+  }
+
+  const openRegister = () => {
+    setNewName(query.trim())
+    setRegisterOpen(true)
+    setResults([])
   }
 
   const addNew = () => {
-    const name = query.trim()
+    const name = newName.trim()
     const phone = newPhone.trim()
     const address = newAddress.trim()
     if (!name || !phone || !address) return
@@ -70,6 +81,7 @@ export default function CustomerSearch({ value, onSelect, onCreateNew }) {
     }
     onCreateNew(customer)
     setSelected(customer)
+    setRegisterOpen(false)
   }
 
   const active = value?.id ? value : selected
@@ -83,13 +95,14 @@ export default function CustomerSearch({ value, onSelect, onCreateNew }) {
             setQuery(e.target.value)
             setSelected(null)
             onSelect(null)
+            setRegisterOpen(false)
           }}
           placeholder="جستجوی نام یا موبایل…"
           autoComplete="off"
         />
       </Field>
       {loading && <p className="muted">در حال جستجو…</p>}
-      {results.length > 0 && (
+      {results.length > 0 && !registerOpen && (
         <ul className="search-dropdown">
           {results.map((c) => (
             <li key={c.id}>
@@ -98,6 +111,12 @@ export default function CustomerSearch({ value, onSelect, onCreateNew }) {
               </button>
             </li>
           ))}
+          <li className="search-dropdown-divider" aria-hidden />
+          <li>
+            <button type="button" className="search-dropdown-new" onClick={openRegister}>
+              + ثبت مشتری جدید
+            </button>
+          </li>
         </ul>
       )}
       {active?.id && (
@@ -121,8 +140,25 @@ export default function CustomerSearch({ value, onSelect, onCreateNew }) {
           )}
         </div>
       )}
-      {query.trim() && !loading && results.length === 0 && !active?.id && (
+      {query.trim() && !loading && results.length === 0 && !active?.id && !registerOpen && (
         <div className="customer-new-inline">
+          <p className="muted small">مشتری با این مشخصات یافت نشد.</p>
+          <Button type="button" variant="ghost" onClick={openRegister}>
+            + ثبت مشتری جدید
+          </Button>
+        </div>
+      )}
+      {registerOpen && !active?.id && (
+        <div className="customer-new-inline">
+          <p className="muted small">ثبت مشتری جدید (همراه با ثبت فروش)</p>
+          <Field label="نام">
+            <input
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="نام و نام خانوادگی"
+              required
+            />
+          </Field>
           <Field label="شماره تماس">
             <input
               className="ltr"
@@ -148,14 +184,27 @@ export default function CustomerSearch({ value, onSelect, onCreateNew }) {
             />
             <span className="muted">اختیاری</span>
           </Field>
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={addNew}
-            disabled={!newPhone.trim() || !newAddress.trim()}
-          >
-            + ثبت مشتری جدید: «{query.trim()}»
-          </Button>
+          <div className="customer-new-inline-actions">
+            <Button
+              type="button"
+              onClick={addNew}
+              disabled={!newName.trim() || !newPhone.trim() || !newAddress.trim()}
+            >
+              تأیید مشتری
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => {
+                setRegisterOpen(false)
+                setNewPhone('')
+                setNewAddress('')
+                setNewBirthday('')
+              }}
+            >
+              انصراف
+            </Button>
+          </div>
         </div>
       )}
       {active && !active.id && (

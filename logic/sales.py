@@ -47,7 +47,7 @@ def normalize_payment_method(method, default="cash"):
 
 
 def resolve_discount_amount(amount, discount_type, discount_value, customer=None):
-    """محاسبه تخفیف نهایی (تومان) از نوع و مقدار ورودی."""
+    """محاسبه تخفیف نهایی (ریال) از نوع و مقدار ورودی."""
     amount = Decimal(amount)
     discount_value = Decimal(discount_value or 0)
     discount_type = (discount_type or "amount").strip()
@@ -126,7 +126,6 @@ def _record_deposit_payment(sale, amount, description="", recorded_by=None):
         document_code=doc_code,
         document_number=doc_num,
         entry_date=sale.sold_at,
-        currency="toman",
     )
     _apply_purchase_to_customer(
         sale.customer,
@@ -148,8 +147,8 @@ def _apply_wallet_discount(customer, amount, sale, user=None):
         description=f"پرداخت فروش فاکتور {sale.invoice_number or sale.pk}",
         user=user,
         transaction_type="sale",
-        sale=sale,
-    )
+            sale=sale,
+        )
 
 
 def _refund_wallet_discount(customer, amount, sale, user=None):
@@ -222,7 +221,6 @@ def _create_sale_accounting(sale, outstanding):
         document_code=doc_code,
         document_number=doc_num,
         entry_date=sale.sold_at,
-        currency="toman",
     )
     if outstanding > 0:
         create_accounting_entry(
@@ -235,7 +233,6 @@ def _create_sale_accounting(sale, outstanding):
             document_code=doc_code,
             document_number=doc_num,
             entry_date=sale.sold_at,
-            currency="toman",
         )
     if paid > 0:
         create_accounting_entry(
@@ -249,7 +246,6 @@ def _create_sale_accounting(sale, outstanding):
             document_code=doc_code,
             document_number=doc_num,
             entry_date=sale.sold_at,
-            currency="toman",
         )
 
 
@@ -266,12 +262,12 @@ def _create_pre_invoice_deposit_accounting(sale, paid_amount, recorded_by=None):
 
 def _sync_receivable_entry(sale):
     """به‌روزرسانی سند مطالبات بر اساس مانده فعلی."""
-    from logic.accounting_money import to_rial_from_toman
-
     if is_pre_invoice_pending(sale) or is_order_cancelled(sale):
         return
     outstanding = balance_due(sale)
-    outstanding_rial = to_rial_from_toman(outstanding)
+    from logic.accounting_money import to_rial
+
+    outstanding_rial = to_rial(outstanding)
     receivable = AccountingEntry.objects.filter(sale=sale, entry_type="receivable").first()
     if outstanding <= 0:
         if receivable:
@@ -289,7 +285,6 @@ def _sync_receivable_entry(sale):
             description=f"مطالبات مشتری فاکتور {sale.invoice_number or sale.pk}",
             sale=sale,
             is_approved=True,
-            currency="toman",
         )
 
 
@@ -560,7 +555,6 @@ def record_payment(sale, amount, description="", recorded_by=None, account=None)
         description=description or f"دریافت پرداخت فاکتور {sale.invoice_number or sale.pk}",
         sale=sale,
         is_approved=True,
-        currency="toman",
     )
     _sync_receivable_entry(sale)
     _apply_purchase_to_customer(
@@ -650,7 +644,6 @@ def cancel_order(sale, recorded_by=None):
             amount=paid,
             description=f"بازگشت بیعانه — فاکتور {sale.invoice_number or sale.pk}",
             sale=sale,
-            currency="toman",
         )
         _reverse_purchase_from_customer(customer, paid)
         AccountingEntry.objects.filter(sale=sale, entry_type="payment").delete()

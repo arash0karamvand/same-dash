@@ -151,7 +151,7 @@ def office_order_to_dict(order, include_installments=False, include_lines=False,
     from auth.org_roles import should_mask_amounts_for_user, should_mask_prices_for_user
     from auth.permissions import can_edit_sale
     from logic.branches import branch_labels
-    from logic.sale_workflow import get_office_workflow_snapshot
+    from logic.sale_workflow import get_office_workflow_snapshot, workflow_progress_percent
 
     BRANCH_LABELS = branch_labels()
     mask_prices = user and should_mask_prices_for_user(user)
@@ -192,6 +192,7 @@ def office_order_to_dict(order, include_installments=False, include_lines=False,
         "delivery_date": order.delivery_date.isoformat() if order.delivery_date else None,
         "workflow_stage": workflow["workflow_stage"],
         "workflow_stage_display": workflow["workflow_stage_display"],
+        "workflow_progress": workflow_progress_percent(workflow["workflow_stage"]),
         "holder_department": workflow["holder_department"],
         "holder_name": workflow["holder_name"],
         "holder_detail": workflow["holder_detail"],
@@ -214,8 +215,11 @@ def office_order_to_dict(order, include_installments=False, include_lines=False,
             }
             for i in order.installments.filter(is_deleted=False)
         ]
+    lines = list(order.line_items.all())
+    data["total_quantity"] = sum(int(i.quantity or 0) for i in lines)
+    data["line_items_count"] = len(lines)
     if include_lines:
-        data["line_items"] = [office_line_item_to_dict(i, user=user) for i in order.line_items.all()]
+        data["line_items"] = [office_line_item_to_dict(i, user=user) for i in lines]
     return data
 
 
@@ -324,32 +328,9 @@ def checks_report_to_dict(report):
 
 
 def attendance_to_dict(record):
-    from auth.branches import BRANCH_LABELS
+    from logic.attendance import attendance_to_dict as _attendance_to_dict
 
-    seller = record.seller
-    return {
-        "id": record.id,
-        "seller_id": seller.id,
-        "seller_name": seller.full_name,
-        "branch": seller.branch,
-        "branch_label": BRANCH_LABELS.get(seller.branch, "—"),
-        "work_branch": record.work_branch or seller.branch,
-        "work_branch_label": BRANCH_LABELS.get(record.work_branch or seller.branch, "—"),
-        "date": record.date.isoformat(),
-        "status": record.status,
-        "status_display": record.get_status_display(),
-        "approval_status": record.approval_status,
-        "approval_status_display": record.get_approval_status_display(),
-        "notes": record.notes,
-        "recorded_by": record.recorded_by.username if record.recorded_by else None,
-        "approved_by": record.approved_by.username if record.approved_by else None,
-        "approved_at": record.approved_at.isoformat() if record.approved_at else None,
-        "check_in_at": record.check_in_at.isoformat() if record.check_in_at else None,
-        "check_out_at": record.check_out_at.isoformat() if record.check_out_at else None,
-        "is_complete": bool(record.check_out_at),
-        "created_at": record.created_at.isoformat(),
-        "is_deleted": getattr(record, "is_deleted", False),
-    }
+    return _attendance_to_dict(record)
 
 
 def accounting_to_dict(entry, user=None):

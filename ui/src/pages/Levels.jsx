@@ -145,10 +145,10 @@ export default function Levels() {
           <Field label="نام سطح">
             <input value={form.name} onChange={update('name')} placeholder="مثلاً طلایی" required />
           </Field>
-          <Field label="حداقل خرید (تومان)">
+          <Field label="حداقل خرید (ریال)">
             <MoneyInput min="0" value={form.min_purchase} onChange={(e) => update('min_purchase')(e)} />
           </Field>
-          <Field label="حداکثر خرید (تومان) — خالی = بدون سقف">
+          <Field label="حداکثر خرید (ریال) — خالی = بدون سقف">
             <MoneyInput min="0" value={form.max_purchase} onChange={(e) => update('max_purchase')(e)} placeholder="برای بالاترین سطح خالی بگذارید" />
           </Field>
           <Field label="امتیاز سطح">

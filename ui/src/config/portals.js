@@ -21,6 +21,7 @@ export const PORTALS = [
       { key: 'levels', label: 'باشگاه و سطوح', icon: '🏅', permission: 'view_loyalty' },
       { key: 'sms', label: 'پیامک', icon: '✉️', anyPermission: ['send_sms', 'view_sms_logs'] },
       { key: 'logs', label: 'لاگ‌ها', icon: '📜', permission: 'view_audit_logs' },
+      { key: 'filter', label: 'فیلتر', icon: '🔍', anyPermission: ['view_dashboard', 'view_audit_logs'] },
     ],
   },
   {
@@ -41,6 +42,7 @@ export const PORTALS = [
     defaultPage: 'office',
     children: [
       { key: 'office', label: 'تایید سفارش', icon: '📋', permission: 'approve_sale_accounting' },
+      { key: 'office-orders', label: 'سفارش‌ها', icon: '📦', anyPermission: ['approve_sale_accounting', 'view_sales'] },
       { key: 'customers', label: 'مشتریان', icon: '👥', permission: 'view_customers' },
       { key: 'products', label: 'محصولات', icon: '📦', permission: 'view_products' },
       { key: 'materials', label: 'تایید متریال', icon: '🧵', permission: 'approve_materials' },
@@ -49,6 +51,7 @@ export const PORTALS = [
       { key: 'factory', label: 'کارخانه — ساخت', icon: '🔧', permission: 'view_factory_orders' },
       { key: 'factory-built', label: 'کارخانه — ساخته‌شده', icon: '✅', permission: 'view_factory_orders' },
       { key: 'freight', label: 'کارخانه — باربری', icon: '🚚', permission: 'view_freight_orders' },
+      { key: 'filter', label: 'فیلتر', icon: '🔍', anyPermission: ['view_accounting', 'approve_sale_accounting', 'view_sales', 'view_customers', 'view_installments'] },
     ],
   },
   {

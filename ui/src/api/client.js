@@ -52,6 +52,7 @@ export const configApi = {
   createMenuSection: (data) => post('/api/config/menu-sections/', data),
   updateMenuSection: (id, data) => put(`/api/config/menu-sections/${id}/`, data),
   deleteMenuSection: (id) => del(`/api/config/menu-sections/${id}/`),
+  savePageGuide: (code, text) => put(`/api/config/page-guides/${encodeURIComponent(code)}/`, { text }),
 }
 
 export const authApi = {
@@ -154,6 +155,21 @@ export const auditApi = {
     if (opts.entity_type) p.set('entity_type', opts.entity_type)
     const q = p.toString()
     return get(`/api/audit-logs/${q ? `?${q}` : ''}`)
+  },
+}
+
+export const recordFilterApi = {
+  catalog: (scope) => {
+    const q = scope ? `?scope=${encodeURIComponent(scope)}` : ''
+    return get(`/api/record-filter/catalog/${q}`)
+  },
+  query: (params = {}) => {
+    const p = new URLSearchParams()
+    Object.entries(params).forEach(([k, v]) => {
+      if (v != null && v !== '') p.set(k, String(v))
+    })
+    const q = p.toString()
+    return get(`/api/record-filter/${q ? `?${q}` : ''}`)
   },
 }
 
@@ -280,6 +296,12 @@ function accountingParams(opts = {}) {
   if (opts.dateFrom) p.set('date_from', opts.dateFrom)
   if (opts.dateTo) p.set('date_to', opts.dateTo)
   if (opts.search) p.set('search', opts.search)
+  if (opts.amountMin != null && opts.amountMin !== '') p.set('amount_min', opts.amountMin)
+  if (opts.amountMax != null && opts.amountMax !== '') p.set('amount_max', opts.amountMax)
+  if (opts.debitMin != null && opts.debitMin !== '') p.set('debit_min', opts.debitMin)
+  if (opts.debitMax != null && opts.debitMax !== '') p.set('debit_max', opts.debitMax)
+  if (opts.creditMin != null && opts.creditMin !== '') p.set('credit_min', opts.creditMin)
+  if (opts.creditMax != null && opts.creditMax !== '') p.set('credit_max', opts.creditMax)
   if (opts.offset != null) p.set('offset', opts.offset)
   if (opts.limit) p.set('limit', opts.limit)
   return p.toString()
@@ -356,6 +378,8 @@ export const accountingApi = {
     return get(`/api/accounting/subsidiaries/${q ? `?${q}` : ''}`)
   },
   createSubsidiary: (data) => post('/api/accounting/subsidiaries/', data),
+  updateSubsidiary: (id, data) => put(`/api/accounting/subsidiaries/${id}/`, data),
+  updateGeneralAccount: (id, data) => put(`/api/accounting/accounts/${id}/`, data),
   details: (opts = {}) => {
     const p = new URLSearchParams()
     if (opts.subsidiaryId) p.set('subsidiary_id', opts.subsidiaryId)
@@ -364,6 +388,7 @@ export const accountingApi = {
     return get(`/api/accounting/details/${q ? `?${q}` : ''}`)
   },
   createDetailed: (data) => post('/api/accounting/details/', data),
+  updateDetailed: (id, data) => put(`/api/accounting/details/${id}/`, data),
   importExcel: async (file, opts = {}) => {
     const form = new FormData()
     form.append('file', file)

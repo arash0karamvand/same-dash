@@ -1,4 +1,4 @@
-// تقویم شمسی — پنل اسکرولی سال / ماه / روز (۱۳۰۰ تا امسال)
+// تقویم شمسی — پنل اسکرولی سال / ماه / روز (با محدوده اختیاری minIso/maxIso)
 
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import JalaliScrollColumn from './JalaliScrollColumn'
@@ -13,12 +13,23 @@ import {
   toPersianDigits,
 } from '../utils/jalali'
 
+function clampJalaliToIsoRange(y, m, d, minIso, maxIso) {
+  const len = jalaliMonthLength(y, m)
+  let day = Math.min(Math.max(1, d), len)
+  let iso = jalaliToIso(y, m, day)
+  if (minIso && iso < minIso) return minIso
+  if (maxIso && iso > maxIso) return maxIso
+  return iso
+}
+
 export default function PersianDateInput({
   value,
   onChange,
   required = false,
   minYear = 1300,
   maxYear,
+  minIso,
+  maxIso,
   placeholder = 'انتخاب تاریخ',
   onClear,
   clearLabel = 'پاک کردن',
@@ -26,59 +37,83 @@ export default function PersianDateInput({
   const uid = useId()
   const wrapRef = useRef(null)
   const cur = currentJalali()
-  const maxY = maxYear ?? cur.year
+  const minJ = minIso ? isoToJalali(minIso) : null
+  const maxJ = maxIso ? isoToJalali(maxIso) : null
+  const minY = minIso ? minJ.year : minYear
+  const maxY = maxIso ? maxJ.year : (maxYear ?? cur.year)
 
-  const parsed = isoToJalali(value)
+  const parsed = value ? isoToJalali(value) : minJ || isoToJalali(null)
   const [open, setOpen] = useState(false)
   const [jy, setJy] = useState(parsed.year)
   const [jm, setJm] = useState(parsed.month)
   const [jd, setJd] = useState(parsed.day)
 
   useEffect(() => {
-    const p = isoToJalali(value)
+    const p = value ? isoToJalali(value) : (minJ || isoToJalali(null))
     setJy(p.year)
     setJm(p.month)
     setJd(p.day)
-  }, [value])
+  }, [value, minIso])
+
+  const clampMonthForYear = (y, m) => {
+    let month = m
+    if (minJ && y === minJ.year && month < minJ.month) month = minJ.month
+    if (maxJ && y === maxJ.year && month > maxJ.month) month = maxJ.month
+    return month
+  }
+
+  const clampDayForYearMonth = (y, m, d) => {
+    let day = Math.min(d, jalaliMonthLength(y, m))
+    if (minJ && y === minJ.year && m === minJ.month && day < minJ.day) day = minJ.day
+    if (maxJ && y === maxJ.year && m === maxJ.month && day > maxJ.day) day = maxJ.day
+    return day
+  }
 
   const years = useMemo(() => {
-    const from = Math.min(minYear, maxY)
+    const from = Math.min(minY, maxY)
     return Array.from({ length: maxY - from + 1 }, (_, i) => maxY - i)
-  }, [minYear, maxY])
+  }, [minY, maxY])
 
   const yearItems = useMemo(
     () => years.map((y) => ({ value: y, label: toPersianDigits(y) })),
     [years],
   )
 
-  const monthItems = useMemo(
-    () => PERSIAN_MONTHS.map((name, idx) => ({ value: idx + 1, label: name })),
-    [],
-  )
+  const monthItems = useMemo(() => {
+    let items = PERSIAN_MONTHS.map((name, idx) => ({ value: idx + 1, label: name }))
+    if (minJ && jy === minJ.year) items = items.filter((it) => it.value >= minJ.month)
+    if (maxJ && jy === maxJ.year) items = items.filter((it) => it.value <= maxJ.month)
+    return items
+  }, [jy, minJ, maxJ])
 
   const dayItems = useMemo(() => {
-    const len = jalaliMonthLength(jy, jm)
-    return Array.from({ length: len }, (_, i) => {
-      const d = i + 1
+    let fromDay = 1
+    let toDay = jalaliMonthLength(jy, jm)
+    if (minJ && jy === minJ.year && jm === minJ.month) fromDay = minJ.day
+    if (maxJ && jy === maxJ.year && jm === maxJ.month) toDay = maxJ.day
+    if (fromDay > toDay) return []
+    return Array.from({ length: toDay - fromDay + 1 }, (_, i) => {
+      const d = fromDay + i
       return { value: d, label: toPersianDigits(d) }
     })
-  }, [jy, jm])
+  }, [jy, jm, minJ, maxJ])
 
   const emit = (y, m, d) => {
-    const clamped = Math.min(d, jalaliMonthLength(y, m))
-    onChange(jalaliToIso(y, m, clamped))
+    onChange(clampJalaliToIsoRange(y, m, d, minIso, maxIso))
   }
 
   const setYear = (y) => {
+    const m = clampMonthForYear(y, jm)
+    const d = clampDayForYearMonth(y, m, jd)
     setJy(y)
-    const d = Math.min(jd, jalaliMonthLength(y, jm))
+    setJm(m)
     setJd(d)
-    emit(y, jm, d)
+    emit(y, m, d)
   }
 
   const setMonth = (m) => {
+    const d = clampDayForYearMonth(jy, m, jd)
     setJm(m)
-    const d = Math.min(jd, jalaliMonthLength(jy, m))
     setJd(d)
     emit(jy, m, d)
   }
@@ -89,10 +124,12 @@ export default function PersianDateInput({
   }
 
   const goToday = () => {
-    setJy(cur.year)
-    setJm(cur.month)
-    setJd(cur.day)
-    emit(cur.year, cur.month, cur.day)
+    const iso = clampJalaliToIsoRange(cur.year, cur.month, cur.day, minIso, maxIso)
+    const p = isoToJalali(iso)
+    setJy(p.year)
+    setJm(p.month)
+    setJd(p.day)
+    onChange(iso)
   }
 
   const clearValue = () => {
@@ -146,7 +183,9 @@ export default function PersianDateInput({
             </button>
           ) : (
             <span className="muted">
-              {toPersianDigits(minYear)} — {toPersianDigits(maxY)}
+              {minIso ? formatJalali(minIso) : toPersianDigits(minY)}
+              {' — '}
+              {maxIso ? formatJalali(maxIso) : toPersianDigits(maxY)}
             </span>
           )}
           <button type="button" className="btn btn-primary jcal-done" onClick={() => setOpen(false)}>

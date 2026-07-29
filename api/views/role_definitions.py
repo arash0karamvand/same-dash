@@ -1,24 +1,24 @@
 """مدیریت نقش‌ها و مجوزها — فقط مدیر سیستم."""
 
-import re
-
-from django.contrib.auth.models import Group
-
 from api.helpers import api_view, fail, parse_json, success
 from auth import roles
-from auth.org_roles import is_locked_role
-from auth.permissions import (
-    ALL_PERMISSIONS,
-    ASSIGNABLE_PERMISSIONS,
-    PERMISSION_LABELS,
-    is_system_admin,
-    permission_groups_for_matrix,
-    menu_sections_for_matrix,
-    sanitize_role_permissions,
-)
+from auth.permissions import is_system_admin
 from backend.models import OrgRank, RoleDefinition
 from logic.audit import log_action
-from logic.role_definitions import delete_role_definition, role_definition_to_dict, seed_builtin_roles, sync_group_for_role
+from logic.role_definitions import (
+    build_permission_matrix_payload,
+    create_org_rank,
+    create_role_definition,
+    deactivate_org_rank,
+    delete_role_definition,
+    list_active_org_ranks,
+    list_role_definitions,
+    org_rank_to_dict,
+    role_definition_to_dict,
+    seed_builtin_roles,
+    update_org_rank,
+    update_role_definition,
+)
 
 
 def _require_system_admin(user):
@@ -27,49 +27,12 @@ def _require_system_admin(user):
     return None
 
 
-def _slugify(text):
-    text = (text or "").strip().lower()
-    text = re.sub(r"[^a-z0-9_]+", "_", text)
-    return text.strip("_")[:40] or "role"
-
-
-def org_rank_to_dict(rank):
-    return {
-        "id": rank.id,
-        "name": rank.name,
-        "branch": rank.branch,
-        "color": rank.color,
-        "sort_order": rank.sort_order,
-        "is_active": rank.is_active,
-    }
-
-
 @api_view("GET")
 def permission_matrix(request):
     denied = _require_system_admin(request.user)
     if denied:
         return denied
-    seed_builtin_roles()
-    from logic.config_seed import seed_config_defaults
-    seed_config_defaults()
-    role_defs = [role_definition_to_dict(r) for r in RoleDefinition.objects.order_by("sort_order")]
-    return success(
-        {
-            "permissions": [
-                {"code": code, "label": PERMISSION_LABELS.get(code, code)}
-                for code in sorted(ALL_PERMISSIONS)
-            ],
-            "assignable_permissions": [
-                {"code": code, "label": PERMISSION_LABELS.get(code, code)}
-                for code in sorted(ASSIGNABLE_PERMISSIONS)
-            ],
-            "permission_groups": permission_groups_for_matrix(assignable_only=False),
-            "assignable_permission_groups": permission_groups_for_matrix(assignable_only=True),
-            "menu_sections": menu_sections_for_matrix(assignable_only=False),
-            "assignable_menu_sections": menu_sections_for_matrix(assignable_only=True),
-            "roles": role_defs,
-        }
-    )
+    return success(build_permission_matrix_payload())
 
 
 @api_view("GET", "POST")
@@ -80,50 +43,16 @@ def role_definition_list(request):
     seed_builtin_roles()
 
     if request.method == "GET":
-        return success(
-            {
-                "results": [
-                    role_definition_to_dict(r)
-                    for r in RoleDefinition.objects.select_related("parent").order_by("sort_order")
-                ]
-            }
-        )
+        return success({"results": [role_definition_to_dict(r) for r in list_role_definitions()]})
 
-    data = parse_json(request)
-    label = (data.get("label") or "").strip()
-    if not label:
-        return fail("عنوان نقش الزامی است.", status=400)
-    slug = (data.get("slug") or _slugify(label)).strip()
-    if RoleDefinition.objects.filter(slug=slug).exists():
-        return fail("این شناسه نقش قبلاً ثبت شده.", status=400)
-    if slug == roles.ADMIN:
-        return fail("نقش مدیر سیستم از این مسیر قابل ساخت نیست.", status=403)
-    if slug in {roles.CEO, roles.CO_CEO, roles.BRANCH_SUPERVISOR, roles.ACCOUNTING_FINANCE, roles.SALES_EXPERT}:
-        return fail("نقش‌های سازمانی پیش‌فرض از این مسیر قابل ساخت نیست.", status=403)
+    try:
+        rd = create_role_definition(parse_json(request))
+    except PermissionError as exc:
+        return fail(str(exc), status=403)
+    except ValueError as exc:
+        return fail(str(exc), status=400)
 
-    perms = sanitize_role_permissions(slug, data.get("permissions") or [])
-    invalid = set(perms) - ALL_PERMISSIONS
-    if invalid:
-        return fail(f"مجوز نامعتبر: {', '.join(sorted(invalid))}", status=400)
-
-    parent = None
-    parent_slug = (data.get("parent_slug") or "").strip()
-    if parent_slug:
-        parent = RoleDefinition.objects.filter(slug=parent_slug).first()
-
-    rd = RoleDefinition.objects.create(
-        slug=slug,
-        label=label,
-        description=(data.get("description") or "").strip(),
-        permissions=perms,
-        is_builtin=False,
-        needs_branch=bool(data.get("needs_branch")),
-        color=(data.get("color") or "#6366f1").strip()[:20],
-        sort_order=int(data.get("sort_order") or 50),
-        parent=parent,
-    )
-    sync_group_for_role(slug)
-    log_action(request.user, "create", f"نقش جدید: {label}", entity_type="RoleDefinition", entity_id=rd.id)
+    log_action(request.user, "create", f"نقش جدید: {rd.label}", entity_type="RoleDefinition", entity_id=rd.id)
     return success(role_definition_to_dict(rd), status=201)
 
 
@@ -152,31 +81,13 @@ def role_definition_detail(request, slug):
         )
         return success({"deleted": True, "users_moved_to_pending": moved})
 
-    data = parse_json(request)
-    if is_locked_role(slug):
-        return fail("مجوزهای این نقش قابل تغییر نیست.", status=400)
+    try:
+        update_role_definition(rd, parse_json(request))
+    except PermissionError as exc:
+        return fail(str(exc), status=400)
+    except ValueError as exc:
+        return fail(str(exc), status=400)
 
-    if "label" in data:
-        rd.label = (data.get("label") or rd.label).strip()
-    if "description" in data:
-        rd.description = (data.get("description") or "").strip()
-    if "permissions" in data:
-        perms = sanitize_role_permissions(slug, data.get("permissions") or [])
-        invalid = set(perms) - ALL_PERMISSIONS
-        if invalid:
-            return fail(f"مجوز نامعتبر: {', '.join(sorted(invalid))}", status=400)
-        rd.permissions = perms
-    if "needs_branch" in data:
-        rd.needs_branch = bool(data.get("needs_branch"))
-    if "color" in data:
-        rd.color = (data.get("color") or rd.color).strip()[:20]
-    if "sort_order" in data:
-        rd.sort_order = int(data.get("sort_order") or rd.sort_order)
-    if "parent_slug" in data:
-        ps = (data.get("parent_slug") or "").strip()
-        rd.parent = RoleDefinition.objects.filter(slug=ps).first() if ps else None
-    rd.save()
-    sync_group_for_role(slug)
     log_action(request.user, "update", f"ویرایش نقش {rd.label}", entity_type="RoleDefinition", entity_id=rd.id)
     return success(role_definition_to_dict(rd))
 
@@ -188,19 +99,12 @@ def org_rank_list(request):
         return denied
 
     if request.method == "GET":
-        qs = OrgRank.objects.filter(is_active=True).order_by("sort_order", "name")
-        return success({"results": [org_rank_to_dict(r) for r in qs]})
+        return success({"results": [org_rank_to_dict(r) for r in list_active_org_ranks()]})
 
-    data = parse_json(request)
-    name = (data.get("name") or "").strip()
-    if not name:
-        return fail("نام رتبه الزامی است.", status=400)
-    rank = OrgRank.objects.create(
-        name=name,
-        branch=(data.get("branch") or "").strip(),
-        color=(data.get("color") or "#6366f1").strip()[:20],
-        sort_order=int(data.get("sort_order") or 0),
-    )
+    try:
+        rank = create_org_rank(parse_json(request))
+    except ValueError as exc:
+        return fail(str(exc), status=400)
     return success(org_rank_to_dict(rank), status=201)
 
 
@@ -215,18 +119,8 @@ def org_rank_detail(request, pk):
         return fail("رتبه یافت نشد.", status=404)
 
     if request.method == "DELETE":
-        rank.is_active = False
-        rank.save(update_fields=["is_active"])
+        deactivate_org_rank(rank)
         return success({"deleted": True})
 
-    data = parse_json(request)
-    if "name" in data:
-        rank.name = (data.get("name") or rank.name).strip()
-    if "branch" in data:
-        rank.branch = (data.get("branch") or "").strip()
-    if "color" in data:
-        rank.color = (data.get("color") or rank.color).strip()[:20]
-    if "sort_order" in data:
-        rank.sort_order = int(data.get("sort_order") or rank.sort_order)
-    rank.save()
+    update_org_rank(rank, parse_json(request))
     return success(org_rank_to_dict(rank))

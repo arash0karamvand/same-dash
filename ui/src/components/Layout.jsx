@@ -2,28 +2,34 @@
 
 import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
+import { useConfig } from '../context/ConfigContext'
 import ChangePasswordModal from './ChangePasswordModal'
 import MobileBottomNav from './MobileBottomNav'
 import PortalNav from './PortalNav'
+import SiteFooterGuide from './SiteFooterGuide'
+import { PageGuideProvider } from '../context/PageGuideContext'
 import { useMediaQuery } from '../hooks/useMediaQuery'
-import { PORTALS } from '../config/portals'
 import { getVisiblePortals, canSeeNavItem } from '../utils/permissions'
-import { getPortal } from '../config/portals'
+
+function getPortalFromList(portals, id) {
+  return portals.find((p) => p.id === id)
+}
 
 export default function Layout({ portal, page, onNavigate, children }) {
   const { user, logout } = useAuth()
+  const { portals } = useConfig()
   const [passwordOpen, setPasswordOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const isMobile = useMediaQuery('(max-width: 767px)')
   const isCompactNav = useMediaQuery('(max-width: 1440px)')
-  const visiblePortals = getVisiblePortals(user)
-  const activePortal = getPortal(portal)
+  const visiblePortals = getVisiblePortals(user, portals)
+  const activePortal = getPortalFromList(portals, portal)
   const pageTitle = activePortal
     ? (activePortal.children.find((c) => c.key === page)?.label || activePortal.label)
     : 'داشبورد'
 
   const navigatePortal = (portalId) => {
-    const p = getPortal(portalId)
+    const p = getPortalFromList(portals, portalId)
     const defaultPage = p?.defaultPage || portalId
     onNavigate(portalId, defaultPage)
     setMenuOpen(false)
@@ -94,7 +100,7 @@ export default function Layout({ portal, page, onNavigate, children }) {
           ))}
         </nav>
 
-        {activePortal && !isCompactNav && (
+        {activePortal && (!isCompactNav || menuOpen) && (
           <nav className="portal-sidebar-sub" aria-label="زیرمنو">
             {(activePortal.children || [])
               .filter((c) => canSeeNavItem(user, c))
@@ -153,10 +159,15 @@ export default function Layout({ portal, page, onNavigate, children }) {
         </header>
 
         {isCompactNav && portal && (
-          <PortalNav user={user} portalId={portal} currentPage={page} onNavigate={navigateSub} />
+          <PortalNav user={user} portals={portals} portalId={portal} currentPage={page} onNavigate={navigateSub} />
         )}
 
-        <main className="content">{children}</main>
+        <main className="content">
+          <PageGuideProvider>
+            {children}
+            <SiteFooterGuide pageKey={page} />
+          </PageGuideProvider>
+        </main>
       </div>
 
       {isMobile && (

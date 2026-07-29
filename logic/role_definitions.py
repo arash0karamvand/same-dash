@@ -155,3 +155,168 @@ def role_definition_to_dict(rd):
 
 def sync_group_for_role(slug):
     Group.objects.get_or_create(name=slug)
+
+
+def slugify_role(text):
+    import re
+
+    text = (text or "").strip().lower()
+    text = re.sub(r"[^a-z0-9_]+", "_", text)
+    return text.strip("_")[:40] or "role"
+
+
+def org_rank_to_dict(rank):
+    return {
+        "id": rank.id,
+        "name": rank.name,
+        "branch": rank.branch,
+        "color": rank.color,
+        "sort_order": rank.sort_order,
+        "is_active": rank.is_active,
+    }
+
+
+def list_role_definitions():
+    return RoleDefinition.objects.select_related("parent").order_by("sort_order")
+
+
+def create_role_definition(data):
+    from auth.permissions import ALL_PERMISSIONS, sanitize_role_permissions
+
+    label = (data.get("label") or "").strip()
+    if not label:
+        raise ValueError("عنوان نقش الزامی است.")
+    slug = (data.get("slug") or slugify_role(label)).strip()
+    if RoleDefinition.objects.filter(slug=slug).exists():
+        raise ValueError("این شناسه نقش قبلاً ثبت شده.")
+    if slug == roles.ADMIN:
+        raise PermissionError("نقش مدیر سیستم از این مسیر قابل ساخت نیست.")
+    if slug in {roles.CEO, roles.CO_CEO, roles.BRANCH_SUPERVISOR, roles.ACCOUNTING_FINANCE, roles.SALES_EXPERT}:
+        raise PermissionError("نقش‌های سازمانی پیش‌فرض از این مسیر قابل ساخت نیست.")
+
+    perms = sanitize_role_permissions(slug, data.get("permissions") or [])
+    invalid = set(perms) - ALL_PERMISSIONS
+    if invalid:
+        raise ValueError(f"مجوز نامعتبر: {', '.join(sorted(invalid))}")
+
+    parent = None
+    parent_slug = (data.get("parent_slug") or "").strip()
+    if parent_slug:
+        parent = RoleDefinition.objects.filter(slug=parent_slug).first()
+
+    rd = RoleDefinition.objects.create(
+        slug=slug,
+        label=label,
+        description=(data.get("description") or "").strip(),
+        permissions=perms,
+        is_builtin=False,
+        needs_branch=bool(data.get("needs_branch")),
+        color=(data.get("color") or "#6366f1").strip()[:20],
+        sort_order=int(data.get("sort_order") or 50),
+        parent=parent,
+    )
+    sync_group_for_role(slug)
+    return rd
+
+
+def update_role_definition(rd, data):
+    from auth.org_roles import is_locked_role
+    from auth.permissions import ALL_PERMISSIONS, sanitize_role_permissions
+
+    slug = rd.slug
+    if is_locked_role(slug):
+        raise PermissionError("مجوزهای این نقش قابل تغییر نیست.")
+
+    if "label" in data:
+        rd.label = (data.get("label") or rd.label).strip()
+    if "description" in data:
+        rd.description = (data.get("description") or "").strip()
+    if "permissions" in data:
+        perms = sanitize_role_permissions(slug, data.get("permissions") or [])
+        invalid = set(perms) - ALL_PERMISSIONS
+        if invalid:
+            raise ValueError(f"مجوز نامعتبر: {', '.join(sorted(invalid))}")
+        rd.permissions = perms
+    if "needs_branch" in data:
+        rd.needs_branch = bool(data.get("needs_branch"))
+    if "color" in data:
+        rd.color = (data.get("color") or rd.color).strip()[:20]
+    if "sort_order" in data:
+        rd.sort_order = int(data.get("sort_order") or rd.sort_order)
+    if "parent_slug" in data:
+        ps = (data.get("parent_slug") or "").strip()
+        rd.parent = RoleDefinition.objects.filter(slug=ps).first() if ps else None
+    rd.save()
+    sync_group_for_role(slug)
+    return rd
+
+
+def create_org_rank(data):
+    from backend.models import OrgRank
+
+    name = (data.get("name") or "").strip()
+    if not name:
+        raise ValueError("نام رتبه الزامی است.")
+    return OrgRank.objects.create(
+        name=name,
+        branch=(data.get("branch") or "").strip(),
+        color=(data.get("color") or "#6366f1").strip()[:20],
+        sort_order=int(data.get("sort_order") or 0),
+    )
+
+
+def update_org_rank(rank, data):
+    if "name" in data:
+        rank.name = (data.get("name") or rank.name).strip()
+    if "branch" in data:
+        rank.branch = (data.get("branch") or "").strip()
+    if "color" in data:
+        rank.color = (data.get("color") or rank.color).strip()[:20]
+    if "sort_order" in data:
+        rank.sort_order = int(data.get("sort_order") or rank.sort_order)
+    rank.save()
+    return rank
+
+
+def deactivate_org_rank(rank):
+    rank.is_active = False
+    rank.save(update_fields=["is_active"])
+    return rank
+
+
+def list_active_org_ranks():
+    from backend.models import OrgRank
+
+    return OrgRank.objects.filter(is_active=True).order_by("sort_order", "name")
+
+
+def build_permission_matrix_payload():
+    from auth.permissions import (
+        ALL_PERMISSIONS,
+        ASSIGNABLE_PERMISSIONS,
+        PERMISSION_LABELS,
+        menu_sections_for_matrix,
+        permission_groups_for_matrix,
+    )
+    from logic.config_seed import seed_config_defaults
+    from logic.module_catalog import portal_modules_for_matrix
+
+    seed_builtin_roles()
+    seed_config_defaults()
+    return {
+        "permissions": [
+            {"code": code, "label": PERMISSION_LABELS.get(code, code)}
+            for code in sorted(ALL_PERMISSIONS)
+        ],
+        "assignable_permissions": [
+            {"code": code, "label": PERMISSION_LABELS.get(code, code)}
+            for code in sorted(ASSIGNABLE_PERMISSIONS)
+        ],
+        "permission_groups": permission_groups_for_matrix(assignable_only=False),
+        "assignable_permission_groups": permission_groups_for_matrix(assignable_only=True),
+        "menu_sections": menu_sections_for_matrix(assignable_only=False),
+        "assignable_menu_sections": menu_sections_for_matrix(assignable_only=True),
+        "portal_modules": portal_modules_for_matrix(assignable_only=False),
+        "assignable_portal_modules": portal_modules_for_matrix(assignable_only=True),
+        "roles": [role_definition_to_dict(r) for r in RoleDefinition.objects.order_by("sort_order")],
+    }

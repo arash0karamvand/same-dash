@@ -180,6 +180,7 @@ def account_to_dict(account):
         "normal_balance": account.normal_balance,
         "sort_order": account.sort_order,
         "legacy_entry_type": account.legacy_entry_type or None,
+        "is_active": account.is_active,
     }
 
 
@@ -200,3 +201,152 @@ def resolve_line_accounts(*, account_id=None, subsidiary_id=None, detailed_id=No
     else:
         raise ValueError("حداقل حساب کل باید مشخص شود.")
     return account, subsidiary, detailed
+
+
+def list_document_models(params):
+    """مدل‌های سند (حساب‌های دفتر کل) به همراه تعداد اسناد."""
+    from django.db.models import Count, Q
+
+    from backend.models import AccountingEntry
+    from logic.accounting_entries import apply_entry_filters
+
+    seed_accounts()
+    accounts = Account.objects.filter(is_active=True).order_by("sort_order", "name")
+    account_class = (params.get("account_class") or "").strip()
+    if account_class:
+        accounts = accounts.filter(account_class=account_class)
+
+    entry_qs = apply_entry_filters(
+        AccountingEntry.objects.filter(account__isnull=False).filter(
+            Q(sale__isnull=True) | Q(sale__is_deleted=False)
+        ),
+        params,
+    )
+    counts = {
+        row["account_id"]: row["count"]
+        for row in entry_qs.values("account_id").annotate(count=Count("id"))
+    }
+
+    models = []
+    for account in accounts:
+        info = account_to_dict(account)
+        info["account_code"] = account.code or str(account.sort_order).zfill(4)
+        info["entry_count"] = counts.get(account.id, 0)
+        models.append(info)
+
+    return {"models": models, "accounts": accounts_grouped()}
+
+
+def list_subsidiary_accounts(params):
+    account_id = (params.get("account_id") or "").strip()
+    qs = SubsidiaryAccount.objects.filter(is_active=True).select_related("account").order_by(
+        "account__sort_order", "code"
+    )
+    if account_id.isdigit():
+        qs = qs.filter(account_id=int(account_id))
+    return [subsidiary_to_dict(s) for s in qs]
+
+
+def create_subsidiary_account(*, account_id, code, name):
+    code = (code or "").strip()
+    name = (name or "").strip()
+    if not account_id or not code or not name:
+        raise ValueError("حساب کل، کد و عنوان معین الزامی است.")
+    try:
+        account = Account.objects.get(pk=account_id, is_active=True)
+    except Account.DoesNotExist as exc:
+        raise LookupError("حساب کل یافت نشد.") from exc
+    if SubsidiaryAccount.objects.filter(account=account, code=code).exists():
+        raise ValueError("این کد معین قبلاً ثبت شده است.")
+    return SubsidiaryAccount.objects.create(account=account, code=code, name=name)
+
+
+def list_detailed_accounts(params):
+    subsidiary_id = (params.get("subsidiary_id") or "").strip()
+    account_id = (params.get("account_id") or "").strip()
+    qs = DetailedAccount.objects.filter(is_active=True).select_related(
+        "subsidiary", "subsidiary__account"
+    ).order_by("subsidiary__account__sort_order", "subsidiary__code", "code")
+    if subsidiary_id.isdigit():
+        qs = qs.filter(subsidiary_id=int(subsidiary_id))
+    elif account_id.isdigit():
+        qs = qs.filter(subsidiary__account_id=int(account_id))
+    return [detailed_to_dict(d) for d in qs]
+
+
+def create_detailed_account(*, subsidiary_id, code, name):
+    code = (code or "").strip()
+    name = (name or "").strip()
+    if not subsidiary_id or not code or not name:
+        raise ValueError("حساب معین، کد و عنوان تفصیلی الزامی است.")
+    try:
+        subsidiary = SubsidiaryAccount.objects.select_related("account").get(
+            pk=subsidiary_id, is_active=True
+        )
+    except SubsidiaryAccount.DoesNotExist as exc:
+        raise LookupError("حساب معین یافت نشد.") from exc
+    if DetailedAccount.objects.filter(subsidiary=subsidiary, code=code).exists():
+        raise ValueError("این کد تفصیلی قبلاً ثبت شده است.")
+    return DetailedAccount.objects.create(subsidiary=subsidiary, code=code, name=name)
+
+
+def update_general_account(*, account_id, name=None, is_active=None):
+    try:
+        account = Account.objects.get(pk=account_id)
+    except Account.DoesNotExist as exc:
+        raise LookupError("حساب کل یافت نشد.") from exc
+    if name is not None:
+        name = (name or "").strip()
+        if not name:
+            raise ValueError("عنوان حساب کل الزامی است.")
+        account.name = name
+    if is_active is not None:
+        account.is_active = bool(is_active)
+    account.save()
+    return account
+
+
+def update_subsidiary_account(*, sub_id, code=None, name=None, is_active=None):
+    try:
+        sub = SubsidiaryAccount.objects.select_related("account").get(pk=sub_id)
+    except SubsidiaryAccount.DoesNotExist as exc:
+        raise LookupError("حساب معین یافت نشد.") from exc
+    if code is not None:
+        code = (code or "").strip()
+        if not code:
+            raise ValueError("کد معین الزامی است.")
+        if SubsidiaryAccount.objects.filter(account=sub.account, code=code).exclude(pk=sub.pk).exists():
+            raise ValueError("این کد معین قبلاً ثبت شده است.")
+        sub.code = code
+    if name is not None:
+        name = (name or "").strip()
+        if not name:
+            raise ValueError("عنوان حساب معین الزامی است.")
+        sub.name = name
+    if is_active is not None:
+        sub.is_active = bool(is_active)
+    sub.save()
+    return sub
+
+
+def update_detailed_account(*, detail_id, code=None, name=None, is_active=None):
+    try:
+        detail = DetailedAccount.objects.select_related("subsidiary", "subsidiary__account").get(pk=detail_id)
+    except DetailedAccount.DoesNotExist as exc:
+        raise LookupError("حساب تفصیلی یافت نشد.") from exc
+    if code is not None:
+        code = (code or "").strip()
+        if not code:
+            raise ValueError("کد تفصیلی الزامی است.")
+        if DetailedAccount.objects.filter(subsidiary=detail.subsidiary, code=code).exclude(pk=detail.pk).exists():
+            raise ValueError("این کد تفصیلی قبلاً ثبت شده است.")
+        detail.code = code
+    if name is not None:
+        name = (name or "").strip()
+        if not name:
+            raise ValueError("عنوان حساب تفصیلی الزامی است.")
+        detail.name = name
+    if is_active is not None:
+        detail.is_active = bool(is_active)
+    detail.save()
+    return detail

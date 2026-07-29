@@ -104,19 +104,17 @@ def create_accounting_entry(
     general_account="",
     subsidiary_account="",
     detailed_account="",
-    currency="rial",
 ):
     from logic.accounting_accounts import payment_account_for_sale, resolve_account_for_entry
-    from logic.accounting_money import to_rial, to_rial_from_toman
+    from logic.accounting_money import to_rial
 
-    convert = to_rial_from_toman if currency == "toman" else to_rial
-    debit = convert(debit)
-    credit = convert(credit)
-    amount = convert(amount) if amount else 0
-    opening_debit = convert(opening_debit)
-    opening_credit = convert(opening_credit)
-    balance_debit = convert(balance_debit)
-    balance_credit = convert(balance_credit)
+    debit = to_rial(debit)
+    credit = to_rial(credit)
+    amount = to_rial(amount) if amount else 0
+    opening_debit = to_rial(opening_debit)
+    opening_credit = to_rial(opening_credit)
+    balance_debit = to_rial(balance_debit)
+    balance_credit = to_rial(balance_credit)
 
     if account is None:
         if account_slug:
@@ -250,18 +248,17 @@ def delete_accounting_entry(entry, user=None):
     if sale and entry_type == "payment":
         from decimal import Decimal
 
-        from logic.accounting_money import TOMAN_TO_RIAL
         from logic.sales import reverse_payment
 
-        amount_toman = Decimal(amount or 0) / TOMAN_TO_RIAL
-        reverse_payment(sale, amount_toman, user=user)
+        amount_rial = Decimal(amount or 0)
+        reverse_payment(sale, amount_rial, user=user)
         entry.delete()
         return {
             "deleted": True,
             "entry_id": entry_id,
             "sale_deleted": False,
             "sale_id": sale.id,
-            "payment_reversed": int(amount_toman),
+            "payment_reversed": int(amount_rial),
         }
 
     if sale and entry_type == "receivable":

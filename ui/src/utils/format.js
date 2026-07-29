@@ -1,5 +1,6 @@
 // توابع کمکی قالب‌بندی نمایش
 
+import { CURRENCY_UNIT, PERCENT_UNIT } from '../config/money'
 import { formatJalali } from './jalali'
 
 const ONES = ['', 'یک', 'دو', 'سه', 'چهار', 'پنج', 'شش', 'هفت', 'هشت', 'نه']
@@ -24,14 +25,14 @@ export function parseAmount(value) {
   return Number.isFinite(n) ? n : NaN
 }
 
-/** متن فارسی مبلغ — unit: 'تومان' | 'درصد' | '' */
-export function getAmountWords(value, unit = 'تومان') {
+/** متن فارسی مبلغ — unit: CURRENCY_UNIT | PERCENT_UNIT | '' */
+export function getAmountWords(value, unit = CURRENCY_UNIT) {
   if (value === '' || value === null || value === undefined) return ''
   const n = parseAmount(value)
   if (Number.isNaN(n)) return ''
   if (n === 0) return unit ? `صفر ${unit}`.trim() : 'صفر'
-  if (unit === 'درصد') return numberToWords(Math.floor(n), 'درصد')
-  if (unit === 'تومان') return numberToWords(Math.floor(n), 'تومان')
+  if (unit === PERCENT_UNIT) return numberToWords(Math.floor(n), PERCENT_UNIT)
+  if (unit === CURRENCY_UNIT) return numberToWords(Math.floor(n), CURRENCY_UNIT)
   return numberToWords(Math.floor(n), unit)
 }
 
@@ -72,18 +73,18 @@ export function numberToWords(value, suffix = '') {
 }
 
 export function amountToWords(value) {
-  return getAmountWords(value, 'تومان')
+  return getAmountWords(value, CURRENCY_UNIT)
 }
 
-// قالب‌بندی مبلغ با واحد دلخواه (پیش‌فرض: تومان)
-export function formatMoney(value, unit = 'تومان') {
+/** قالب‌بندی مبلغ — پیش‌فرض: ریال */
+export function formatMoney(value, unit = CURRENCY_UNIT) {
   const number = Number(value || 0)
   return number.toLocaleString('fa-IR') + (unit ? ` ${unit}` : '')
 }
 
-/** قالب‌بندی مبلغ حسابداری — همیشه ریال */
+/** همان formatMoney — برای یکنواختی با حسابداری */
 export function formatRial(value) {
-  return formatMoney(value, 'ریال')
+  return formatMoney(value, CURRENCY_UNIT)
 }
 
 // قالب‌بندی عدد ساده با ارقام فارسی

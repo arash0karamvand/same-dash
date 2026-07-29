@@ -4,9 +4,9 @@ export const ACCOUNTING_MENU = {
   'trial-balance': 'تراز کل',
   'subsidiary-trial': 'تراز معین',
   'detailed-trial': 'تراز تفصیلی',
-  ledger: 'دفتر کل (ریز حساب)',
+  ledger: 'دفتر کل',
   entry: 'ثبت سند حسابداری',
-  'chart-of-accounts': 'طرح حساب',
+  'chart-of-accounts': 'ایجاد حساب',
   'upload-excel': 'بارگذاری اکسل',
 }
 
@@ -25,7 +25,7 @@ export const TERMS = {
   debit: 'بدهکار',
   credit: 'بستانکار',
   balance: 'مانده',
-  openingBalance: 'مانده ابتدای دوره',
+  openingBalance: 'افتتاحیه',
   turnover: 'گردش',
   trialBalance: 'تراز',
   ledger: 'دفتر کل',

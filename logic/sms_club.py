@@ -21,7 +21,7 @@ def _format_discount_label(discount_type, value):
     val = Decimal(str(value or 0))
     if discount_type == "percent":
         return f"{int(val)}٪"
-    return f"{int(val):,} تومان"
+    return f"{int(val):,} ریال"
 
 
 def render_template(template, **ctx):

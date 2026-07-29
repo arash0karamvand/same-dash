@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { configApi } from '../api/client'
+import { buildPortalsFromModuleTree } from '../config/portalCatalog'
 import { useAuth } from './AuthContext'
 
 const ConfigContext = createContext(null)
@@ -10,7 +11,8 @@ const EMPTY_CONFIG = {
   branches: [],
   choices: {},
   nav_items: [],
-  permission_catalog: { permissions: [], permission_groups: [] },
+  permission_catalog: { permissions: [], permission_groups: [], module_tree: [] },
+  page_guides: {},
 }
 
 export function ConfigProvider({ children }) {
@@ -61,6 +63,13 @@ export function ConfigProvider({ children }) {
     [config.choices],
   )
 
+  const moduleTree = config.permission_catalog?.module_tree || []
+
+  const portals = useMemo(
+    () => buildPortalsFromModuleTree(moduleTree),
+    [moduleTree],
+  )
+
   const value = {
     config,
     loading,
@@ -72,6 +81,8 @@ export function ConfigProvider({ children }) {
     choices,
     choiceLabel,
     permissionCatalog: config.permission_catalog || EMPTY_CONFIG.permission_catalog,
+    moduleTree,
+    portals,
   }
 
   return <ConfigContext.Provider value={value}>{children}</ConfigContext.Provider>

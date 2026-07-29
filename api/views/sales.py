@@ -2,191 +2,78 @@
 
 from decimal import Decimal, InvalidOperation
 
-from django.db.models import Count, Sum
-from django.utils import timezone
-
 from api.filters import apply_sales_filters, parse_date
 from api.helpers import api_view, fail, parse_json, success
 from api.serializers import sale_to_dict
-from auth import roles
-from auth.org_roles import is_branch_supervisor, is_executive_user, sales_expert_summary_only
+from auth.org_roles import is_branch_supervisor, is_executive_user
 from auth.permissions import (
     APPROVE_SALE_ACCOUNTING,
     APPROVE_SALE_BRANCH,
     CREATE_SALE,
     DELETE_SALE,
-    EDIT_SALE,
     MANAGE_FACTORY_ORDERS,
     MANAGE_FREIGHT_ORDERS,
     VIEW_EMPLOYEE_RANKING,
-    VIEW_OWN_SALES,
-    VIEW_SALES,
     VIEW_SALES_SUMMARY,
     can_edit_sale,
     can_view_sale,
     has_permission,
 )
-from backend.models import Customer, Product, Sale, SaleLineItem
+from backend.models import Customer, Sale
 from logic.audit import log_action
-from logic.employee_ranking import build_employee_ranking
 from logic.sales import (
     cancel_order,
     confirm_pre_invoice,
     delete_sale,
-    normalize_payment_method,
     normalize_payment_status,
     record_payment,
     record_sale,
     update_sale,
 )
-from logic.jalali import date_to_jalali
-from logic.sales_day import (
-    filter_sales_for_gregorian_date,
-    filter_sales_for_jalali_month,
-    filter_sales_for_jalali_year,
-    today_jalali,
+from logic.sale_workflow import approve_sale_branch
+from logic.sales_reports import (
+    aggregate_sales,
+    build_daily_breakdown,
+    build_daily_sales_report,
+    build_employee_ranking_report,
+    build_monthly_sales_payload,
+    build_yearly_sales_report,
+    can_list_sales,
+    can_view_sales_reports,
+    get_sale,
+    prepare_monthly_sales_queryset,
+    sales_queryset,
 )
-from logic.sale_workflow import (
-    STAGE_PENDING_BRANCH,
-    approve_sale_branch,
-)
-from logic.sellers import (
-    effective_sale_branch,
-    get_seller_for_user,
-    get_user_branch,
-    resolve_sale_branch_for_create,
-)
-
-
-def _can_list_sales(user):
-    if sales_expert_summary_only(user):
-        return False
-    if is_executive_user(user):
-        return True
-    return has_permission(user, APPROVE_SALE_BRANCH) or is_branch_supervisor(user)
-
-
-def _sales_queryset(user, params=None):
-    """صف فروشگاه — فقط سفارش‌های معلق تا ارسال به اداری."""
-    params = params or {}
-    qs = Sale.objects.select_related("customer", "recorded_by", "seller").prefetch_related(
-        "installments", "line_items"
-    )
-    pending_q = qs.filter(
-        workflow_stage=STAGE_PENDING_BRANCH,
-        transferred_to_office_at__isnull=True,
-    )
-    if is_executive_user(user):
-        queue = (params.get("queue") or "").strip()
-        if queue == "branch":
-            return pending_q
-        return qs
-    if has_permission(user, APPROVE_SALE_BRANCH) or is_branch_supervisor(user):
-        branch = get_user_branch(user) or effective_sale_branch(user)
-        if branch:
-            return pending_q.filter(branch=branch)
-        return qs.none()
-    return qs.none()
-
-
-def _sales_report_queryset(user, branch_param=None):
-    """گزارش فروش شعبه — همه ثبت‌ها در بازه، حتی پس از ارسال به اداری."""
-    qs = Sale.objects.select_related("customer", "recorded_by", "seller").prefetch_related(
-        "installments", "line_items"
-    ).exclude(order_status=Sale.ORDER_STATUS_CANCELLED)
-
-    branch_param = (branch_param or "").strip() or None
-
-    if sales_expert_summary_only(user):
-        return qs.filter(recorded_by=user)
-
-    if is_executive_user(user):
-        if branch_param:
-            return qs.filter(branch=branch_param)
-        return qs
-
-    if has_permission(user, APPROVE_SALE_BRANCH) or is_branch_supervisor(user):
-        branch = branch_param or get_user_branch(user) or effective_sale_branch(user)
-        if branch:
-            return qs.filter(branch=branch)
-        return qs.none()
-
-    if has_permission(user, VIEW_OWN_SALES) and not has_permission(user, VIEW_SALES):
-        branch = get_user_branch(user) or effective_sale_branch(user)
-        if branch:
-            return qs.filter(branch=branch)
-        return qs.filter(recorded_by=user)
-
-    if has_permission(user, VIEW_SALES):
-        if branch_param:
-            return qs.filter(branch=branch_param)
-        return qs
-
-    return qs.none()
-
-
-def _can_view_sales_reports(user):
-    return (
-        is_executive_user(user)
-        or is_branch_supervisor(user)
-        or has_permission(user, VIEW_SALES)
-        or has_permission(user, VIEW_OWN_SALES)
-        or has_permission(user, VIEW_SALES_SUMMARY)
-        or has_permission(user, APPROVE_SALE_BRANCH)
-    )
+from logic.sellers import get_seller_for_user, resolve_sale_branch_for_create
 
 
 def _serialize_sales(user, sales):
     return [sale_to_dict(s, user=user, include_lines=True) for s in sales]
 
 
-def _parse_period_params(params):
-    period = (params.get("period") or "month").strip().lower()
-    if period not in {"day", "month", "year"}:
-        raise ValueError("بازه باید day، month یا year باشد.")
-    jy, jm, jd = today_jalali()
-    year = int(params.get("year") or jy)
-    month = int(params.get("month") or jm)
-    day = int(params.get("day") or jd)
-    return period, year, month, day
-
-
-def _get_sale(pk, include_deleted=False):
-    manager = Sale.all_objects if include_deleted else Sale.objects
-    try:
-        return manager.select_related("customer", "recorded_by", "seller").prefetch_related(
-        "installments", "line_items"
-    ).get(pk=pk)
-    except Sale.DoesNotExist:
-        return None
-
-
-def _aggregate_sales(qs):
-    qs = qs.exclude(order_status=Sale.ORDER_STATUS_CANCELLED)
-    agg = qs.aggregate(
-        count=Count("id"),
-        total_final=Sum("final_amount"),
-        total_paid=Sum("paid_amount"),
-    )
-    return {
-        "count": agg["count"] or 0,
-        "total_final": int(agg["total_final"] or 0),
-        "total_paid": int(agg["total_paid"] or 0),
-    }
+def _report_success(user, payload):
+    """تبدیل کلید sales به results سریال‌شده."""
+    sales = payload.pop("sales", None)
+    if sales is not None:
+        if sales == []:
+            payload["results"] = []
+        else:
+            payload["results"] = _serialize_sales(user, sales)
+    return success(payload)
 
 
 @api_view("GET", "POST")
 def sale_list(request):
     if request.method == "GET":
-        if not _can_list_sales(request.user):
+        if not can_list_sales(request.user):
             if has_permission(request.user, VIEW_SALES_SUMMARY):
                 return fail("فقط گزارش ماهانه فروش در دسترس است.", status=403)
             return fail("Permission denied", status=403)
-        qs = apply_sales_filters(_sales_queryset(request.user, request.GET), request.GET)
+        qs = apply_sales_filters(sales_queryset(request.user, request.GET), request.GET)
         workflow = (request.GET.get("workflow_stage") or "").strip()
         if workflow:
             qs = qs.filter(workflow_stage=workflow)
-        return success({"results": _serialize_sales(request.user, qs), "summary": _aggregate_sales(qs)})
+        return success({"results": _serialize_sales(request.user, qs), "summary": aggregate_sales(qs)})
 
     if not has_permission(request.user, CREATE_SALE):
         return fail("Permission denied", status=403)
@@ -287,7 +174,7 @@ def sale_list(request):
     log_action(
         request.user,
         "sale",
-        f"فروش {int(sale.final_amount)} تومان — {customer.full_name} — فروشنده: {seller_name}",
+        f"فروش {int(sale.final_amount)} ریال — {customer.full_name} — فروشنده: {seller_name}",
         entity_type="Sale",
         entity_id=sale.id,
         details={"branch": branch, "line_items": line_items},
@@ -298,7 +185,7 @@ def sale_list(request):
 
 @api_view("GET", "PUT", "DELETE")
 def sale_detail(request, pk):
-    sale = _get_sale(pk)
+    sale = get_sale(pk)
     if sale is None:
         return fail("Sale not found", status=404)
 
@@ -361,7 +248,7 @@ def sale_detail(request, pk):
 
 @api_view("POST")
 def sale_record_payment(request, pk):
-    sale = _get_sale(pk)
+    sale = get_sale(pk)
     if sale is None:
         return fail("Sale not found", status=404)
     if not can_edit_sale(request.user, sale):
@@ -386,7 +273,7 @@ def sale_record_payment(request, pk):
     log_action(
         request.user,
         "payment",
-        f"دریافت {int(amount)} تومان — فروش #{sale.id}",
+        f"دریافت {int(amount)} ریال — فروش #{sale.id}",
         entity_type="Sale",
         entity_id=sale.id,
     )
@@ -395,7 +282,7 @@ def sale_record_payment(request, pk):
 
 @api_view("POST")
 def sale_confirm(request, pk):
-    sale = _get_sale(pk)
+    sale = get_sale(pk)
     if sale is None:
         return fail("Sale not found", status=404)
     if not can_edit_sale(request.user, sale):
@@ -418,7 +305,7 @@ def sale_confirm(request, pk):
 
 @api_view("POST")
 def sale_cancel(request, pk):
-    sale = _get_sale(pk)
+    sale = get_sale(pk)
     if sale is None:
         return fail("Sale not found", status=404)
     if not can_edit_sale(request.user, sale):
@@ -441,58 +328,26 @@ def sale_cancel(request, pk):
 
 @api_view("GET")
 def sales_daily_report(request):
-    if not _can_view_sales_reports(request.user):
+    if not can_view_sales_reports(request.user):
         return fail("Permission denied", status=403)
     if is_branch_supervisor(request.user) and not is_executive_user(request.user):
         return fail("سرپرست شعبه گزارش روزانه ندارد.", status=403)
-    day = parse_date(request.GET.get("date")) or timezone.localdate()
-    jy, jm, jd = date_to_jalali(day)
-    branch = (request.GET.get("branch") or "").strip() or None
-    qs = filter_sales_for_gregorian_date(_sales_report_queryset(request.user, branch), day)
-    return success(
-        {
-            "date": day.isoformat(),
-            "jalali_year": jy,
-            "jalali_month": jm,
-            "jalali_day": jd,
-            **_aggregate_sales(qs),
-            "results": _serialize_sales(request.user, qs),
-        }
-    )
+    return _report_success(request.user, build_daily_sales_report(request.user, request.GET))
 
 
 @api_view("GET")
 def sales_monthly_report(request):
-    if not _can_view_sales_reports(request.user):
+    if not can_view_sales_reports(request.user):
         return fail("Permission denied", status=403)
-    jy, jm, _ = today_jalali()
-    year = int(request.GET.get("year") or jy)
-    month = int(request.GET.get("month") or jm)
-    branch = (request.GET.get("branch") or "").strip() or None
-    if sales_expert_summary_only(request.user):
-        qs = Sale.objects.filter(recorded_by=request.user).exclude(
-            order_status=Sale.ORDER_STATUS_CANCELLED
-        )
-    else:
-        qs = _sales_report_queryset(request.user, branch)
-    qs = filter_sales_for_jalali_month(qs, year, month)
+    qs, year, month = prepare_monthly_sales_queryset(request.user, request.GET)
     qs = apply_sales_filters(qs, {k: v for k, v in request.GET.items() if k not in ("year", "month")})
-    return success(
-        {
-            "jalali_year": year,
-            "jalali_month": month,
-            "year": year,
-            "month": month,
-            **_aggregate_sales(qs),
-            "results": [] if sales_expert_summary_only(request.user) else _serialize_sales(request.user, qs),
-        }
-    )
+    return _report_success(request.user, build_monthly_sales_payload(request.user, qs, year, month))
 
 
 def _workflow_action(request, pk, permission, action, log_label):
     if not has_permission(request.user, permission):
         return fail("Permission denied", status=403)
-    sale = _get_sale(pk)
+    sale = get_sale(pk)
     if sale is None:
         return fail("Sale not found", status=404)
     if not can_view_sale(request.user, sale):
@@ -515,7 +370,7 @@ def _workflow_action(request, pk, permission, action, log_label):
 def sale_approve_branch(request, pk):
     if not (has_permission(request.user, APPROVE_SALE_BRANCH) or is_executive_user(request.user)):
         return fail("Permission denied", status=403)
-    sale = _get_sale(pk)
+    sale = get_sale(pk)
     if sale is None:
         return fail("Sale not found", status=404)
     if not can_view_sale(request.user, sale):
@@ -627,80 +482,17 @@ def sale_freight_complete(request, pk):
 
 @api_view("GET")
 def sales_yearly_report(request):
-    if not _can_view_sales_reports(request.user):
+    if not can_view_sales_reports(request.user):
         return fail("Permission denied", status=403)
-    jy, _, _ = today_jalali()
-    year = int(request.GET.get("year") or jy)
-    branch = (request.GET.get("branch") or "").strip() or None
-    if sales_expert_summary_only(request.user):
-        qs = Sale.objects.filter(recorded_by=request.user).exclude(
-            order_status=Sale.ORDER_STATUS_CANCELLED
-        )
-    else:
-        qs = _sales_report_queryset(request.user, branch)
-    qs = filter_sales_for_jalali_year(qs, year)
-    return success(
-        {
-            "jalali_year": year,
-            "year": year,
-            **_aggregate_sales(qs),
-            "results": [] if sales_expert_summary_only(request.user) else _serialize_sales(request.user, qs),
-        }
-    )
+    return _report_success(request.user, build_yearly_sales_report(request.user, request.GET))
 
 
 @api_view("GET")
 def sales_daily_breakdown(request):
     """خلاصه فروش روزانه — فقط تاریخ و مبلغ، بدون جزئیات سفارش."""
-    if not _can_view_sales_reports(request.user):
+    if not can_view_sales_reports(request.user):
         return fail("Permission denied", status=403)
-    jy, jm, _ = today_jalali()
-    year = int(request.GET.get("year") or jy)
-    month = int(request.GET.get("month") or jm)
-    branch = (request.GET.get("branch") or "").strip() or None
-
-    if sales_expert_summary_only(request.user):
-        qs = Sale.objects.filter(recorded_by=request.user).exclude(
-            order_status=Sale.ORDER_STATUS_CANCELLED
-        )
-    else:
-        qs = _sales_report_queryset(request.user, branch)
-
-    qs = filter_sales_for_jalali_month(qs, year, month)
-    from logic.sales_day import sold_at_jalali
-
-    buckets = {}
-    for sold_at, final_amount in qs.values_list("sold_at", "final_amount"):
-        dj_y, dj_m, dj_d = sold_at_jalali(sold_at)
-        key = (dj_y, dj_m, dj_d)
-        if key not in buckets:
-            buckets[key] = {"count": 0, "total_final": 0}
-        buckets[key]["count"] += 1
-        buckets[key]["total_final"] += int(final_amount or 0)
-
-    days = []
-    for (dj_y, dj_m, dj_d) in sorted(buckets.keys(), reverse=True):
-        agg = buckets[(dj_y, dj_m, dj_d)]
-        days.append(
-            {
-                "jalali_year": dj_y,
-                "jalali_month": dj_m,
-                "jalali_day": dj_d,
-                "count": agg["count"],
-                "total_final": agg["total_final"],
-            }
-        )
-
-    return success(
-        {
-            "jalali_year": year,
-            "jalali_month": month,
-            "year": year,
-            "month": month,
-            **_aggregate_sales(qs),
-            "days": days,
-        }
-    )
+    return success(build_daily_breakdown(request.user, request.GET))
 
 
 @api_view("GET")
@@ -708,33 +500,6 @@ def employee_ranking(request):
     if not has_permission(request.user, VIEW_EMPLOYEE_RANKING):
         return fail("Permission denied", status=403)
     try:
-        period, year, month, day = _parse_period_params(request.GET)
+        return success(build_employee_ranking_report(request.GET))
     except (ValueError, TypeError) as exc:
         return fail(str(exc), status=400)
-
-    branch = (request.GET.get("branch") or "").strip() or None
-    qs = Sale.objects.select_related("recorded_by")
-    try:
-        results = build_employee_ranking(
-            qs,
-            period,
-            year,
-            jm=month if period in ("day", "month") else None,
-            jd=day if period == "day" else None,
-            branch=branch,
-        )
-    except ValueError as exc:
-        return fail(str(exc), status=400)
-
-    total = sum(item["total_final"] for item in results)
-    return success(
-        {
-            "period": period,
-            "jalali_year": year,
-            "jalali_month": month if period in ("day", "month") else None,
-            "jalali_day": day if period == "day" else None,
-            "branch": branch,
-            "total_final": total,
-            "results": results,
-        }
-    )

@@ -6,6 +6,8 @@ import PersianDateInput from '../components/PersianDateInput'
 import PersianMonthPicker from '../components/PersianMonthPicker'
 import MoneyInput from '../components/MoneyInput'
 import Select from '../components/Select'
+import RecordFilterPanel from '../components/RecordFilterPanel'
+import { OFFICE_INSTALLMENTS_FILTER } from '../config/recordFilterSections'
 import { Badge, Button, Card, EmptyState, Field, FilterBar, Modal } from '../components/ui'
 import { useConfirm } from '../context/ConfirmContext'
 import { formatDate, formatMoney } from '../utils/format'
@@ -20,6 +22,8 @@ const EMPTY = {
   bank_name: '',
   notes: '',
 }
+
+const INSTALLMENT_SALE_FILTER_DEFAULTS = OFFICE_INSTALLMENTS_FILTER.initialFilters
 
 export default function Checks() {
   const confirm = useConfirm()
@@ -140,6 +144,15 @@ export default function Checks() {
           <Card title="مانده"><p className="stat-value">{formatMoney(report.pending_amount)}</p></Card>
         </div>
       )}
+      <Card title={OFFICE_INSTALLMENTS_FILTER.title} className="section-record-filter">
+        <RecordFilterPanel
+          scope={OFFICE_INSTALLMENTS_FILTER.scope}
+          lockModel={OFFICE_INSTALLMENTS_FILTER.lockModel}
+          compact
+          liveSearch
+          initialFilters={INSTALLMENT_SALE_FILTER_DEFAULTS}
+        />
+      </Card>
       <Card title="چک و اقساط" actions={<Button onClick={openCreate}>+ افزودن</Button>}>
         {error && <div className="alert-error">{error}</div>}
         <FilterBar>

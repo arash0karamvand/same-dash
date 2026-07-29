@@ -41,7 +41,7 @@ export function saleFinalAmount(form, walletBalance = 0) {
 
 export function saleBalanceDue(form, walletBalance = 0) {
   const finalAmount = saleFinalAmount(form, walletBalance)
-  const paid = form.payment_status === 'installment' ? Number(form.paid_amount) || 0 : 0
+  const paid = form.payment_method === 'check' ? Number(form.paid_amount) || 0 : 0
   return Math.max(0, finalAmount - paid)
 }
 

@@ -325,6 +325,47 @@
   min-width: 0;
 }
 
+.site-footer-guide {
+  margin-top: 28px;
+  padding: 14px 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  line-height: 1.65;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.site-footer-guide-editable {
+  cursor: default;
+  border-style: dashed;
+}
+
+.site-footer-guide-editable:hover {
+  border-color: var(--primary);
+}
+
+.site-footer-guide-label {
+  flex-shrink: 0;
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--text);
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.site-footer-guide-text {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  white-space: pre-wrap;
+}
+
 .page {
   display: flex;
   flex-direction: column;
@@ -657,6 +698,17 @@
   outline: none;
   border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+/* عدد فقط با تایپ — بدون دکمه کم/زیاد */
+input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 .field {
@@ -3365,8 +3417,90 @@
 }
 
 .chart-account-head {
-  cursor: default;
+  cursor: pointer;
   border-bottom: 1px solid var(--border);
+}
+
+.chart-of-accounts-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+}
+
+@media (min-width: 960px) {
+  .chart-of-accounts-layout:has(.chart-account-detail) {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+    align-items: start;
+  }
+}
+
+.chart-account-detail {
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 10px);
+  padding: 16px;
+  background: color-mix(in srgb, var(--surface) 92%, var(--border));
+  position: sticky;
+  top: 12px;
+}
+
+.chart-account-detail-title {
+  margin: 0 0 12px;
+  font-size: 1.05rem;
+}
+
+.chart-account-detail-meta {
+  margin: 0 0 16px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 12px;
+  font-size: 13px;
+}
+
+.chart-account-detail-meta dt {
+  margin: 0;
+  color: var(--muted);
+}
+
+.chart-account-detail-meta dd {
+  margin: 0;
+}
+
+.chart-account-detail-form .checkbox-field {
+  margin: 8px 0 12px;
+}
+
+.chart-account-detail-add {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.chart-account-detail-add-title {
+  margin: 0 0 12px;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.chart-detail-row {
+  display: block;
+  width: 100%;
+  text-align: inherit;
+  padding: 4px 8px;
+  margin: 0 -8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.chart-detail-row:hover {
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.chart-detail-row.drill-row-selected {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
 .chart-subsidiary-block {
@@ -3500,6 +3634,53 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.accounting-doc-header {
+  max-width: 720px;
+}
+
+.accounting-doc-header-hint {
+  margin: -4px 0 16px;
+}
+
+.accounting-doc-header-mobile {
+  display: none;
+  margin-bottom: 12px;
+}
+
+.accounting-line-pick-message {
+  margin: 0 0 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.accounting-line-pick-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.accounting-line-pick-actions .btn {
+  justify-content: flex-start;
+  text-align: start;
+  white-space: normal;
+  height: auto;
+  min-height: 44px;
+}
+
+@media (max-width: 1440px) {
+  .accounting-doc-header,
+  .accounting-doc-header-hint {
+    display: none;
+  }
+
+  .accounting-doc-header-mobile {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
 }
 
 .accounting-doc-mobile-totals {
@@ -3812,6 +3993,42 @@
 }
 .menu-section-item input {
   flex-shrink: 0;
+}
+.portal-module-matrix {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.portal-module-block {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2, rgba(99, 102, 241, 0.04));
+  overflow: hidden;
+}
+.portal-module-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--card-bg, #fff);
+  border-bottom: 1px solid var(--border);
+}
+.portal-module-portal-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 0.9375rem;
+}
+.portal-module-expand {
+  flex-shrink: 0;
+}
+.portal-module-children {
+  margin: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
 }
 .perm-groups {
   display: flex;
@@ -4765,6 +4982,26 @@
   margin-top: 8px;
 }
 
+.customer-new-inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.search-dropdown-new {
+  color: var(--primary, #6366f1);
+  font-weight: 600;
+}
+
+.search-dropdown-divider {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border);
+  list-style: none;
+  pointer-events: none;
+}
+
 @media (max-width: 768px) {
   .purchase-history-items thead {
     display: none;
@@ -4864,4 +5101,109 @@
 .workflow-filter-today {
   align-self: flex-end;
   margin-bottom: 0.35rem;
+}
+
+/* پیگیری سفارش — اداری */
+.order-workflow-progress {
+  min-width: 180px;
+}
+
+.order-workflow-progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.order-workflow-progress-pct {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted, #64748b);
+}
+
+.order-workflow-progress-track {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--border, #e2e8f0);
+  overflow: hidden;
+}
+
+.order-workflow-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.25s ease;
+}
+
+.order-workflow-progress-detail {
+  margin: 6px 0 0;
+  line-height: 1.4;
+}
+
+.office-order-inline-purchase {
+  margin: 12px 0 20px;
+  padding: 12px 14px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: var(--radius, 10px);
+  background: var(--surface-muted, #f8fafc);
+}
+
+.office-order-inline-title {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+}
+
+.office-orders-cards-mobile {
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.office-purchase-detail .order-workflow-progress {
+  margin: 12px 0 16px;
+}
+
+@media (max-width: 1440px) {
+  .office-orders-tracking .office-orders-table-desktop {
+    display: none !important;
+  }
+
+  .office-orders-tracking .office-orders-cards-mobile {
+    display: flex !important;
+  }
+}
+
+@media (min-width: 1441px) {
+  .office-orders-tracking .office-orders-cards-mobile {
+    display: none !important;
+  }
+}
+
+.record-filter-count {
+  margin: 16px 0 12px;
+  font-size: 1.05rem;
+}
+
+.record-filter-results {
+  margin-top: 8px;
+  border-top: 1px solid var(--border, #e2e8f0);
+  padding-top: 12px;
+}
+
+.section-record-filter {
+  margin-bottom: 16px;
+}
+
+.record-filter-panel-compact .record-filter-results {
+  margin-top: 12px;
+}
+
+.ledger-col-search-range {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.office-approve-filter {
+  margin-bottom: 16px;
 }

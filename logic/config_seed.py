@@ -217,15 +217,17 @@ def seed_branches():
         return
     try:
         for spec in DEFAULT_BRANCHES:
-            Branch.objects.update_or_create(
+            branch, created = Branch.objects.update_or_create(
                 code=spec["code"],
                 defaults={
                     "label": spec["label"],
                     "color": spec.get("color", "#6366f1"),
                     "sort_order": spec.get("sort_order", 0),
-                    "is_active": True,
                 },
             )
+            if created:
+                branch.is_active = True
+                branch.save(update_fields=["is_active"])
     except OperationalError:
         return
 
@@ -235,16 +237,18 @@ def seed_lookups():
         return
     try:
         for category, code, label, sort_order, meta in DEFAULT_LOOKUPS:
-            LookupOption.objects.update_or_create(
+            opt, created = LookupOption.objects.update_or_create(
                 category=category,
                 code=code,
                 defaults={
                     "label": label,
                     "sort_order": sort_order,
-                    "is_active": True,
                     "meta": meta or {},
                 },
             )
+            if created:
+                opt.is_active = True
+                opt.save(update_fields=["is_active"])
     except OperationalError:
         return
 
@@ -254,19 +258,26 @@ def seed_menu_sections():
         return
     try:
         for sec in MENU_SECTIONS:
-            MenuSection.objects.update_or_create(
+            existing_sort = (
+                MenuSection.objects.filter(section_id=sec["id"])
+                .values_list("sort_order", flat=True)
+                .first()
+            )
+            menu_sec, created = MenuSection.objects.update_or_create(
                 section_id=sec["id"],
                 defaults={
                     "label": sec["label"],
                     "icon": sec.get("icon", "📄"),
                     "page_key": sec["page_key"],
-                    "sort_order": MenuSection.objects.filter(section_id=sec["id"]).values_list("sort_order", flat=True).first() or 0,
-                    "is_active": True,
+                    "sort_order": existing_sort if existing_sort is not None else 0,
                     "system_admin": bool(sec.get("system_admin")),
                     "menu_permission_codes": list(sec.get("menu_permissions", [])),
                     "section_permission_codes": sorted(set(sec.get("section_permissions", []))),
                 },
             )
+            if created:
+                menu_sec.is_active = True
+                menu_sec.save(update_fields=["is_active"])
         for idx, sec in enumerate(MENU_SECTIONS):
             MenuSection.objects.filter(section_id=sec["id"]).update(sort_order=idx)
         active_ids = {sec["id"] for sec in MENU_SECTIONS}
@@ -366,6 +377,8 @@ def seed_config_defaults():
 
 def permission_catalog():
     """کاتالوگ مجوزها برای UI."""
+    from logic.module_catalog import module_tree_for_config
+
     return {
         "permissions": [
             {"code": code, "label": PERMISSION_LABELS.get(code, code)}
@@ -381,4 +394,5 @@ def permission_catalog():
             }
             for g in PERMISSION_GROUPS
         ],
+        "module_tree": module_tree_for_config(),
     }

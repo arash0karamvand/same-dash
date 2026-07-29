@@ -9,6 +9,7 @@ import { Badge, Button, Card, EmptyState, Field, Modal } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmContext'
 import { formatDate } from '../utils/format'
+import { CURRENCY_UNIT, PERCENT_UNIT } from '../config/money'
 import { formatJalali, toPersianDigits } from '../utils/jalali'
 import { hasPermission } from '../utils/permissions'
 
@@ -493,7 +494,7 @@ export default function Sms() {
                     value={clubForm.default_discount_type}
                     onChange={(v) => setClubForm({ ...clubForm, default_discount_type: v })}
                     options={[
-                      { value: 'amount', label: 'مبلغ (تومان)' },
+                      { value: 'amount', label: `مبلغ (${CURRENCY_UNIT})` },
                       { value: 'percent', label: 'درصد' },
                     ]}
                   />
@@ -501,7 +502,7 @@ export default function Sms() {
                 <Field label="مقدار پیش‌فرض">
                   <MoneyInput
                     min="0"
-                    unit={clubForm.default_discount_type === 'percent' ? 'درصد' : 'تومان'}
+                    unit={clubForm.default_discount_type === 'percent' ? PERCENT_UNIT : CURRENCY_UNIT}
                     value={clubForm.default_discount_value}
                     onChange={(e) =>
                       setClubForm({ ...clubForm, default_discount_value: e.target.value })
@@ -578,7 +579,7 @@ export default function Sms() {
                   value={discountForm.discount_type}
                   onChange={(v) => setDiscountForm({ ...discountForm, discount_type: v })}
                   options={[
-                    { value: 'amount', label: 'مبلغ (تومان)' },
+                    { value: 'amount', label: `مبلغ (${CURRENCY_UNIT})` },
                     { value: 'percent', label: 'درصد' },
                   ]}
                 />
@@ -586,7 +587,7 @@ export default function Sms() {
               <Field label="مقدار تخفیف">
                 <MoneyInput
                   min="1"
-                  unit={discountForm.discount_type === 'percent' ? 'درصد' : 'تومان'}
+                  unit={discountForm.discount_type === 'percent' ? PERCENT_UNIT : CURRENCY_UNIT}
                   value={discountForm.discount_value}
                   onChange={(e) =>
                     setDiscountForm({ ...discountForm, discount_value: e.target.value })

@@ -284,7 +284,7 @@ class Sale(SoftDeleteModel):
         "نوع تخفیف", max_length=10, choices=DISCOUNT_TYPE_CHOICES, default="amount"
     )
     discount_value = models.DecimalField("مقدار تخفیف (ورودی)", default=0, **MONEY_KWARGS)
-    discount = models.DecimalField("تخفیف (تومان)", default=0, **MONEY_KWARGS)
+    discount = models.DecimalField("تخفیف (ریال)", default=0, **MONEY_KWARGS)
     final_amount = models.DecimalField("مبلغ نهایی", default=0, **MONEY_KWARGS)
     paid_amount = models.DecimalField("مبلغ پرداخت‌شده", default=0, **MONEY_KWARGS)
     sold_at = models.DateTimeField("تاریخ فروش", default=timezone.now)
@@ -695,7 +695,7 @@ class OfficeOrder(SoftDeleteModel):
         "نوع تخفیف", max_length=10, choices=Sale.DISCOUNT_TYPE_CHOICES, default="amount"
     )
     discount_value = models.DecimalField("مقدار تخفیف (ورودی)", default=0, **MONEY_KWARGS)
-    discount = models.DecimalField("تخفیف (تومان)", default=0, **MONEY_KWARGS)
+    discount = models.DecimalField("تخفیف (ریال)", default=0, **MONEY_KWARGS)
     final_amount = models.DecimalField("مبلغ نهایی", default=0, **MONEY_KWARGS)
     paid_amount = models.DecimalField("مبلغ پرداخت‌شده", default=0, **MONEY_KWARGS)
     sold_at = models.DateTimeField("تاریخ فروش", default=timezone.now)
@@ -1345,7 +1345,7 @@ class SmsClubSettings(models.Model):
 
     order_placed_template = models.TextField(
         "قالب ثبت سفارش",
-        default="{name} عزیز، سفارش شما به مبلغ {amount} تومان ثبت شد. {shop_name}",
+        default="{name} عزیز، سفارش شما به مبلغ {amount} ریال ثبت شد. {shop_name}",
     )
     welcome_template = models.TextField(
         "قالب خوش‌آمدگویی",

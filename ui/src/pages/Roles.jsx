@@ -4,7 +4,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { authApi } from '../api/client'
 import { useConfirm } from '../context/ConfirmContext'
 import { Badge, Button, Card, EmptyState, Field, Modal } from '../components/ui'
-import { sectionHasMenuAccess, toggleSectionPermissions } from '../utils/permissions'
+import {
+  moduleSelectionState,
+  portalSelectionState,
+  sectionHasMenuAccess,
+  toggleModulePermissions,
+  togglePortalPermissions,
+  toggleSectionPermissions,
+} from '../utils/permissions'
 
 const LOCKED_ROLE_SLUGS = new Set(['admin', 'ceo'])
 
@@ -82,6 +89,85 @@ function RoleTreeCard({ role, depth, onEdit, onRemove, parentLabel }) {
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+function PortalModuleMatrix({
+  portals,
+  permissions,
+  isAdminRole,
+  onTogglePortal,
+  onToggleModule,
+}) {
+  const [expanded, setExpanded] = useState(() => new Set(['office']))
+
+  const toggleExpand = (portalId) => {
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(portalId)) next.delete(portalId)
+      else next.add(portalId)
+      return next
+    })
+  }
+
+  if (!portals?.length) {
+    return <p className="muted small">ماژولی تعریف نشده.</p>
+  }
+
+  return (
+    <div className="portal-module-matrix">
+      {portals.map((portal) => {
+        const portalState = portalSelectionState(permissions, portal)
+        const isOpen = expanded.has(portal.id)
+        return (
+          <div key={portal.id} className="portal-module-block">
+            <div className="portal-module-head">
+              <label className="portal-module-portal-label">
+                <input
+                  type="checkbox"
+                  checked={isAdminRole || portalState === 'all'}
+                  ref={(el) => {
+                    if (el) el.indeterminate = !isAdminRole && portalState === 'partial'
+                  }}
+                  disabled={isAdminRole}
+                  onChange={() => onTogglePortal(portal, portalState !== 'all')}
+                />
+                <span>{portal.icon} {portal.label}</span>
+              </label>
+              <button
+                type="button"
+                className="link small portal-module-expand"
+                onClick={() => toggleExpand(portal.id)}
+                aria-expanded={isOpen}
+              >
+                {isOpen ? 'بستن زیربخش‌ها' : 'نمایش زیربخش‌ها'}
+              </button>
+            </div>
+            {isOpen && (
+              <div className="portal-module-children menu-section-grid">
+                {(portal.modules || []).map((mod) => {
+                  const modState = moduleSelectionState(permissions, mod)
+                  return (
+                    <label key={mod.id} className="menu-section-item">
+                      <input
+                        type="checkbox"
+                        checked={isAdminRole || modState === 'all'}
+                        ref={(el) => {
+                          if (el) el.indeterminate = !isAdminRole && modState === 'partial'
+                        }}
+                        disabled={isAdminRole}
+                        onChange={() => onToggleModule(mod, modState !== 'all')}
+                      />
+                      <span>{mod.icon} {mod.label}</span>
+                    </label>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -217,17 +303,35 @@ export default function Roles() {
       ? matrix.assignable_permission_groups
       : matrix.permission_groups)
 
-  const menuSections = isAdminRole
+  const portalModules = isAdminRole
+    ? (matrix.portal_modules?.length ? matrix.portal_modules : matrix.menu_sections)
+    : (matrix.assignable_portal_modules?.length
+      ? matrix.assignable_portal_modules
+      : (matrix.portal_modules?.length ? matrix.portal_modules : matrix.assignable_menu_sections))
+
+  const legacyMenuSections = isAdminRole
     ? matrix.menu_sections
-    : (matrix.assignable_menu_sections?.length
-      ? matrix.assignable_menu_sections
-      : matrix.menu_sections)
+    : matrix.assignable_menu_sections
 
   const toggleMenuSection = (section) => {
     const enabled = sectionHasMenuAccess({ permissions: form.permissions }, section)
     setForm((f) => ({
       ...f,
       permissions: toggleSectionPermissions(f.permissions, section, !enabled),
+    }))
+  }
+
+  const togglePortal = (portal, enable) => {
+    setForm((f) => ({
+      ...f,
+      permissions: togglePortalPermissions(f.permissions, portal, enable),
+    }))
+  }
+
+  const toggleModule = (mod, enable) => {
+    setForm((f) => ({
+      ...f,
+      permissions: toggleModulePermissions(f.permissions, mod, enable),
     }))
   }
 
@@ -243,6 +347,8 @@ export default function Roles() {
     </label>
   )
 
+  const usePortalTree = portalModules?.length && portalModules[0].modules
+
   if (loading) return <div className="page"><p className="muted">در حال بارگذاری…</p></div>
 
   return (
@@ -252,7 +358,7 @@ export default function Roles() {
 
       <Card title="سلسله‌مراتب سازمانی" actions={<Button onClick={openCreate}>+ نقش سفارشی</Button>}>
         <p className="muted roles-intro">
-          پنل در چهار بخش «مدیران»، «فروشگاه»، «اداری» (شامل حسابداری) و «کارخانه» سازماندهی شده است.
+          پورتال‌ها و زیربخش‌ها را انتخاب کنید؛ مثلاً با تیک «اداری» همه مجوزهای مرتبط با آن بخش فعال می‌شود.
         </p>
 
         {matrix.roles.length === 0 ? (
@@ -319,13 +425,21 @@ export default function Roles() {
           </label>
 
           <div className="menu-section-matrix">
-            <h4>منوی پنل</h4>
+            <h4>ماژول‌های پنل</h4>
             <p className="muted small" style={{ marginBottom: 12 }}>
-              بخش‌های بدون تیک در منو نمایش داده نمی‌شوند و دسترسی API همان بخش قطع می‌شود.
+              با انتخاب یک پورتال (مثل اداری)، همه زیربخش‌ها و مجوزهای API مربوطه یکجا فعال می‌شوند.
             </p>
-            {menuSections?.length ? (
+            {usePortalTree ? (
+              <PortalModuleMatrix
+                portals={portalModules}
+                permissions={form.permissions}
+                isAdminRole={isAdminRole}
+                onTogglePortal={togglePortal}
+                onToggleModule={toggleModule}
+              />
+            ) : legacyMenuSections?.length ? (
               <div className="menu-section-grid">
-                {menuSections.map((section) => {
+                {legacyMenuSections.map((section) => {
                   const checked = isAdminRole || sectionHasMenuAccess({ permissions: form.permissions }, section)
                   return (
                     <label key={section.id} className="menu-section-item">

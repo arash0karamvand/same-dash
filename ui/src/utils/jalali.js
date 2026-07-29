@@ -148,3 +148,12 @@ export function jalaliMonthToGregorian(jy, jm) {
 export function currentJalali() {
   return isoToJalali(todayIso())
 }
+
+/** همان روز/ماه در سال میلادی جدید (مثلاً +۳ سال برای سقف تاریخ تحویل). */
+export function addYearsToIso(iso, years) {
+  const [y, m, d] = gregorianFromIso(iso)
+  const ny = y + years
+  const dim = new Date(ny, m, 0).getDate()
+  const nd = Math.min(d, dim)
+  return `${ny}-${pad2(m)}-${pad2(nd)}`
+}

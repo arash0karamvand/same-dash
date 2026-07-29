@@ -19,7 +19,7 @@ const EMPTY_BRANCH = { code: '', label: '', color: '#6366f1', sort_order: 0 }
 const EMPTY_LOOKUP = { category: 'payment_method', code: '', label: '', sort_order: 0 }
 
 export default function Settings() {
-  const { refresh: refreshConfig } = useConfig()
+  const { refresh: refreshConfig, moduleTree } = useConfig()
   const [tab, setTab] = useState('branches')
   const [branches, setBranches] = useState([])
   const [lookups, setLookups] = useState([])
@@ -91,7 +91,20 @@ export default function Settings() {
 
   const toggleLookup = async (item) => {
     try {
-      await configApi.updateLookup(item.id, { is_active: !item.is_active })
+      const next = !item.is_active
+      await configApi.updateLookup(item.id, { is_active: next })
+      setInfo(next ? 'گزینه فعال شد.' : 'گزینه غیرفعال شد.')
+      await afterSave()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const toggleBranch = async (item) => {
+    try {
+      const next = !item.is_active
+      await configApi.updateBranch(item.id, { is_active: next })
+      setInfo(next ? 'شعبه فعال شد.' : 'شعبه غیرفعال شد.')
       await afterSave()
     } catch (err) {
       setError(err.message)
@@ -99,8 +112,15 @@ export default function Settings() {
   }
 
   const toggleMenu = async (item) => {
+    const sectionPk = item.pk ?? item.id
+    if (!sectionPk) {
+      setError('شناسه بخش منو نامعتبر است.')
+      return
+    }
     try {
-      await configApi.updateMenuSection(item.pk, { is_active: !item.is_active })
+      const next = item.is_active === false
+      await configApi.updateMenuSection(sectionPk, { is_active: next })
+      setInfo(next ? 'بخش منو نمایش داده می‌شود.' : 'بخش منو مخفی شد.')
       await afterSave()
     } catch (err) {
       setError(err.message)
@@ -153,6 +173,10 @@ export default function Settings() {
                           <td>{b.is_active ? 'فعال' : 'غیرفعال'}</td>
                           <td>
                             <button type="button" className="link" onClick={() => { setSelectedBranch(b); setBranchForm({ code: b.code, label: b.label, color: b.color, sort_order: b.sort_order }); setBranchModal(true) }}>ویرایش</button>
+                            {' · '}
+                            <button type="button" className="link" onClick={() => toggleBranch(b)}>
+                              {b.is_active ? 'غیرفعال' : 'فعال'}
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -191,6 +215,27 @@ export default function Settings() {
             )}
 
             {tab === 'menu' && (
+              <>
+                {moduleTree?.length > 0 && (
+                  <div className="portal-module-matrix" style={{ marginBottom: 16 }}>
+                    <p className="muted small">کاتالوگ ماژول (پورتال و زیربخش) — برای نقش‌ها از همین ساختار استفاده می‌شود.</p>
+                    {moduleTree.map((portal) => (
+                      <div key={portal.id} className="portal-module-block">
+                        <div className="portal-module-head">
+                          <span className="portal-module-portal-label">{portal.icon} {portal.label}</span>
+                          <span className="muted small">{(portal.modules || []).length} زیربخش</span>
+                        </div>
+                        <div className="portal-module-children menu-section-grid">
+                          {(portal.modules || []).map((mod) => (
+                            <div key={mod.id} className="menu-section-item">
+                              <span>{mod.icon} {mod.label}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               <table className="table">
                 <thead><tr><th>بخش</th><th>صفحه</th><th>ترتیب</th><th>عملیات</th></tr></thead>
                 <tbody>
@@ -208,6 +253,7 @@ export default function Settings() {
                   ))}
                 </tbody>
               </table>
+              </>
             )}
           </>
         )}

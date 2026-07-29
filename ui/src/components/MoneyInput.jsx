@@ -1,11 +1,12 @@
 // ورودی مبلغ با نمایش حروف فارسی زیر فیلد
 
+import { CURRENCY_UNIT } from '../config/money'
 import { getAmountWords } from '../utils/format'
 
 export default function MoneyInput({
   value,
   onChange,
-  unit = 'تومان',
+  unit = CURRENCY_UNIT,
   className = 'ltr',
   min,
   max,
@@ -40,7 +41,7 @@ export default function MoneyInput({
   )
 }
 
-export function MoneyWordsHint({ value, unit = 'تومان', className = 'money-input-hint' }) {
+export function MoneyWordsHint({ value, unit = CURRENCY_UNIT, className = 'money-input-hint' }) {
   const words = getAmountWords(value, unit)
   if (!words) return null
   return <span className={className} aria-live="polite">{words}</span>

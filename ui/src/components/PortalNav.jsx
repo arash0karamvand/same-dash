@@ -1,14 +1,17 @@
-// زیرمنوی پورتال فعال
+// زیرمنوی پورتال فعال — از همان درخت منوی Config (نه فقط portals.js ثابت)
 
-import { getPortal } from '../config/portals'
 import { canSeeNavItem } from '../utils/permissions'
 
-export default function PortalNav({ user, portalId, currentPage, onNavigate }) {
-  const portal = getPortal(portalId)
+function findPortal(portals, portalId) {
+  return (portals || []).find((p) => p.id === portalId)
+}
+
+export default function PortalNav({ user, portals, portalId, currentPage, onNavigate }) {
+  const portal = findPortal(portals, portalId)
   if (!portal) return null
 
   const items = (portal.children || []).filter((c) => canSeeNavItem(user, c))
-  if (items.length <= 1) return null
+  if (!items.length) return null
 
   return (
     <nav className="portal-subnav" aria-label={`زیرمنوی ${portal.label}`}>

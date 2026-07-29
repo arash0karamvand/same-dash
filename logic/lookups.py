@@ -67,3 +67,51 @@ def lookup_to_dict(opt):
 
 def invalidate_lookup_cache():
     _invalidate_cache()
+
+
+def list_lookups(category=""):
+    qs = LookupOption.objects.order_by("category", "sort_order", "label")
+    if category:
+        qs = qs.filter(category=category)
+    return list(qs)
+
+
+def create_lookup(*, category, code, label, sort_order=0, is_active=True, meta=None):
+    category = (category or "").strip()
+    code = (code or "").strip()
+    label = (label or "").strip()
+    if not category or not code or not label:
+        raise ValueError("دسته، کد و عنوان الزامی است.")
+    if LookupOption.objects.filter(category=category, code=code).exists():
+        raise ValueError("این گزینه قبلاً ثبت شده.")
+    opt = LookupOption.objects.create(
+        category=category,
+        code=code,
+        label=label,
+        sort_order=int(sort_order or 0),
+        is_active=bool(is_active),
+        meta=meta or {},
+    )
+    invalidate_lookup_cache()
+    return opt
+
+
+def update_lookup(opt, data):
+    if "label" in data:
+        opt.label = (data.get("label") or opt.label).strip()
+    if "sort_order" in data:
+        opt.sort_order = int(data.get("sort_order") or opt.sort_order)
+    if "is_active" in data:
+        opt.is_active = bool(data.get("is_active"))
+    if "meta" in data:
+        opt.meta = data.get("meta") or {}
+    opt.save()
+    invalidate_lookup_cache()
+    return opt
+
+
+def deactivate_lookup(opt):
+    opt.is_active = False
+    opt.save(update_fields=["is_active"])
+    invalidate_lookup_cache()
+    return opt
