@@ -25,10 +25,11 @@ function buildInitialFilters(lockModel, defaultModel, initialFilters = {}) {
   return merged
 }
 
-function buildQueryParams(filters) {
+function buildQueryParams(filters, limit = 30) {
   if (!filters.model) return null
   const params = {
     model: filters.model,
+    limit,
     date_from: filters.date_from || undefined,
     date_to: filters.date_to || undefined,
     name: filters.name.trim() || undefined,
@@ -52,6 +53,10 @@ export default function RecordFilterPanel({
   liveSearch = true,
   debounceMs = 450,
   compact = false,
+  unified = false,
+  resultLimit = 30,
+  hideResults = false,
+  onFiltersChange,
   initialFilters = {},
   className = '',
 }) {
@@ -146,9 +151,15 @@ export default function RecordFilterPanel({
 
   const runFilter = useCallback(async (e) => {
     e?.preventDefault?.()
-    const params = buildQueryParams(filters)
+    const params = buildQueryParams(filters, resultLimit)
     if (!params) {
       setError('مدل را انتخاب کنید.')
+      return
+    }
+    if (onFiltersChange) onFiltersChange(filters, params)
+    if (hideResults) {
+      setApplied({ total: 0, results: [], hidden: true })
+      setError('')
       return
     }
     const seq = ++requestSeq.current
@@ -165,7 +176,7 @@ export default function RecordFilterPanel({
     } finally {
       if (seq === requestSeq.current) setLoading(false)
     }
-  }, [filters])
+  }, [filters, hideResults, onFiltersChange, resultLimit])
 
   const resetFilters = () => {
     setFilters(buildInitialFilters(lockModel, defaultModel, parsedInitialFilters))
@@ -186,12 +197,7 @@ export default function RecordFilterPanel({
   const showModelSelect = !lockModel && modelOptions.length !== 1
 
   return (
-    <div className={`record-filter-panel ${compact ? 'record-filter-panel-compact' : ''} ${className}`.trim()}>
-      {!compact && (
-        <p className="muted">
-          همه شرط‌ها با هم اعمال می‌شوند: بازه تاریخ، نوع، نام و بازه مبلغ. جستجو به‌صورت خودکار به‌روز می‌شود.
-        </p>
-      )}
+    <div className={`record-filter-panel ${compact ? 'record-filter-panel-compact' : ''} ${unified ? 'record-filter-panel-unified' : ''} ${className}`.trim()}>
       {error && <div className="alert-error">{error}</div>}
       {metaLoading ? (
         <p className="muted loading">در حال بارگذاری…</p>
@@ -296,11 +302,14 @@ export default function RecordFilterPanel({
         </form>
       )}
 
-      {applied && (
+      {applied && !hideResults && (
         <div className="record-filter-results">
           <p className="record-filter-count">
             <strong>{toPersianDigits(applied.total)}</strong> رکورد
             {applied.model_label ? ` — ${applied.model_label}` : ''}
+            {applied.total > applied.results.length && (
+              <> — نمایش {toPersianDigits(applied.results.length)} اخیر</>
+            )}
             {loading ? ' …' : ''}
           </p>
           {applied.total === 0 ? (
@@ -334,12 +343,10 @@ export default function RecordFilterPanel({
               </table>
             </div>
           )}
-          {applied.total > applied.results.length && (
-            <p className="muted small">
-              نمایش {toPersianDigits(applied.results.length)} از {toPersianDigits(applied.total)} — برای دقت بیشتر فیلتر را محدودتر کنید.
-            </p>
-          )}
         </div>
+      )}
+      {hideResults && filters.model && loading && (
+        <p className="record-filter-count muted small">در حال جستجو…</p>
       )}
     </div>
   )

@@ -116,6 +116,7 @@ export function buildInvoiceHtml(sale) {
       margin-bottom: 18px;
     }
     .brand { font-size: 24px; font-weight: 700; color: #6366f1; margin-bottom: 4px; }
+    .brand-logo-img { max-height: 70px; max-width: 220px; object-fit: contain; margin-bottom: 6px; display: block; }
     .meta { text-align: left; font-size: 13px; color: #475569; line-height: 1.8; }
     .grid {
       display: grid;
@@ -200,7 +201,8 @@ export function buildInvoiceHtml(sale) {
 <body>
   <div class="header">
     <div>
-      <div class="brand">سام اکسون</div>
+      <img class="brand-logo-img" src="/company_logo.png" alt="سام اکسون" onerror="this.style.display='none';this.nextElementSibling.style.display='block'" />
+      <div class="brand" style="display:none">سام اکسون</div>
       <div class="muted">فاکتور فروش — شماره: <strong>${escapeHtml(invoiceNo)}</strong></div>
     </div>
     <div class="meta">

@@ -2,6 +2,6 @@
 
 import Sales from './Sales'
 
-export default function Shop() {
-  return <Sales portal="shop" />
+export default function Shop({ page = 'shop' }) {
+  return <Sales portal="shop" pageKey={page} />
 }

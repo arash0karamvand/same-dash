@@ -2,10 +2,10 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { officeApi } from '../api/client'
-import RecordFilterPanel from '../components/RecordFilterPanel'
-import { OFFICE_ORDERS_FILTER } from '../config/recordFilterSections'
+import OfficeSectionCard from '../components/OfficeSectionCard'
+import { OFFICE_ORDERS_FILTER, recordFiltersToQueryString } from '../config/recordFilterSections'
 import { useConfig } from '../context/ConfigContext'
-import { Badge, Button, Card, EmptyState, Modal } from '../components/ui'
+import { Badge, Button, EmptyState, Modal } from '../components/ui'
 import { formatDate, formatMoney } from '../utils/format'
 import { toPersianDigits } from '../utils/jalali'
 
@@ -81,6 +81,12 @@ export default function OfficeOrders() {
   const [expandedId, setExpandedId] = useState(null)
   const [detailOrder, setDetailOrder] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
+  const [listFilterQuery, setListFilterQuery] = useState(() =>
+    recordFiltersToQueryString(
+      { model: 'office_order', ...OFFICE_ORDERS_FILTER.initialFilters },
+      { limit: OFFICE_ORDERS_FILTER.resultLimit, extra: { scope: 'tracking' } },
+    ),
+  )
 
   const stageColor = (stage) => {
     const fromDb = stageChoices.find((o) => o.value === stage)?.meta?.color
@@ -91,7 +97,7 @@ export default function OfficeOrders() {
     setLoading(true)
     setError('')
     try {
-      const data = await officeApi.list('scope=tracking')
+      const data = await officeApi.list(listFilterQuery)
       setOrders(data.results || [])
     } catch (e) {
       setError(e.message)
@@ -99,7 +105,7 @@ export default function OfficeOrders() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [listFilterQuery])
 
   useEffect(() => {
     load()
@@ -127,27 +133,20 @@ export default function OfficeOrders() {
 
   return (
     <div className="page office-orders-tracking">
-      <div className="page-head">
-        <div>
-          <h1>سفارش‌ها</h1>
-          <p className="muted">وضعیت هر سفارش، محل فعلی در گردش کار و جزئیات مقدار خرید</p>
-        </div>
-        <Button type="button" variant="ghost" onClick={load}>بروزرسانی</Button>
-      </div>
-
+      <OfficeSectionCard
+        section={OFFICE_ORDERS_FILTER}
+        actions={<Button type="button" variant="ghost" onClick={load}>بروزرسانی</Button>}
+        onFiltersChange={(filters) => {
+          setListFilterQuery(
+            recordFiltersToQueryString(filters, {
+              limit: OFFICE_ORDERS_FILTER.resultLimit,
+              extra: { scope: 'tracking' },
+            }),
+          )
+        }}
+      >
       {error && <div className="alert alert-error">{error}</div>}
 
-      <Card title={OFFICE_ORDERS_FILTER.title} className="section-record-filter">
-        <RecordFilterPanel
-          scope={OFFICE_ORDERS_FILTER.scope}
-          lockModel={OFFICE_ORDERS_FILTER.lockModel}
-          compact
-          liveSearch
-          initialFilters={OFFICE_ORDERS_FILTER.initialFilters}
-        />
-      </Card>
-
-      <Card>
         {loading ? (
           <p className="muted loading">در حال بارگذاری…</p>
         ) : orders.length === 0 ? (
@@ -280,7 +279,7 @@ export default function OfficeOrders() {
             </div>
           </>
         )}
-      </Card>
+      </OfficeSectionCard>
 
       <Modal
         title={detailOrder ? `جزئیات خرید — ${detailOrder.customer_name}` : 'جزئیات خرید'}

@@ -10,8 +10,18 @@ from backend.models import Sale, SaleInstallment
 from logic.sales import normalize_payment_method, record_payment
 
 
+def _parse_optional_date(value):
+    if not value:
+        return None
+    if hasattr(value, "isoformat"):
+        return value
+    return django_parse_date(str(value))
+
+
 @transaction.atomic
 def create_installments(sale, items):
+    if len(items) > 16:
+        raise ValueError("حداکثر ۱۶ چک مطابق فرم اکسل قابل ثبت است.")
     created = []
     for item in items:
         due_date = item["due_date"]
@@ -27,6 +37,8 @@ def create_installments(sale, items):
             check_number=(item.get("check_number") or "").strip(),
             bank_name=(item.get("bank_name") or "").strip(),
             notes=(item.get("notes") or "").strip(),
+            received_at=_parse_optional_date(item.get("received_at")),
+            receiver_name=(item.get("receiver_name") or "").strip(),
         )
         created.append(inst)
     return created
@@ -38,6 +50,14 @@ def pay_installment(installment, recorded_by=None):
         raise ValueError("این قسط قبلاً پرداخت شده است.")
     if installment.status == "cancelled":
         raise ValueError("قسط لغوشده قابل پرداخت نیست.")
+
+    if (
+        installment.payment_method == "check"
+        and installment.accounting_registered_at
+    ):
+        from logic.check_accounting import clear_registered_check
+
+        return clear_registered_check(installment, recorded_by=recorded_by)
 
     record_payment(
         installment.sale,
@@ -77,7 +97,12 @@ def checks_report(year=None, month=None, date_from=None, date_to=None):
 
 def get_installment(pk):
     try:
-        return SaleInstallment.objects.select_related("sale", "sale__customer").get(pk=pk)
+        return SaleInstallment.objects.select_related(
+            "sale",
+            "sale__customer",
+            "registration_account",
+            "deposit_account",
+        ).get(pk=pk)
     except SaleInstallment.DoesNotExist:
         return None
 
@@ -106,7 +131,12 @@ def apply_installment_filters(qs, params, parse_date_fn):
 
 
 def list_installments(params, parse_date_fn):
-    qs = SaleInstallment.objects.select_related("sale", "sale__customer").all()
+    qs = SaleInstallment.objects.select_related(
+        "sale",
+        "sale__customer",
+        "registration_account",
+        "deposit_account",
+    ).all()
     return apply_installment_filters(qs, params, parse_date_fn)
 
 
@@ -126,7 +156,7 @@ def create_installment(data):
     except (InvalidOperation, TypeError) as exc:
         raise ValueError("Invalid amount") from exc
 
-    payment_method = normalize_payment_method(data.get("payment_method") or "cash")
+    payment_method = normalize_payment_method(data.get("payment_method") or "check")
     return SaleInstallment.objects.create(
         sale=sale,
         amount=amount,
@@ -135,18 +165,22 @@ def create_installment(data):
         check_number=(data.get("check_number") or "").strip(),
         bank_name=(data.get("bank_name") or "").strip(),
         notes=(data.get("notes") or "").strip(),
+        received_at=_parse_optional_date(data.get("received_at")),
+        receiver_name=(data.get("receiver_name") or "").strip(),
     )
 
 
 def update_installment(inst, data):
     if inst.status == "paid":
         raise ValueError("Cannot edit paid installment")
-    for field in ("check_number", "bank_name", "notes", "payment_method"):
+    for field in ("check_number", "bank_name", "notes", "payment_method", "receiver_name"):
         if field in data:
             value = (data.get(field) or "").strip()
             if field == "payment_method":
                 value = normalize_payment_method(value)
             setattr(inst, field, value)
+    if "received_at" in data:
+        inst.received_at = _parse_optional_date(data.get("received_at"))
     if "amount" in data:
         inst.amount = Decimal(str(data["amount"]))
     if "due_date" in data:

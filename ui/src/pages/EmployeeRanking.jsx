@@ -7,6 +7,8 @@ import PersianMonthPicker from '../components/PersianMonthPicker'
 import Select from '../components/Select'
 import { Badge, Button, Card, EmptyState, Field, FilterBar } from '../components/ui'
 import { useConfig } from '../context/ConfigContext'
+import { PAGE_GUIDE_DEFAULTS } from '../config/pageGuideDefaults'
+import { useRegisterPageGuide } from '../context/PageGuideContext'
 import { formatMoney } from '../utils/format'
 import { currentJalali, isoToJalali, todayIso, toPersianDigits } from '../utils/jalali'
 
@@ -40,6 +42,7 @@ function buildParams(period, dayIso, monthYear, monthValue, yearValue, branch, j
 }
 
 export default function EmployeeRanking() {
+  useRegisterPageGuide('ranking', PAGE_GUIDE_DEFAULTS.ranking)
   const { branchOptions } = useConfig()
   const branchFilterOptions = [{ value: '', label: 'همه شعب' }, ...branchOptions]
   const jNow = currentJalali()
@@ -92,9 +95,6 @@ export default function EmployeeRanking() {
   return (
     <div className="page employee-ranking-page">
       <Card title="رده‌بندی کارکنان">
-        <p className="muted small" style={{ marginBottom: 16 }}>
-          شعبه ثابت کارمند، شعب حضور در بازه، و فروش به تفکیک هر شعبه نمایش داده می‌شود.
-        </p>
         <FilterBar>
           <Field label="بازه">
             <Select value={period} onChange={setPeriod} options={PERIOD_OPTIONS} />

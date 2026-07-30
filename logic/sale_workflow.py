@@ -76,7 +76,20 @@ def approve_sale_branch(sale, user):
 
 
 @transaction.atomic
-def approve_office_order(office_order, user):
+def approve_office_order(
+    office_order,
+    user,
+    *,
+    check_registration_account_id=None,
+    check_deposit_account_id=None,
+    save_check_accounts_as_default=False,
+):
+    from logic.check_accounting import (
+        _resolve_account,
+        register_sale_checks,
+        sale_has_pending_checks,
+        save_user_accounting_preference,
+    )
     from logic.order_queues import create_factory_order_from_office
     from logic.sales import _apply_purchase_to_customer, _create_sale_accounting, balance_due
 
@@ -87,22 +100,41 @@ def approve_office_order(office_order, user):
     if sale.order_status == sale.ORDER_STATUS_CANCELLED:
         raise ValueError("سفارش لغو شده است.")
 
+    has_checks = sale_has_pending_checks(sale)
+    if has_checks and not check_registration_account_id:
+        raise ValueError("برای سفارش چکی، انتخاب حساب ثبت چک الزامی است.")
+
     create_factory_order_from_office(office_order, user)
 
     outstanding = balance_due(sale)
-    if not sale.accounting_entries.exists():
-        _create_sale_accounting(sale, outstanding)
-        if sale.paid_amount > 0:
-            _apply_purchase_to_customer(
-                sale.customer,
-                sale.paid_amount,
-                sale.sold_at,
-                reason="تایید اداری — مبلغ پرداخت‌شده",
-                user=user,
-            )
-    from logic.accounting import approve_sale_accounting_entries
+    from backend.models import Sale
 
-    approve_sale_accounting_entries(sale)
+    if sale.accounting_mode == Sale.ACCOUNTING_MODE_AUTOMATIC:
+        if not sale.accounting_entries.exists():
+            _create_sale_accounting(sale, outstanding)
+        from logic.accounting import approve_sale_accounting_entries
+
+        approve_sale_accounting_entries(sale)
+
+    if has_checks:
+        reg_account = _resolve_account(check_registration_account_id, "collection_at_bank")
+        dep_account = _resolve_account(check_deposit_account_id, "bank")
+        register_sale_checks(sale, reg_account, dep_account, user=user)
+        save_user_accounting_preference(
+            user,
+            registration_account_id=reg_account.id,
+            deposit_account_id=dep_account.id,
+            save_as_default=save_check_accounts_as_default,
+        )
+
+    if sale.paid_amount > 0:
+        _apply_purchase_to_customer(
+            sale.customer,
+            sale.paid_amount,
+            sale.sold_at,
+            reason="تایید اداری — مبلغ پرداخت‌شده",
+            user=user,
+        )
     return office_order
 
 
@@ -393,6 +425,8 @@ def reject_office_order(office_order, user, reason=""):
     sale = office_order.source_sale
     if sale.order_status == sale.ORDER_STATUS_CANCELLED:
         raise ValueError("سفارش لغو شده است.")
+
+    sale.accounting_entries.filter(is_approved=False).delete()
 
     for inst in office_order.installments.filter(is_deleted=False):
         inst.soft_delete()

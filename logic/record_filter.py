@@ -15,6 +15,9 @@ from backend.models import (
     Sale,
 )
 
+DEFAULT_RECORD_FILTER_LIMIT = 30
+MAX_RECORD_FILTER_LIMIT = 500
+
 
 def _parse_amount(value):
     if value is None or value == "":
@@ -161,6 +164,81 @@ def _apply_amount_range(qs, field_name, amount_min, amount_max):
     return qs
 
 
+def apply_office_order_search_filters(qs, params):
+    """فیلتر مشترک صف اداری و API جستجو."""
+    date_from = parse_date(params.get("date_from"))
+    date_to = parse_date(params.get("date_to"))
+    type_field = (params.get("type_field") or "").strip()
+    type_value = (params.get("type") or params.get("type_value") or "").strip()
+    name = (params.get("name") or params.get("search") or "").strip()
+    amount_min = _parse_amount(params.get("amount_min"))
+    amount_max = _parse_amount(params.get("amount_max"))
+
+    qs = _apply_date_range(qs, "sold_at", date_from, date_to)
+    if type_field and type_value:
+        qs = qs.filter(**{type_field: type_value})
+    if name:
+        qs = qs.filter(
+            Q(customer__full_name__icontains=name)
+            | Q(invoice_number__icontains=name)
+            | Q(customer__phone__icontains=name)
+        )
+    qs = _apply_amount_range(qs, "final_amount", amount_min, amount_max)
+    return qs
+
+
+def apply_sale_search_filters(qs, params):
+    date_from = parse_date(params.get("date_from"))
+    date_to = parse_date(params.get("date_to"))
+    type_field = (params.get("type_field") or "").strip()
+    type_value = (params.get("type") or params.get("type_value") or "").strip()
+    name = (params.get("name") or params.get("search") or "").strip()
+    amount_min = _parse_amount(params.get("amount_min"))
+    amount_max = _parse_amount(params.get("amount_max"))
+    amount_field = (params.get("amount_field") or "").strip()
+
+    qs = _apply_date_range(qs, "sold_at", date_from, date_to)
+    if type_field and type_value:
+        qs = qs.filter(**{type_field: type_value})
+    if name:
+        qs = qs.filter(
+            Q(customer__full_name__icontains=name)
+            | Q(invoice_number__icontains=name)
+            | Q(customer__phone__icontains=name)
+        )
+    amt_field = amount_field if amount_field in ("final_amount", "paid_amount", "amount") else "final_amount"
+    qs = _apply_amount_range(qs, amt_field, amount_min, amount_max)
+    return qs
+
+
+def apply_customer_search_filters(qs, params):
+    date_from = parse_date(params.get("date_from"))
+    date_to = parse_date(params.get("date_to"))
+    name = (params.get("name") or params.get("search") or "").strip()
+    amount_min = _parse_amount(params.get("amount_min"))
+    amount_max = _parse_amount(params.get("amount_max"))
+    amount_field = (params.get("amount_field") or "").strip()
+
+    qs = _apply_date_range(qs, "joined_at", date_from, date_to)
+    if name:
+        qs = qs.filter(
+            Q(full_name__icontains=name)
+            | Q(phone__icontains=name)
+            | Q(membership_code__icontains=name)
+        )
+    amt_field = amount_field if amount_field in ("total_purchases", "wallet_balance") else "total_purchases"
+    qs = _apply_amount_range(qs, amt_field, amount_min, amount_max)
+    return qs
+
+
+def _parse_limit(params):
+    try:
+        limit = int(params.get("limit") or DEFAULT_RECORD_FILTER_LIMIT)
+    except (TypeError, ValueError):
+        limit = DEFAULT_RECORD_FILTER_LIMIT
+    return min(max(1, limit), MAX_RECORD_FILTER_LIMIT)
+
+
 def _serialize_sale(row):
     return {
         "id": row.id,
@@ -233,51 +311,25 @@ def query_filtered_records(params, *, include_executive_logs=False):
     amount_field = (params.get("amount_field") or "").strip()
 
     offset = max(0, int(params.get("offset") or 0))
-    limit = min(max(1, int(params.get("limit") or 100)), 500)
+    limit = _parse_limit(params)
 
     if model_key == "sale":
         qs = Sale.objects.filter(is_deleted=False).select_related("customer")
-        qs = _apply_date_range(qs, "sold_at", date_from, date_to)
-        if type_field and type_value:
-            qs = qs.filter(**{type_field: type_value})
-        if name:
-            qs = qs.filter(
-                Q(customer__full_name__icontains=name)
-                | Q(invoice_number__icontains=name)
-                | Q(customer__phone__icontains=name)
-            )
-        amt_field = amount_field if amount_field in ("final_amount", "paid_amount", "amount") else "final_amount"
-        qs = _apply_amount_range(qs, amt_field, amount_min, amount_max)
+        qs = apply_sale_search_filters(qs, params)
         total = qs.count()
         rows = qs.order_by("-sold_at")[offset : offset + limit]
         results = [_serialize_sale(r) for r in rows]
 
     elif model_key == "customer":
         qs = Customer.objects.filter(is_deleted=False).select_related("level")
-        qs = _apply_date_range(qs, "joined_at", date_from, date_to)
-        if name:
-            qs = qs.filter(
-                Q(full_name__icontains=name)
-                | Q(phone__icontains=name)
-                | Q(membership_code__icontains=name)
-            )
-        amt_field = amount_field if amount_field in ("total_purchases", "wallet_balance") else "total_purchases"
-        qs = _apply_amount_range(qs, amt_field, amount_min, amount_max)
+        qs = apply_customer_search_filters(qs, params)
         total = qs.count()
         rows = qs.order_by("-joined_at")[offset : offset + limit]
         results = [_serialize_customer(r) for r in rows]
 
     elif model_key == "office_order":
         qs = OfficeOrder.objects.filter(is_deleted=False).select_related("customer")
-        qs = _apply_date_range(qs, "sold_at", date_from, date_to)
-        if type_field and type_value:
-            qs = qs.filter(**{type_field: type_value})
-        if name:
-            qs = qs.filter(
-                Q(customer__full_name__icontains=name)
-                | Q(invoice_number__icontains=name)
-            )
-        qs = _apply_amount_range(qs, "final_amount", amount_min, amount_max)
+        qs = apply_office_order_search_filters(qs, params)
         total = qs.count()
         rows = qs.order_by("-created_at")[offset : offset + limit]
         results = [_serialize_office_order(r) for r in rows]

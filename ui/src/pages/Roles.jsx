@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { authApi } from '../api/client'
 import { useConfirm } from '../context/ConfirmContext'
 import { Badge, Button, Card, EmptyState, Field, Modal } from '../components/ui'
+import Select from '../components/Select'
 import {
   moduleSelectionState,
   portalSelectionState,
@@ -394,16 +395,16 @@ export default function Roles() {
             </Field>
           )}
           <Field label="نقش والد">
-            <select
+            <Select
               value={form.parent_slug}
-              onChange={(e) => setForm({ ...form, parent_slug: e.target.value })}
+              onChange={(v) => setForm({ ...form, parent_slug: v })}
               disabled={lockedRole}
-            >
-              <option value="">— بدون والد (سطح بالا) —</option>
-              {parentOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
+              options={[
+                { value: '', label: '— بدون والد (سطح بالا) —' },
+                ...parentOptions,
+              ]}
+              placeholder="— بدون والد (سطح بالا) —"
+            />
           </Field>
           <Field label="ترتیب نمایش">
             <input

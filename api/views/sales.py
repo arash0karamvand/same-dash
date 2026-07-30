@@ -162,6 +162,7 @@ def sale_list(request):
             seller=seller,
             order_kind=order_kind,
             delivery_date=delivery_date,
+            accounting_mode=data.get("accounting_mode"),
         )
     except ValueError as exc:
         return fail(str(exc), status=400)
@@ -181,6 +182,46 @@ def sale_list(request):
     )
 
     return success(sale_to_dict(sale, include_installments=True, include_lines=True), status=201)
+
+
+@api_view("GET")
+def sale_export_excel(request, pk):
+    sale = get_sale(pk)
+    if sale is None:
+        return fail("Sale not found", status=404)
+    if not can_view_sale(request.user, sale):
+        return fail("Permission denied", status=403)
+
+    try:
+        from django.http import HttpResponse
+
+        from logic.sales_excel_export import (
+            content_disposition_attachment,
+            sale_excel_bytes,
+            sale_excel_download_name,
+            sale_excel_filename,
+        )
+
+        payload = sale_to_dict(
+            sale, include_installments=True, include_lines=True, user=request.user
+        )
+        content = sale_excel_bytes(payload)
+        ascii_name = sale_excel_filename(payload)
+        display_name = sale_excel_download_name(payload)
+        response = HttpResponse(
+            content,
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+        response["Content-Disposition"] = content_disposition_attachment(
+            display_name, fallback_ascii=ascii_name
+        )
+        return response
+    except ImportError:
+        return fail("کتابخانه openpyxl نصب نیست. دستور: pip install openpyxl", status=500)
+    except FileNotFoundError as exc:
+        return fail(str(exc), status=500)
+    except Exception as exc:
+        return fail(f"خطا در ساخت فایل اکسل: {exc}", status=500)
 
 
 @api_view("GET", "PUT", "DELETE")

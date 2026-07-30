@@ -3,6 +3,7 @@
 from decimal import Decimal
 
 from logic.accounting import create_accounting_entry, generate_document_code, next_document_number
+from logic.ledger import FACTORY_LEDGER, OFFICE_LEDGER
 
 
 def _material_label(material):
@@ -20,15 +21,15 @@ def material_inventory_value(material):
 
 
 def post_material_inventory_receipt(material):
-    """ثبت ورود موجودی متریال پس از تایید اداری — بدهکار مواد اولیه / بستانکار پرداختنی."""
+    """ثبت ورود موجودی متریال پس از تایید اداری — بدهکار مواد اولیه / بستانکار پرداختنی (دفتر اداری)."""
     if getattr(material, "inventory_accounted_at", None):
         return
     value = material_inventory_value(material)
     if value <= 0:
         return
 
-    doc = generate_document_code()
-    doc_num = next_document_number()
+    doc = generate_document_code(ledger=OFFICE_LEDGER)
+    doc_num = next_document_number(ledger=OFFICE_LEDGER)
     label = _material_label(material)
     stock = material.stock
     unit_cost = int(material.unit_cost or 0)
@@ -42,6 +43,7 @@ def post_material_inventory_receipt(material):
         description=f"ورود موجودی متریال — {detail}",
         document_code=doc,
         document_number=doc_num,
+        ledger=OFFICE_LEDGER,
     )
     create_accounting_entry(
         entry_type="adjustment",
@@ -51,6 +53,7 @@ def post_material_inventory_receipt(material):
         description=f"بابت خرید/ثبت متریال — {detail}",
         document_code=doc,
         document_number=doc_num,
+        ledger=OFFICE_LEDGER,
     )
 
     from django.utils import timezone
@@ -60,16 +63,15 @@ def post_material_inventory_receipt(material):
 
 
 def post_factory_material_consumption(factory_order, requirements):
-    """انتقال بهای متریال مصرف‌شده — بدهکار WIP / بستانکار مواد اولیه."""
-    sale = getattr(factory_order, "source_sale", None)
+    """انتقال بهای متریال مصرف‌شده — بدهکار WIP / بستانکار مواد اولیه (دفتر کارخانه)."""
     invoice = factory_order.invoice_number or factory_order.pk
 
     for item in requirements:
         cost = int(item.get("line_cost") or 0)
         if cost <= 0:
             continue
-        doc = generate_document_code()
-        doc_num = next_document_number()
+        doc = generate_document_code(ledger=FACTORY_LEDGER)
+        doc_num = next_document_number(ledger=FACTORY_LEDGER)
         mat = item.get("material") or {}
         name = mat.get("name") or "متریال"
         qty = item.get("required_quantity")
@@ -83,10 +85,11 @@ def post_factory_material_consumption(factory_order, requirements):
             debit=cost,
             amount=cost,
             description=f"مصرف متریال (WIP) — سفارش {invoice} — {detail}",
-            sale=sale,
+            factory_order=factory_order,
             document_code=doc,
             document_number=doc_num,
             is_approved=True,
+            ledger=FACTORY_LEDGER,
         )
         create_accounting_entry(
             entry_type="adjustment",
@@ -94,24 +97,24 @@ def post_factory_material_consumption(factory_order, requirements):
             credit=cost,
             amount=cost,
             description=f"کسر موجودی مواد اولیه — سفارش {invoice} — {detail}",
-            sale=sale,
+            factory_order=factory_order,
             document_code=doc,
             document_number=doc_num,
             is_approved=True,
+            ledger=FACTORY_LEDGER,
         )
 
 
 def reverse_factory_material_consumption(factory_order, requirements):
-    """برگشت سند مصرف — برای بازگشت سفارش از آماده باربری به ساخت."""
-    sale = getattr(factory_order, "source_sale", None)
+    """برگشت سند مصرف — برای بازگشت سفارش از آماده باربری به ساخت (دفتر کارخانه)."""
     invoice = factory_order.invoice_number or factory_order.pk
 
     for item in requirements:
         cost = int(item.get("line_cost") or 0)
         if cost <= 0:
             continue
-        doc = generate_document_code()
-        doc_num = next_document_number()
+        doc = generate_document_code(ledger=FACTORY_LEDGER)
+        doc_num = next_document_number(ledger=FACTORY_LEDGER)
         mat = item.get("material") or {}
         name = mat.get("name") or "متریال"
         detail = f"{name} — {item.get('required_quantity')} {item.get('unit') or ''}"
@@ -122,10 +125,11 @@ def reverse_factory_material_consumption(factory_order, requirements):
             debit=cost,
             amount=cost,
             description=f"برگشت موجودی مواد اولیه — سفارش {invoice} — {detail}",
-            sale=sale,
+            factory_order=factory_order,
             document_code=doc,
             document_number=doc_num,
             is_approved=True,
+            ledger=FACTORY_LEDGER,
         )
         create_accounting_entry(
             entry_type="adjustment",
@@ -133,8 +137,9 @@ def reverse_factory_material_consumption(factory_order, requirements):
             credit=cost,
             amount=cost,
             description=f"برگشت مصرف WIP — سفارش {invoice} — {detail}",
-            sale=sale,
+            factory_order=factory_order,
             document_code=doc,
             document_number=doc_num,
             is_approved=True,
+            ledger=FACTORY_LEDGER,
         )

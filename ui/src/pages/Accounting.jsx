@@ -2,6 +2,18 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { accountingApi } from '../api/client'
+import AccountDetailPanel from '../components/AccountDetailPanel'
+import LedgerSidePanelContent from '../components/LedgerSidePanelContent'
+import {
+  DEFAULT_DRILL_PANEL_LAYOUT,
+  LedgerDrillCard,
+  LedgerDrillStage,
+  LedgerSidePanel,
+  LedgerStageDivider,
+  LedgerTrialColumn,
+  LedgerWorkspace,
+  rowSelectionLabel,
+} from '../components/LedgerDrillPanels'
 import MoneyInput from '../components/MoneyInput'
 import TrialBalanceFilterPanel, {
   applyTrialBalanceFilter,
@@ -9,7 +21,7 @@ import TrialBalanceFilterPanel, {
   sumTrialBalanceTotals,
   trialBalanceFilterActive,
 } from '../components/TrialBalanceFilterPanel'
-import { TRIAL_BALANCE_FILTERS } from '../config/recordFilterSections'
+import { TRIAL_BALANCE_FILTERS, LEDGER_DRILL_FILTER } from '../config/recordFilterSections'
 import Select from '../components/Select'
 import PersianDateInput from '../components/PersianDateInput'
 import { Button, Card, EmptyState, Field, FilterBar, Modal } from '../components/ui'
@@ -23,6 +35,23 @@ import {
 import { PAGE_GUIDE_DEFAULTS } from '../config/pageGuideDefaults'
 import { useAuth } from '../context/AuthContext'
 import { useRegisterPageGuide } from '../context/PageGuideContext'
+import { usePersistedState } from '../hooks/usePersistedState'
+import {
+  buildAccountEditForm,
+  clampHeight,
+  clampWidth,
+  computeDrillColumnWidths,
+  DEFAULT_DRILL_ROW_HEIGHT,
+  DEFAULT_DRILL_WEIGHTS,
+  DRILL_HEIGHT_LIMITS,
+  migrateDrillWidthsToWeights,
+  resizeDrillPanelPair,
+  drillRowToAccountRecord,
+  drillSelectionToDocLine,
+  EMPTY_CHART_CHILD,
+  saveAccountChild,
+  saveAccountEdit,
+} from '../utils/accountHelpers'
 import { formatDate, formatNumber, formatRial } from '../utils/format'
 import { hasPermission } from '../utils/permissions'
 
@@ -35,8 +64,6 @@ const EMPTY_DOC_LINE = {
   debit: '',
   credit: '',
 }
-
-const EMPTY_CHART_CHILD = { code: '', name: '' }
 
 function buildAccountOptions(groups) {
   const opts = []
@@ -210,152 +237,6 @@ function TrialBalanceTable({ rows, totals, loading, onRowClick, selectedKey, get
   )
 }
 
-const DEFAULT_DRILL_PANEL_LAYOUT = {
-  general: 'normal',
-  subsidiary: 'normal',
-  detailed: 'normal',
-  ledger: 'normal',
-}
-
-function DrillPanelShell({
-  panelId,
-  layoutMode = 'normal',
-  onToggleMinimize,
-  onToggleMaximize,
-  title,
-  hint,
-  children,
-  className = '',
-}) {
-  const minimized = layoutMode === 'minimized'
-  const maximized = layoutMode === 'maximized'
-
-  return (
-    <section
-      className={[
-        'ledger-drill-panel',
-        className,
-        minimized ? 'ledger-drill-panel-minimized' : '',
-        maximized ? 'ledger-drill-panel-maximized' : '',
-      ].filter(Boolean).join(' ')}
-    >
-      <header className="ledger-drill-panel-head">
-        <div className="ledger-drill-panel-title">
-          <h3>{title}</h3>
-          {hint && !minimized && <p className="muted small">{hint}</p>}
-        </div>
-        <div className="ledger-drill-panel-actions">
-          <button
-            type="button"
-            className="ledger-drill-panel-btn"
-            onClick={() => onToggleMinimize(panelId)}
-            title={minimized ? 'باز کردن پنجره' : 'جمع کردن پنجره'}
-            aria-label={minimized ? 'باز کردن پنجره' : 'جمع کردن پنجره'}
-          >
-            {minimized ? '+' : '−'}
-          </button>
-          <button
-            type="button"
-            className="ledger-drill-panel-btn"
-            onClick={() => onToggleMaximize(panelId)}
-            title={maximized ? 'بازگشت به نمای عادی' : 'بزرگ‌نمایی پنجره'}
-            aria-label={maximized ? 'بازگشت به نمای عادی' : 'بزرگ‌نمایی پنجره'}
-          >
-            {maximized ? '⤡' : '⛶'}
-          </button>
-        </div>
-      </header>
-      {!minimized && <div className="ledger-drill-panel-body">{children}</div>}
-    </section>
-  )
-}
-
-function DrillTrialPanel({
-  panelId,
-  layoutMode,
-  onToggleMinimize,
-  onToggleMaximize,
-  title,
-  hint,
-  rows,
-  loading,
-  selectedId,
-  idKey,
-  onSelect,
-}) {
-  return (
-    <DrillPanelShell
-      panelId={panelId}
-      layoutMode={layoutMode}
-      onToggleMinimize={onToggleMinimize}
-      onToggleMaximize={onToggleMaximize}
-      title={title}
-      hint={hint}
-    >
-      {loading ? (
-        <div className="loading">در حال بارگذاری…</div>
-      ) : !rows.length ? (
-        <EmptyState text="حسابی یافت نشد." />
-      ) : (
-        <>
-          <div className="table-wrap ledger-drill-table-wrap accounting-drill-table-desktop">
-            <table className="table ledger-drill-table">
-              <thead>
-                <tr>
-                  <th>{TERMS.accountCode}</th>
-                  <th>{TERMS.accountTitle}</th>
-                  <th>{TERMS.balance}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => {
-                  const rowId = row[idKey]
-                  const selected = selectedId != null && String(selectedId) === String(rowId)
-                  const balance = row.balance_debit || row.balance_credit
-                  const side = row.balance_debit ? TERMS.debit : TERMS.credit
-                  return (
-                    <tr
-                      key={rowId || row.account_code}
-                      className={`entry-row-clickable${selected ? ' drill-row-selected' : ''}`}
-                      onClick={() => onSelect(row)}
-                    >
-                      <td><strong>{row.account_code}</strong></td>
-                      <td className="text-cell">{row.account_name}</td>
-                      <td>{balance ? `${renderAmount(balance)} (${side})` : '—'}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-          <div className="accounting-drill-cards-mobile">
-            {rows.map((row) => {
-              const rowId = row[idKey]
-              const selected = selectedId != null && String(selectedId) === String(rowId)
-              const balance = row.balance_debit || row.balance_credit
-              const side = row.balance_debit ? TERMS.debit : TERMS.credit
-              return (
-                <button
-                  key={rowId || row.account_code}
-                  type="button"
-                  className={`accounting-drill-card${selected ? ' drill-row-selected' : ''}`}
-                  onClick={() => onSelect(row)}
-                >
-                  <strong>{row.account_code}</strong>
-                  <span className="accounting-drill-card-name">{row.account_name}</span>
-                  <span className="accounting-drill-card-balance">
-                    {balance ? `${renderAmount(balance)} (${side})` : '—'}
-                  </span>
-                </button>
-              )
-            })}
-          </div>
-        </>
-      )}
-    </DrillPanelShell>
-  )
-}
-
 function parseLedgerMoney(value) {
   if (value === '' || value == null) return null
   const n = Number(String(value).replace(/,/g, ''))
@@ -410,7 +291,7 @@ const EMPTY_LEDGER_COL_FILTERS = {
   balance_max: '',
 }
 
-function DetailLedgerTable({ ledger, loading }) {
+function DetailLedgerTable({ ledger, loading, compact = false, onEditEntry, onDeleteEntry, canApprove }) {
   const [colFilters, setColFilters] = useState(EMPTY_LEDGER_COL_FILTERS)
 
   useEffect(() => {
@@ -432,15 +313,29 @@ function DetailLedgerTable({ ledger, loading }) {
 
   return (
     <>
-      <div className="detail-ledger-header">
-        <p><span className="muted">{TERMS.generalAccount}:</span> {ledger.header.general_name}</p>
-        <p><span className="muted">{TERMS.subsidiaryAccount}:</span> {ledger.header.subsidiary_name}</p>
-        <p><span className="muted">{TERMS.detailedAccount}:</span> {ledger.header.detailed_code} — {ledger.header.detailed_name}</p>
-        <p className="record-filter-count muted">
-          <strong>{formatNumber(shown)}</strong> از {formatNumber(total)} ردیف
-        </p>
+      <div className={`detail-ledger-header${compact ? ' detail-ledger-header-compact' : ''}`}>
+        {compact ? (
+          <p className="detail-ledger-header-inline">
+            <span className="muted">{TERMS.generalAccount}:</span> {ledger.header.general_name}
+            {' · '}
+            <span className="muted">{TERMS.subsidiaryAccount}:</span> {ledger.header.subsidiary_name}
+            {' · '}
+            <span className="muted">{TERMS.detailedAccount}:</span> {ledger.header.detailed_code} — {ledger.header.detailed_name}
+            {' · '}
+            <strong>{formatNumber(shown)}</strong> از {formatNumber(total)} ردیف
+          </p>
+        ) : (
+          <>
+            <p><span className="muted">{TERMS.generalAccount}:</span> {ledger.header.general_name}</p>
+            <p><span className="muted">{TERMS.subsidiaryAccount}:</span> {ledger.header.subsidiary_name}</p>
+            <p><span className="muted">{TERMS.detailedAccount}:</span> {ledger.header.detailed_code} — {ledger.header.detailed_name}</p>
+            <p className="record-filter-count muted">
+              <strong>{formatNumber(shown)}</strong> از {formatNumber(total)} ردیف
+            </p>
+          </>
+        )}
       </div>
-      <div className="table-wrap accounting-ledger-wrap accounting-table-desktop">
+      <div className={`table-wrap accounting-ledger-wrap accounting-table-desktop${compact ? ' ledger-table-compact' : ''}`}>
         <table className="table accounting-ledger-table">
           <thead>
             <tr>
@@ -452,6 +347,7 @@ function DetailLedgerTable({ ledger, loading }) {
               <th>{TERMS.credit}</th>
               <th>{TERMS.balance}</th>
               <th>{TERMS.side}</th>
+              {(onEditEntry || onDeleteEntry) && <th>عملیات</th>}
             </tr>
             <tr className="ledger-search-row">
               <th>
@@ -485,12 +381,13 @@ function DetailLedgerTable({ ledger, loading }) {
                 </div>
               </th>
               <th />
+              {(onEditEntry || onDeleteEntry) && <th />}
             </tr>
           </thead>
           <tbody>
             {filteredLines.length === 0 ? (
               <tr>
-                <td colSpan={8} className="muted text-center">ردیفی با این فیلتر یافت نشد.</td>
+                <td colSpan={(onEditEntry || onDeleteEntry) ? 9 : 8} className="muted text-center">ردیفی با این فیلتر یافت نشد.</td>
               </tr>
             ) : (
               filteredLines.map((line, idx) => (
@@ -498,11 +395,35 @@ function DetailLedgerTable({ ledger, loading }) {
                   <td>{formatDate(line.entry_date)}</td>
                   <td>{line.document_number ? formatNumber(line.document_number) : '—'}</td>
                   <td>{line.attach_code || '—'}</td>
-                  <td className="text-cell">{line.description}</td>
+                  <td className="text-cell">
+                    {line.description}
+                    {line.transferred_to_office_at && (
+                      <span className="accounting-transfer-badge" title={line.office_document_code || ''}>
+                        {' '}منتقل‌شده به اداری
+                      </span>
+                    )}
+                  </td>
                   <td>{renderAmount(line.debit)}</td>
                   <td>{renderAmount(line.credit)}</td>
                   <td>{formatRial(line.balance)}</td>
                   <td>{line.balance_side_label}</td>
+                  {(onEditEntry || onDeleteEntry) && (
+                    <td className="ledger-entry-actions">
+                      {!line.is_opening && line.id && (
+                        <>
+                          {line.can_edit && onEditEntry && (
+                            <button type="button" className="link" onClick={() => onEditEntry(line)} title="ویرایش">✎</button>
+                          )}
+                          {line.can_delete && onDeleteEntry && (
+                            <button type="button" className="link danger" onClick={() => onDeleteEntry(line)} title="حذف">×</button>
+                          )}
+                          {canApprove && line.is_approved === false && (
+                            <span className="muted small" title="تایید نشده">○</span>
+                          )}
+                        </>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))
             )}
@@ -523,6 +444,11 @@ function DetailLedgerTable({ ledger, loading }) {
               <span className="accounting-entry-amount">{line.balance_side_label}</span>
             </div>
             {line.description && <p className="accounting-entry-desc">{line.description}</p>}
+            {line.transferred_to_office_at && (
+              <p className="accounting-transfer-badge muted small">
+                منتقل‌شده به اداری{line.office_document_code ? ` (${line.office_document_code})` : ''}
+              </p>
+            )}
             <div className="m-card-grid">
               <div><span className="muted">{TERMS.debit}</span><strong>{renderAmount(line.debit)}</strong></div>
               <div><span className="muted">{TERMS.credit}</span><strong>{renderAmount(line.credit)}</strong></div>
@@ -535,12 +461,33 @@ function DetailLedgerTable({ ledger, loading }) {
   )
 }
 
-export default function Accounting() {
+export default function Accounting({
+  api = accountingApi,
+  pageTitle = 'حسابداری',
+  createPermission = 'create_accounting',
+  editPermission = 'edit_accounting',
+  deletePermission = 'delete_accounting',
+  approvePermission = 'approve_accounting',
+  guidePrefix = 'accounting',
+  ledgerKind = 'office',
+  transferPermission = '',
+}) {
   const { user } = useAuth()
-  const canCreate = hasPermission(user, 'create_accounting')
-  const canEditChart = hasPermission(user, 'edit_accounting') || canCreate
+  const canCreate = hasPermission(user, createPermission)
+  const canEdit = hasPermission(user, editPermission) || canCreate
+  const canDelete = hasPermission(user, deletePermission)
+  const canApprove = hasPermission(user, approvePermission)
+  const canEditChart = canEdit
+  const canTransfer = Boolean(transferPermission) && hasPermission(user, transferPermission)
+  const visibleTabs = useMemo(() => {
+    const tabs = [...ACCOUNTING_TABS]
+    if (canTransfer) {
+      tabs.push({ id: 'transfer-to-office', label: 'انتقال به اداری' })
+    }
+    return tabs
+  }, [canTransfer])
   const [activeTab, setActiveTab] = useState('trial-balance')
-  const accountingGuideKey = `accounting__${activeTab}`
+  const accountingGuideKey = `${guidePrefix}__${activeTab}`
   useRegisterPageGuide(accountingGuideKey, PAGE_GUIDE_DEFAULTS[accountingGuideKey] || '')
   const [classFilter, setClassFilter] = useState('')
   const [trialDateFrom, setTrialDateFrom] = useState('')
@@ -555,6 +502,7 @@ export default function Accounting() {
   const [trialTotals, setTrialTotals] = useState({})
   const [trialLoading, setTrialLoading] = useState(false)
   const [trialTextFilter, setTrialTextFilter] = useState(EMPTY_TRIAL_BALANCE_FILTER)
+  const [ledgerTextFilter, setLedgerTextFilter] = useState(EMPTY_TRIAL_BALANCE_FILTER)
 
   const [detailLedger, setDetailLedger] = useState(null)
   const [detailLoading, setDetailLoading] = useState(false)
@@ -569,28 +517,84 @@ export default function Accounting() {
   const [ledgerGeneralRows, setLedgerGeneralRows] = useState([])
   const [ledgerGeneralLoading, setLedgerGeneralLoading] = useState(false)
   const [drillPanelLayout, setDrillPanelLayout] = useState(DEFAULT_DRILL_PANEL_LAYOUT)
+  const storageKey = `accounting-ledger-panels-${ledgerKind}`
+  const [drillWeights, setDrillWeights] = usePersistedState(`${storageKey}-weights`, DEFAULT_DRILL_WEIGHTS)
+  const [drillRowHeight, setDrillRowHeight] = usePersistedState(`${storageKey}-row-height`, DEFAULT_DRILL_ROW_HEIGHT)
+  const [ledgerAccountPanelOpen, setLedgerAccountPanelOpen] = useState(false)
+  const [ledgerAccountPanelMinimized, setLedgerAccountPanelMinimized] = useState(false)
+  const [ledgerAccountPanelWidth, setLedgerAccountPanelWidth] = usePersistedState(`${storageKey}-account-panel-w`, 340)
+  const [ledgerAccountSelected, setLedgerAccountSelected] = useState(null)
+  const [ledgerAccountEditForm, setLedgerAccountEditForm] = useState(null)
+  const [ledgerAccountChildForm, setLedgerAccountChildForm] = useState(EMPTY_CHART_CHILD)
+  const [ledgerAccountEditSaving, setLedgerAccountEditSaving] = useState(false)
+  const [ledgerAccountChildSaving, setLedgerAccountChildSaving] = useState(false)
+  const [ledgerAccountPanelTab, setLedgerAccountPanelTab] = useState('edit')
+  const [activeLedgerCard, setActiveLedgerCard] = useState('general')
+  const [ledgerSidePanelTab, setLedgerSidePanelTab] = useState('account')
+  const [quickDocForm, setQuickDocForm] = useState({
+    description: '',
+    entry_date: '',
+    attach_code: '',
+    debit: '',
+    credit: '',
+    account_id: '',
+    subsidiary_id: '',
+    detailed_id: '',
+  })
+  const [quickDocSaving, setQuickDocSaving] = useState(false)
+  const [quickDocError, setQuickDocError] = useState('')
+  const [quickDocSuccess, setQuickDocSuccess] = useState('')
+  const ledgerAccountPanelRef = useRef(null)
+  const ledgerLayoutRef = useRef(null)
+  const drillStageWrapRef = useRef(null)
+  const drillStageRef = useRef(null)
+  const [drillStageWidth, setDrillStageWidth] = useState(0)
+  const [drillStageMaxHeight, setDrillStageMaxHeight] = useState(DRILL_HEIGHT_LIMITS.ledger.max)
+  const drillSavedSizesRef = useRef({ weights: {}, rowHeight: null })
+  const ledgerQueryRef = useRef('')
 
-  const [docHeader, setDocHeader] = useState({ attach_code: '', description: '' })
+  const [docHeader, setDocHeader] = useState({ attach_code: '', description: '', entry_date: '', document_number: '' })
   const [docLines, setDocLines] = useState([{ ...EMPTY_DOC_LINE }, { ...EMPTY_DOC_LINE }])
   const [docSaving, setDocSaving] = useState(false)
   const [docError, setDocError] = useState('')
   const [docSuccess, setDocSuccess] = useState('')
+  const [docEditCode, setDocEditCode] = useState('')
+  const [docCanEdit, setDocCanEdit] = useState(true)
+  const [docView, setDocView] = useState('list')
 
-  const [chartModal, setChartModal] = useState(null)
-  const [chartForm, setChartForm] = useState({ code: '', name: '', account_id: '', subsidiary_id: '' })
-  const [chartSaving, setChartSaving] = useState(false)
+  const [docListRows, setDocListRows] = useState([])
+  const [docListTotal, setDocListTotal] = useState(0)
+  const [docListOffset, setDocListOffset] = useState(0)
+  const [docListLoading, setDocListLoading] = useState(false)
+  const [docListSearch, setDocListSearch] = useState('')
+  const [docListApproved, setDocListApproved] = useState('')
+  const DOC_LIST_LIMIT = 50
+
+  const [entryEdit, setEntryEdit] = useState(null)
+  const [entryEditSaving, setEntryEditSaving] = useState(false)
+
   const [chartSearch, setChartSearch] = useState('')
   const [chartSelected, setChartSelected] = useState(null)
   const [chartEditForm, setChartEditForm] = useState(null)
   const [chartEditSaving, setChartEditSaving] = useState(false)
   const [chartChildForm, setChartChildForm] = useState(EMPTY_CHART_CHILD)
   const [chartChildSaving, setChartChildSaving] = useState(false)
+  const [chartPanelTab, setChartPanelTab] = useState('edit')
+  const chartDetailRef = useRef(null)
 
   const [lineAccountPick, setLineAccountPick] = useState(null)
   const lineAccountPickRef = useRef(null)
 
   const [importFile, setImportFile] = useState(null)
   const [importDryRun, setImportDryRun] = useState(false)
+
+  const [transferDocCode, setTransferDocCode] = useState('')
+  const [transferDocNumber, setTransferDocNumber] = useState('')
+  const [transferPreview, setTransferPreview] = useState(null)
+  const [transferLoading, setTransferLoading] = useState(false)
+  const [transferSaving, setTransferSaving] = useState(false)
+  const [transferError, setTransferError] = useState('')
+  const [transferSuccess, setTransferSuccess] = useState('')
   const [importLoading, setImportLoading] = useState(false)
   const [importResult, setImportResult] = useState(null)
   const [importError, setImportError] = useState('')
@@ -775,12 +779,14 @@ export default function Accounting() {
     }))
   }
 
-  const resolveLinePosting = async (line, rowNumber) => {
+  const resolveLinePosting = async (line, rowNumber, options = {}) => {
+    const description = options.description ?? docHeader.description
+    const attachCode = options.attach_code ?? docHeader.attach_code
     const base = {
-      description: docHeader.description.trim(),
+      description: description.trim(),
       debit: Number(line.debit) || 0,
       credit: Number(line.credit) || 0,
-      attach_code: docHeader.attach_code.trim(),
+      attach_code: attachCode.trim(),
     }
 
     const det = line.detailed_id ? details.find((d) => String(d.id) === String(line.detailed_id)) : null
@@ -844,9 +850,9 @@ export default function Accounting() {
   const loadAccounts = useCallback(async () => {
     try {
       const [accData, subData, detData] = await Promise.all([
-        accountingApi.accounts(),
-        accountingApi.subsidiaries(),
-        accountingApi.details(),
+        api.accounts(),
+        api.subsidiaries(),
+        api.details(),
       ])
       setAccountGroups(accData.accounts || [])
       setSubsidiaries(subData.results || [])
@@ -854,14 +860,14 @@ export default function Accounting() {
     } catch {
       /* optional */
     }
-  }, [])
+  }, [api])
 
   const loadTrialBalance = useCallback(async () => {
     const level = TRIAL_BALANCE_LEVEL[activeTab]
     if (!level) return
     setTrialLoading(true)
     try {
-      const data = await accountingApi.trialBalance({
+      const data = await api.trialBalance({
         level,
         accountClass: classFilter,
         ...dateRange,
@@ -879,7 +885,7 @@ export default function Accounting() {
   const loadLedgerGeneral = useCallback(async () => {
     setLedgerGeneralLoading(true)
     try {
-      const data = await accountingApi.trialBalance({
+      const data = await api.trialBalance({
         level: 'general',
         accountClass: classFilter,
         ...dateRange,
@@ -896,7 +902,7 @@ export default function Accounting() {
   const fetchDetailLedger = useCallback(async (target) => {
     setDetailLoading(true)
     try {
-      const data = await accountingApi.detailLedger({
+      const data = await api.detailLedger({
         detailedId: target.detailedId,
         subsidiaryId: target.subsidiaryId,
         accountId: target.accountId,
@@ -919,7 +925,7 @@ export default function Accounting() {
     }
     setDrillSubsidiaryLoading(true)
     try {
-      const data = await accountingApi.trialBalance({
+      const data = await api.trialBalance({
         level: 'subsidiary',
         accountId,
         accountClass: classFilter,
@@ -945,7 +951,7 @@ export default function Accounting() {
     }
     setDrillDetailedLoading(true)
     try {
-      const data = await accountingApi.trialBalance({
+      const data = await api.trialBalance({
         level: 'detailed',
         subsidiaryId,
         accountClass: classFilter,
@@ -964,10 +970,143 @@ export default function Accounting() {
     }
   }, [classFilter, dateRange])
 
+  const loadDocumentList = useCallback(async (offset = 0) => {
+    setDocListLoading(true)
+    try {
+      const data = await api.listDocuments({
+        search: docListSearch.trim() || undefined,
+        approved: docListApproved || undefined,
+        accountClass: classFilter || undefined,
+        dateFrom: trialDateFrom || undefined,
+        dateTo: trialDateTo || undefined,
+        offset,
+        limit: DOC_LIST_LIMIT,
+      })
+      setDocListRows(data.results || [])
+      setDocListTotal(data.total || 0)
+      setDocListOffset(data.offset || 0)
+      setError('')
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setDocListLoading(false)
+    }
+  }, [api, docListSearch, docListApproved, classFilter, trialDateFrom, trialDateTo])
+
   const refreshAll = useCallback(async () => {
     await Promise.all([loadAccounts(), loadTrialBalance()])
     if (activeTab === 'ledger') await loadLedgerGeneral()
-  }, [loadAccounts, loadTrialBalance, loadLedgerGeneral, activeTab])
+    if (activeTab === 'documents' && docView === 'list') await loadDocumentList(docListOffset)
+  }, [loadAccounts, loadTrialBalance, loadLedgerGeneral, loadDocumentList, activeTab, docView, docListOffset])
+
+  const resetDocForm = () => {
+    setDocEditCode('')
+    setDocCanEdit(true)
+    setDocHeader({ attach_code: '', description: '', entry_date: '', document_number: '' })
+    setDocLines([{ ...EMPTY_DOC_LINE }, { ...EMPTY_DOC_LINE }])
+    setDocError('')
+    setDocSuccess('')
+  }
+
+  const openNewDocument = () => {
+    resetDocForm()
+    setDocView('form')
+  }
+
+  const openEditDocument = async (docCode) => {
+    setDocError('')
+    setDocSuccess('')
+    setDocSaving(true)
+    try {
+      const doc = await api.getDocument(docCode)
+      setDocEditCode(doc.document_code)
+      setDocCanEdit(doc.can_edit !== false)
+      setDocHeader({
+        attach_code: doc.attach_code || '',
+        description: doc.description || '',
+        entry_date: doc.entry_date ? doc.entry_date.slice(0, 10) : '',
+        document_number: doc.document_number != null ? String(doc.document_number) : '',
+      })
+      setDocLines(
+        doc.lines.map((line) => ({
+          id: line.id,
+          account_id: line.account_id ? String(line.account_id) : '',
+          subsidiary_id: line.subsidiary_id ? String(line.subsidiary_id) : '',
+          detailed_id: line.detailed_id ? String(line.detailed_id) : '',
+          debit: line.debit ? String(line.debit) : '',
+          credit: line.credit ? String(line.credit) : '',
+          description: line.description || '',
+        })),
+      )
+      setDocView('form')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setDocSaving(false)
+    }
+  }
+
+  const deleteDocumentByCode = async (docCode) => {
+    if (!window.confirm(`سند ${docCode} حذف شود؟`)) return
+    try {
+      await api.deleteDocument(docCode)
+      await loadDocumentList(docListOffset)
+      await refreshAll()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const toggleDocumentApproval = async (doc, approve) => {
+    try {
+      await api.approveDocument(doc.document_code, approve)
+      await loadDocumentList(docListOffset)
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const refreshDetailLedger = useCallback(async () => {
+    if (drillDetailed?.detailed_id) {
+      await fetchDetailLedger({ detailedId: String(drillDetailed.detailed_id) })
+    } else if (drillSubsidiary?.subsidiary_id) {
+      await fetchDetailLedger({ subsidiaryId: String(drillSubsidiary.subsidiary_id) })
+    } else if (drillGeneral?.account_id) {
+      await fetchDetailLedger({ accountId: String(drillGeneral.account_id) })
+    }
+  }, [drillDetailed, drillSubsidiary, drillGeneral, fetchDetailLedger])
+
+  const deleteLedgerEntry = async (line) => {
+    if (!line.id || !window.confirm('این ردیف حذف شود؟')) return
+    try {
+      await api.remove(line.id)
+      await refreshDetailLedger()
+      await refreshAll()
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
+  const saveEntryEdit = async (e) => {
+    e.preventDefault()
+    if (!entryEdit?.id) return
+    setEntryEditSaving(true)
+    try {
+      await api.update(entryEdit.id, {
+        description: entryEdit.description,
+        debit: Number(entryEdit.debit) || 0,
+        credit: Number(entryEdit.credit) || 0,
+        entry_date: entryEdit.entry_date || undefined,
+      })
+      setEntryEdit(null)
+      await refreshDetailLedger()
+      await refreshAll()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setEntryEditSaving(false)
+    }
+  }
 
   useEffect(() => { loadAccounts() }, [loadAccounts])
   useEffect(() => { loadTrialBalance() }, [loadTrialBalance])
@@ -977,7 +1116,69 @@ export default function Accounting() {
     }
   }, [activeTab, loadLedgerGeneral])
 
+  useEffect(() => {
+    if (activeTab !== 'ledger') return
+
+    const queryKey = `${classFilter}|${trialDateFrom}|${trialDateTo}`
+    if (ledgerQueryRef.current === queryKey) return
+    ledgerQueryRef.current = queryKey
+
+    if (drillGeneral?.account_id) {
+      loadDrillSubsidiary(drillGeneral.account_id)
+    }
+    if (drillSubsidiary?.subsidiary_id) {
+      loadDrillDetailed(drillSubsidiary.subsidiary_id)
+    }
+    if (drillDetailed?.detailed_id) {
+      fetchDetailLedger({ detailedId: String(drillDetailed.detailed_id) })
+    } else if (drillSubsidiary?.subsidiary_id) {
+      fetchDetailLedger({ subsidiaryId: String(drillSubsidiary.subsidiary_id) })
+    } else if (drillGeneral?.account_id) {
+      fetchDetailLedger({ accountId: String(drillGeneral.account_id) })
+    }
+  }, [
+    activeTab,
+    classFilter,
+    trialDateFrom,
+    trialDateTo,
+    drillGeneral,
+    drillSubsidiary,
+    drillDetailed,
+    loadDrillSubsidiary,
+    loadDrillDetailed,
+    fetchDetailLedger,
+  ])
+
+  useEffect(() => {
+    try {
+      const weightsKey = `${storageKey}-weights`
+      const widthsKey = `${storageKey}-widths`
+      if (!localStorage.getItem(weightsKey) && localStorage.getItem(widthsKey)) {
+        const migrated = migrateDrillWidthsToWeights(JSON.parse(localStorage.getItem(widthsKey)))
+        setDrillWeights(migrated)
+        localStorage.removeItem(widthsKey)
+      }
+      const rowHeightKey = `${storageKey}-row-height`
+      const heightsKey = `${storageKey}-heights`
+      if (!localStorage.getItem(rowHeightKey) && localStorage.getItem(heightsKey)) {
+        const heights = JSON.parse(localStorage.getItem(heightsKey))
+        const nextHeight = heights?.general ?? heights?.ledger ?? DEFAULT_DRILL_ROW_HEIGHT
+        setDrillRowHeight(nextHeight)
+        localStorage.removeItem(heightsKey)
+      }
+    } catch {
+      /* ignore migration errors */
+    }
+  }, [storageKey, setDrillWeights, setDrillRowHeight])
+
+  useEffect(() => {
+    if (activeTab === 'documents' && docView === 'list') {
+      loadDocumentList(0)
+    }
+  }, [activeTab, docView, docListSearch, docListApproved, classFilter, trialDateFrom, trialDateTo])
+
   const selectDrillGeneral = useCallback(async (row) => {
+    setActiveLedgerCard('general')
     setDrillGeneral(row)
     setDrillSubsidiary(null)
     setDrillDetailed(null)
@@ -990,6 +1191,7 @@ export default function Accounting() {
   }, [loadDrillSubsidiary, fetchDetailLedger])
 
   const selectDrillSubsidiary = useCallback(async (row) => {
+    setActiveLedgerCard('subsidiary')
     setDrillSubsidiary(row)
     setDrillDetailed(null)
     setDetailLedger(null)
@@ -1000,6 +1202,7 @@ export default function Accounting() {
   }, [loadDrillDetailed, fetchDetailLedger])
 
   const selectDrillDetailed = useCallback(async (row) => {
+    setActiveLedgerCard('detailed')
     setDrillDetailed(row)
     await fetchDetailLedger({ detailedId: String(row.detailed_id) })
   }, [fetchDetailLedger])
@@ -1009,28 +1212,418 @@ export default function Accounting() {
     [drillPanelLayout],
   )
 
-  const toggleDrillPanelMinimize = useCallback((panelId) => {
-    setDrillPanelLayout((prev) => {
-      if (prev[panelId] === 'maximized') return prev
-      return {
-        ...prev,
-        [panelId]: prev[panelId] === 'minimized' ? 'normal' : 'minimized',
-      }
-    })
+  useEffect(() => {
+    if (activeTab !== 'ledger') return undefined
+
+    const updateStageMetrics = () => {
+      const wrap = drillStageWrapRef.current
+      if (!wrap) return
+      setDrillStageWidth(wrap.clientWidth)
+      const rect = wrap.getBoundingClientRect()
+      const available = window.innerHeight - rect.top - 24
+      setDrillStageMaxHeight(Math.max(DRILL_HEIGHT_LIMITS.general.min, available))
+    }
+
+    updateStageMetrics()
+    const wrap = drillStageWrapRef.current
+    if (!wrap) return undefined
+
+    const observer = new ResizeObserver(updateStageMetrics)
+    observer.observe(wrap)
+    window.addEventListener('resize', updateStageMetrics)
+    return () => {
+      observer.disconnect()
+      window.removeEventListener('resize', updateStageMetrics)
+    }
+  }, [activeTab, drillLayoutHasMaximized, ledgerAccountPanelOpen, ledgerAccountPanelMinimized])
+
+  useEffect(() => {
+    setDrillRowHeight((prev) => clampHeight(
+      prev ?? DEFAULT_DRILL_ROW_HEIGHT,
+      DRILL_HEIGHT_LIMITS.general.min,
+      drillStageMaxHeight,
+    ))
+  }, [drillStageMaxHeight, setDrillRowHeight])
+
+  const maximizedPanelId = useMemo(
+    () => Object.entries(drillPanelLayout).find(([, mode]) => mode === 'maximized')?.[0] || null,
+    [drillPanelLayout],
+  )
+
+  const ledgerAccountSelection = useMemo(() => {
+    switch (activeLedgerCard) {
+      case 'general':
+        return drillGeneral ? { level: 'general', row: drillGeneral } : null
+      case 'subsidiary':
+        return drillSubsidiary ? { level: 'subsidiary', row: drillSubsidiary } : null
+      case 'detailed':
+        return drillDetailed ? { level: 'detailed', row: drillDetailed } : null
+      case 'ledger':
+        if (drillDetailed) return { level: 'detailed', row: drillDetailed }
+        if (drillSubsidiary) return { level: 'subsidiary', row: drillSubsidiary }
+        if (drillGeneral) return { level: 'general', row: drillGeneral }
+        return null
+      default:
+        return null
+    }
+  }, [activeLedgerCard, drillGeneral, drillSubsidiary, drillDetailed])
+
+  const syncQuickDocForm = useCallback((selection) => {
+    const line = drillSelectionToDocLine(selection)
+    setQuickDocForm((prev) => ({
+      ...prev,
+      description: prev.description,
+      entry_date: prev.entry_date,
+      attach_code: prev.attach_code,
+      debit: prev.debit,
+      credit: prev.credit,
+      account_id: line.account_id,
+      subsidiary_id: line.subsidiary_id,
+      detailed_id: line.detailed_id,
+    }))
+    setQuickDocError('')
+    setQuickDocSuccess('')
   }, [])
 
-  const toggleDrillPanelMaximize = useCallback((panelId) => {
+  const selectLedgerCard = useCallback((panelId) => {
+    setActiveLedgerCard(panelId)
+  }, [])
+
+  const syncLedgerAccountContext = useCallback((selection, tab = 'edit') => {
+    if (!selection) {
+      setLedgerAccountSelected(null)
+      setLedgerAccountEditForm(null)
+      setLedgerAccountChildForm(EMPTY_CHART_CHILD)
+      return
+    }
+    const record = drillRowToAccountRecord(selection.level, selection.row, {
+      accountGroups,
+      subsidiaries,
+      details,
+    })
+    if (!record?.id) return
+    setLedgerAccountSelected({ level: selection.level, id: record.id })
+    setLedgerAccountEditForm(buildAccountEditForm(selection.level, record))
+    setLedgerAccountChildForm(EMPTY_CHART_CHILD)
+    setLedgerAccountPanelTab(tab === 'add' && selection.level !== 'detailed' ? 'add' : 'edit')
+  }, [accountGroups, subsidiaries, details])
+
+  useEffect(() => {
+    if (!ledgerAccountPanelOpen) return
+    syncLedgerAccountContext(ledgerAccountSelection)
+    syncQuickDocForm(ledgerAccountSelection)
+  }, [ledgerAccountPanelOpen, ledgerAccountSelection, syncLedgerAccountContext, syncQuickDocForm])
+
+  const openLedgerAccountPanel = useCallback((tab = 'edit') => {
+    setLedgerAccountPanelOpen(true)
+    setLedgerAccountPanelMinimized(false)
+    if (activeLedgerCard === 'ledger' || tab === 'document') {
+      setLedgerSidePanelTab('document')
+    } else {
+      setLedgerSidePanelTab('account')
+    }
+    syncLedgerAccountContext(ledgerAccountSelection, tab === 'add' ? 'add' : 'edit')
+    syncQuickDocForm(ledgerAccountSelection)
+    requestAnimationFrame(() => {
+      ledgerAccountPanelRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    })
+  }, [activeLedgerCard, ledgerAccountSelection, syncLedgerAccountContext, syncQuickDocForm])
+
+  const closeLedgerAccountPanel = useCallback(() => {
+    setLedgerAccountPanelOpen(false)
+    setLedgerAccountPanelMinimized(false)
+    setLedgerAccountSelected(null)
+    setLedgerAccountEditForm(null)
+    setLedgerAccountChildForm(EMPTY_CHART_CHILD)
+    setLedgerAccountPanelTab('edit')
+    setLedgerSidePanelTab('account')
+    setQuickDocError('')
+    setQuickDocSuccess('')
+  }, [])
+
+  const restoreDrillPanelSize = useCallback((panelKey) => {
+    const savedWeight = drillSavedSizesRef.current.weights[panelKey]
+    const savedRowHeight = drillSavedSizesRef.current.rowHeight
+    if (savedWeight != null) {
+      setDrillWeights((prev) => ({ ...prev, [panelKey]: savedWeight }))
+    }
+    if (savedRowHeight) {
+      setDrillRowHeight(savedRowHeight)
+    }
+  }, [setDrillWeights, setDrillRowHeight])
+
+  const resizeDrillPanel = useCallback((panelKey, delta) => {
+    if (!drillStageWidth) return
+    setDrillWeights((prev) => resizeDrillPanelPair(
+      prev,
+      drillPanelLayout,
+      panelKey,
+      delta,
+      drillStageWidth,
+    ))
+  }, [drillStageWidth, drillPanelLayout, setDrillWeights])
+
+  const resizeDrillRowHeight = useCallback((delta) => {
+    setDrillRowHeight((prev) => clampHeight(
+      (prev ?? DEFAULT_DRILL_ROW_HEIGHT) + delta,
+      DRILL_HEIGHT_LIMITS.general.min,
+      drillStageMaxHeight,
+    ))
+  }, [setDrillRowHeight, drillStageMaxHeight])
+
+  const resizeLedgerAccountPanel = useCallback((delta) => {
+    const layoutWidth = ledgerLayoutRef.current?.clientWidth ?? window.innerWidth
+    const maxSide = Math.max(260, Math.min(560, layoutWidth * 0.55))
+    setLedgerAccountPanelWidth((prev) => clampWidth(prev + delta, 260, maxSide))
+  }, [setLedgerAccountPanelWidth])
+
+  const ledgerBreadcrumb = useMemo(() => {
+    const parts = []
+    if (drillGeneral) parts.push(`${drillGeneral.account_code || ''} ${drillGeneral.account_name || ''}`.trim())
+    if (drillSubsidiary) parts.push(`${drillSubsidiary.account_code || ''} ${drillSubsidiary.account_name || ''}`.trim())
+    if (drillDetailed) parts.push(`${drillDetailed.account_code || ''} ${drillDetailed.account_name || ''}`.trim())
+    return parts.filter(Boolean).join(' › ')
+  }, [drillGeneral, drillSubsidiary, drillDetailed])
+
+  const ledgerDetailHint = drillDetailed
+    ? `${drillDetailed.account_code} — ${drillDetailed.account_name}`
+    : drillSubsidiary
+      ? `${drillSubsidiary.account_code} — ${drillSubsidiary.account_name}`
+      : drillGeneral
+        ? `${drillGeneral.account_code} — ${drillGeneral.account_name}`
+        : ''
+
+  const filteredLedgerGeneralRows = useMemo(
+    () => applyTrialBalanceFilter(ledgerGeneralRows, ledgerTextFilter),
+    [ledgerGeneralRows, ledgerTextFilter],
+  )
+
+  const filteredDrillSubsidiaryRows = useMemo(
+    () => applyTrialBalanceFilter(drillSubsidiaryRows, ledgerTextFilter),
+    [drillSubsidiaryRows, ledgerTextFilter],
+  )
+
+  const filteredDrillDetailedRows = useMemo(
+    () => applyTrialBalanceFilter(drillDetailedRows, ledgerTextFilter),
+    [drillDetailedRows, ledgerTextFilter],
+  )
+
+  const ledgerFilterOn = trialBalanceFilterActive(ledgerTextFilter)
+
+  const ledgerFilterCounts = useMemo(() => ({
+    general: {
+      shown: filteredLedgerGeneralRows.length,
+      total: ledgerGeneralRows.length,
+    },
+    subsidiary: {
+      shown: filteredDrillSubsidiaryRows.length,
+      total: drillSubsidiaryRows.length,
+    },
+    detailed: {
+      shown: filteredDrillDetailedRows.length,
+      total: drillDetailedRows.length,
+    },
+  }), [
+    filteredLedgerGeneralRows.length,
+    ledgerGeneralRows.length,
+    filteredDrillSubsidiaryRows.length,
+    drillSubsidiaryRows.length,
+    filteredDrillDetailedRows.length,
+    drillDetailedRows.length,
+  ])
+
+  const toggleDrillPanelMinimize = useCallback((panelId) => {
     setDrillPanelLayout((prev) => {
-      if (prev[panelId] === 'maximized') {
-        return { ...DEFAULT_DRILL_PANEL_LAYOUT }
+      const hasMaximized = Object.values(prev).some((mode) => mode === 'maximized')
+      if (hasMaximized && prev[panelId] === 'minimized') {
+        restoreDrillPanelSize(panelId)
+        const next = { ...DEFAULT_DRILL_PANEL_LAYOUT }
+        for (const key of Object.keys(next)) {
+          next[key] = key === panelId ? 'maximized' : 'minimized'
+        }
+        return next
       }
+      if (prev[panelId] === 'maximized') return prev
+      if (prev[panelId] === 'minimized') {
+        restoreDrillPanelSize(panelId)
+        return { ...prev, [panelId]: 'normal' }
+      }
+      drillSavedSizesRef.current.weights[panelId] = drillWeights[panelId] ?? DEFAULT_DRILL_WEIGHTS[panelId]
+      drillSavedSizesRef.current.rowHeight = drillRowHeight ?? DEFAULT_DRILL_ROW_HEIGHT
+      return { ...prev, [panelId]: 'minimized' }
+    })
+  }, [restoreDrillPanelSize, drillWeights, drillRowHeight])
+
+  const focusDrillPanel = useCallback((panelId) => {
+    setDrillPanelLayout((prev) => {
+      const hasMaximized = Object.values(prev).some((mode) => mode === 'maximized')
+      if (!hasMaximized) {
+        if (prev[panelId] === 'minimized') restoreDrillPanelSize(panelId)
+        return { ...prev, [panelId]: 'normal' }
+      }
+      restoreDrillPanelSize(panelId)
       const next = { ...DEFAULT_DRILL_PANEL_LAYOUT }
       for (const key of Object.keys(next)) {
         next[key] = key === panelId ? 'maximized' : 'minimized'
       }
       return next
     })
-  }, [])
+  }, [restoreDrillPanelSize])
+
+  const toggleDrillPanelMaximize = useCallback((panelId) => {
+    setDrillPanelLayout((prev) => {
+      if (prev[panelId] === 'maximized') {
+        return { ...DEFAULT_DRILL_PANEL_LAYOUT }
+      }
+      drillSavedSizesRef.current.weights[panelId] = drillWeights[panelId] ?? DEFAULT_DRILL_WEIGHTS[panelId]
+      drillSavedSizesRef.current.rowHeight = drillRowHeight ?? DEFAULT_DRILL_ROW_HEIGHT
+      const next = { ...DEFAULT_DRILL_PANEL_LAYOUT }
+      for (const key of Object.keys(next)) {
+        next[key] = key === panelId ? 'maximized' : 'minimized'
+      }
+      return next
+    })
+  }, [drillWeights, drillRowHeight])
+
+  const renderGeneralPanel = (compact = false) => (
+    <LedgerTrialColumn
+      panelId="general"
+      layoutMode={drillPanelLayout.general}
+      onToggleMinimize={toggleDrillPanelMinimize}
+      onToggleMaximize={toggleDrillPanelMaximize}
+      onFocus={focusDrillPanel}
+      title={ACCOUNTING_MENU['trial-balance']}
+      selectionLabel={rowSelectionLabel(drillGeneral)}
+      rows={filteredLedgerGeneralRows}
+      loading={ledgerGeneralLoading}
+      selectedId={drillGeneral?.account_id}
+      idKey="account_id"
+      onSelect={selectDrillGeneral}
+      compact={compact}
+      emptyText={ledgerFilterOn ? 'با این فیلتر حسابی یافت نشد.' : 'حسابی یافت نشد.'}
+      resizable={!compact}
+      panelHeight={drillRowHeight ?? DEFAULT_DRILL_ROW_HEIGHT}
+      onResizeHeight={resizeDrillRowHeight}
+      cardSelected={activeLedgerCard === 'general'}
+      onSelectCard={selectLedgerCard}
+    />
+  )
+
+  const renderSubsidiaryPanel = (compact = false) => (
+    <LedgerTrialColumn
+      panelId="subsidiary"
+      layoutMode={drillPanelLayout.subsidiary}
+      onToggleMinimize={toggleDrillPanelMinimize}
+      onToggleMaximize={toggleDrillPanelMaximize}
+      onFocus={focusDrillPanel}
+      title={ACCOUNTING_MENU['subsidiary-trial']}
+      subtitle={drillGeneral?.account_name || 'ابتدا حساب کل را انتخاب کنید'}
+      selectionLabel={rowSelectionLabel(drillSubsidiary)}
+      rows={drillGeneral ? filteredDrillSubsidiaryRows : []}
+      loading={drillGeneral ? drillSubsidiaryLoading : false}
+      selectedId={drillSubsidiary?.subsidiary_id}
+      idKey="subsidiary_id"
+      onSelect={selectDrillSubsidiary}
+      compact={compact}
+      emptyText={drillGeneral ? (ledgerFilterOn ? 'با این فیلتر حساب معینی یافت نشد.' : 'حساب معینی یافت نشد.') : 'ابتدا حساب کل را انتخاب کنید.'}
+      resizable={!compact}
+      panelHeight={drillRowHeight ?? DEFAULT_DRILL_ROW_HEIGHT}
+      onResizeHeight={resizeDrillRowHeight}
+      cardSelected={activeLedgerCard === 'subsidiary'}
+      onSelectCard={selectLedgerCard}
+    />
+  )
+
+  const renderDetailedPanel = (compact = false) => (
+    <LedgerTrialColumn
+      panelId="detailed"
+      layoutMode={drillPanelLayout.detailed}
+      onToggleMinimize={toggleDrillPanelMinimize}
+      onToggleMaximize={toggleDrillPanelMaximize}
+      onFocus={focusDrillPanel}
+      title={ACCOUNTING_MENU['detailed-trial']}
+      subtitle={drillSubsidiary?.account_name || 'ابتدا حساب معین را انتخاب کنید'}
+      selectionLabel={rowSelectionLabel(drillDetailed)}
+      rows={drillSubsidiary ? filteredDrillDetailedRows : []}
+      loading={drillSubsidiary ? drillDetailedLoading : false}
+      selectedId={drillDetailed?.detailed_id}
+      idKey="detailed_id"
+      onSelect={selectDrillDetailed}
+      compact={compact}
+      emptyText={drillSubsidiary ? (ledgerFilterOn ? 'با این فیلتر حساب تفصیلی یافت نشد.' : 'حساب تفصیلی یافت نشد.') : 'ابتدا حساب معین را انتخاب کنید.'}
+      resizable={!compact}
+      panelHeight={drillRowHeight ?? DEFAULT_DRILL_ROW_HEIGHT}
+      onResizeHeight={resizeDrillRowHeight}
+      cardSelected={activeLedgerCard === 'detailed'}
+      onSelectCard={selectLedgerCard}
+    />
+  )
+
+  const renderLedgerPanel = (compact = false) => (
+    <LedgerDrillCard
+      panelId="ledger"
+      variant="ledger"
+      layoutMode={drillPanelLayout.ledger}
+      onToggleMinimize={toggleDrillPanelMinimize}
+      onToggleMaximize={toggleDrillPanelMaximize}
+      onFocus={focusDrillPanel}
+      cardSelected={activeLedgerCard === 'ledger'}
+      onSelectCard={selectLedgerCard}
+      title={TERMS.ledger}
+      subtitle={ledgerDetailHint || 'حساب را از مراحل قبل انتخاب کنید'}
+      selectionLabel={ledgerDetailHint}
+      compact={compact}
+      resizable={!compact}
+      panelHeight={drillRowHeight ?? DEFAULT_DRILL_ROW_HEIGHT}
+      onResizeHeight={resizeDrillRowHeight}
+    >
+      {detailLoading ? (
+        <div className="loading">در حال بارگذاری…</div>
+      ) : detailLedger ? (
+        <DetailLedgerTable
+          ledger={detailLedger}
+          loading={false}
+          compact={compact || drillLayoutHasMaximized}
+          onEditEntry={canEdit ? (line) => setEntryEdit({
+            id: line.id,
+            description: line.description || '',
+            debit: String(line.debit || ''),
+            credit: String(line.credit || ''),
+            entry_date: line.entry_date || '',
+          }) : undefined}
+          onDeleteEntry={canDelete ? deleteLedgerEntry : undefined}
+          canApprove={canApprove}
+        />
+      ) : (
+        <EmptyState text="حساب تفصیلی، معین یا کل را انتخاب کنید." />
+      )}
+    </LedgerDrillCard>
+  )
+
+  const drillColumnWidths = useMemo(() => computeDrillColumnWidths(
+    drillWeights,
+    drillPanelLayout,
+    drillStageWidth || 1200,
+  ), [drillWeights, drillPanelLayout, drillStageWidth])
+
+  const drillStageStyle = useMemo(() => ({
+    '--ld-w-general': `${drillColumnWidths.general}px`,
+    '--ld-w-subsidiary': `${drillColumnWidths.subsidiary}px`,
+    '--ld-w-detailed': `${drillColumnWidths.detailed}px`,
+    '--ld-w-ledger': `${drillColumnWidths.ledger}px`,
+  }), [drillColumnWidths])
+
+  const renderDrillStageResizable = () => (
+    <LedgerDrillStage ref={drillStageRef} style={drillStageStyle}>
+      {renderGeneralPanel()}
+      <LedgerStageDivider label="تغییر عرض ستون حساب کل" onDrag={(d) => resizeDrillPanel('general', d)} />
+      {renderSubsidiaryPanel()}
+      <LedgerStageDivider label="تغییر عرض ستون حساب معین" onDrag={(d) => resizeDrillPanel('subsidiary', d)} />
+      {renderDetailedPanel()}
+      <LedgerStageDivider label="تغییر عرض ستون حساب تفصیلی" onDrag={(d) => resizeDrillPanel('detailed', d)} />
+      {renderLedgerPanel()}
+    </LedgerDrillStage>
+  )
 
   const docTotals = useMemo(() => {
     let debit = 0
@@ -1080,17 +1673,42 @@ export default function Accounting() {
     try {
       const lines = []
       for (const { line, rowNumber } of activeRows) {
-        lines.push(await resolveLinePosting(line, rowNumber))
+        const resolved = await resolveLinePosting(line, rowNumber)
+        if (line.id) resolved.id = line.id
+        if (line.description?.trim()) resolved.description = line.description.trim()
+        if (docHeader.attach_code.trim() && rowNumber === activeRows[0].rowNumber) {
+          resolved.attach_code = docHeader.attach_code.trim()
+        }
+        lines.push(resolved)
       }
-      const result = await accountingApi.createDocument({
+      const payload = {
         description: docDescription,
         lines,
-      })
-      setDocHeader({ attach_code: '', description: '' })
-      setDocLines([{ ...EMPTY_DOC_LINE }, { ...EMPTY_DOC_LINE }])
+        attach_code: docHeader.attach_code.trim() || undefined,
+      }
+      if (docHeader.entry_date) payload.entry_date = docHeader.entry_date
+      if (docHeader.document_number.trim()) payload.document_number = Number(docHeader.document_number)
+
+      let result
+      const wasEdit = Boolean(docEditCode)
+      if (docEditCode) {
+        result = await api.updateDocument(docEditCode, payload)
+      } else {
+        result = await api.createDocument(payload)
+      }
+
+      const savedCode = result.document_code
+      const savedNumber = result.document_number
+      resetDocForm()
       const unbalancedNote =
         docTotals.debit !== docTotals.credit ? ` (${TERMS.unbalanced} — ${TERMS.debit} و ${TERMS.credit} برابر نیست.)` : ''
-      setDocSuccess(`${TERMS.document} شماره ${formatNumber(result.document_number)} ثبت شد.${unbalancedNote}`)
+      setDocSuccess(
+        wasEdit
+          ? `${TERMS.document} ${savedCode} ویرایش شد.${unbalancedNote}`
+          : `${TERMS.document} شماره ${formatNumber(savedNumber)} ثبت شد.${unbalancedNote}`,
+      )
+      setDocView('list')
+      await loadDocumentList(0)
       await refreshAll()
     } catch (err) {
       setDocError(err.message)
@@ -1099,63 +1717,76 @@ export default function Accounting() {
     }
   }
 
-  const saveChartAccount = async (e) => {
-    e.preventDefault()
-    setChartSaving(true)
+  const saveQuickLedgerDocument = async (e) => {
+    e?.preventDefault?.()
+    setQuickDocError('')
+    setQuickDocSuccess('')
+    if (!ledgerAccountSelection) {
+      setQuickDocError('ابتدا یک حساب در کارت فعال انتخاب کنید.')
+      return
+    }
+    const description = quickDocForm.description.trim()
+    if (!description) {
+      setQuickDocError(`${TERMS.description} ${TERMS.document} الزامی است.`)
+      return
+    }
+    const debit = Number(quickDocForm.debit) || 0
+    const credit = Number(quickDocForm.credit) || 0
+    if (debit <= 0 && credit <= 0) {
+      setQuickDocError('مبلغ بدهکار یا بستانکار را وارد کنید.')
+      return
+    }
+
+    setQuickDocSaving(true)
     try {
-      if (chartModal === 'subsidiary') {
-        await accountingApi.createSubsidiary({
-          account_id: Number(chartForm.account_id),
-          code: chartForm.code.trim(),
-          name: chartForm.name.trim(),
-        })
-      } else {
-        await accountingApi.createDetailed({
-          subsidiary_id: Number(chartForm.subsidiary_id),
-          code: chartForm.code.trim(),
-          name: chartForm.name.trim(),
-        })
+      const line = {
+        account_id: quickDocForm.account_id,
+        subsidiary_id: quickDocForm.subsidiary_id,
+        detailed_id: quickDocForm.detailed_id,
+        debit: quickDocForm.debit,
+        credit: quickDocForm.credit,
       }
-      setChartModal(null)
-      setChartForm({ code: '', name: '', account_id: '', subsidiary_id: '' })
-      await loadAccounts()
+      const resolved = await resolveLinePosting(line, 1, {
+        description,
+        attach_code: quickDocForm.attach_code,
+      })
+      const payload = {
+        description,
+        lines: [resolved],
+        attach_code: quickDocForm.attach_code.trim() || undefined,
+      }
+      if (quickDocForm.entry_date) payload.entry_date = quickDocForm.entry_date
+
+      const result = await api.createDocument(payload)
+      setQuickDocSuccess(`${TERMS.document} شماره ${formatNumber(result.document_number)} ثبت شد.`)
+      setQuickDocForm((prev) => ({
+        ...prev,
+        description: '',
+        debit: '',
+        credit: '',
+      }))
+      await refreshAll()
+      if (drillDetailed?.detailed_id) {
+        await fetchDetailLedger({ detailedId: String(drillDetailed.detailed_id) })
+      } else if (drillSubsidiary?.subsidiary_id) {
+        await fetchDetailLedger({ subsidiaryId: String(drillSubsidiary.subsidiary_id) })
+      } else if (drillGeneral?.account_id) {
+        await fetchDetailLedger({ accountId: String(drillGeneral.account_id) })
+      }
     } catch (err) {
-      setError(err.message)
+      setQuickDocError(err.message)
     } finally {
-      setChartSaving(false)
+      setQuickDocSaving(false)
     }
   }
 
-  const selectChartAccount = (level, record) => {
+  const selectChartAccount = (level, record, options = {}) => {
     setChartSelected({ level, id: record.id })
     setChartChildForm(EMPTY_CHART_CHILD)
-    if (level === 'general') {
-      setChartEditForm({
-        code: record.code || '',
-        name: record.name || '',
-        is_active: record.is_active !== false,
-        class_label: record.account_class_label || '',
-        normal_balance: record.normal_balance,
-      })
-      return
-    }
-    if (level === 'subsidiary') {
-      setChartEditForm({
-        code: record.code || '',
-        name: record.name || '',
-        is_active: record.is_active !== false,
-        full_code: record.full_code,
-        general_name: record.general_name,
-      })
-      return
-    }
-    setChartEditForm({
-      code: record.code || '',
-      name: record.name || '',
-      is_active: record.is_active !== false,
-      full_code: record.full_code,
-      subsidiary_name: record.subsidiary_name,
-      general_name: record.general_name,
+    setChartPanelTab(options.tab === 'add' && level !== 'detailed' ? 'add' : 'edit')
+    setChartEditForm(buildAccountEditForm(level, record))
+    requestAnimationFrame(() => {
+      chartDetailRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
     })
   }
 
@@ -1164,21 +1795,7 @@ export default function Accounting() {
     if (!chartSelected || !chartEditForm || !canEditChart) return
     setChartEditSaving(true)
     try {
-      const payload = {
-        name: chartEditForm.name.trim(),
-        is_active: chartEditForm.is_active,
-      }
-      let updated
-      if (chartSelected.level === 'general') {
-        updated = await accountingApi.updateGeneralAccount(chartSelected.id, payload)
-      } else {
-        payload.code = chartEditForm.code.trim()
-        if (chartSelected.level === 'subsidiary') {
-          updated = await accountingApi.updateSubsidiary(chartSelected.id, payload)
-        } else {
-          updated = await accountingApi.updateDetailed(chartSelected.id, payload)
-        }
-      }
+      const updated = await saveAccountEdit(api, chartSelected, chartEditForm)
       selectChartAccount(chartSelected.level, { ...updated, id: chartSelected.id })
       await loadAccounts()
       setError('')
@@ -1198,22 +1815,11 @@ export default function Accounting() {
 
     setChartChildSaving(true)
     try {
-      let created
+      const created = await saveAccountChild(api, chartSelected, chartChildForm)
+      await loadAccounts()
       if (chartSelected.level === 'general') {
-        created = await accountingApi.createSubsidiary({
-          account_id: chartSelected.id,
-          code,
-          name,
-        })
-        await loadAccounts()
         selectChartAccount('subsidiary', created)
       } else {
-        created = await accountingApi.createDetailed({
-          subsidiary_id: chartSelected.id,
-          code,
-          name,
-        })
-        await loadAccounts()
         selectChartAccount('detailed', created)
       }
       setError('')
@@ -1224,10 +1830,91 @@ export default function Accounting() {
     }
   }
 
+  const refreshLedgerAfterAccountChange = useCallback(async (level, created) => {
+    await loadAccounts()
+    await loadLedgerGeneral()
+    if (level === 'subsidiary' && drillGeneral) {
+      const rows = await loadDrillSubsidiary(drillGeneral.account_id)
+      const newRow = rows.find((r) => r.subsidiary_id === created.id) || {
+        subsidiary_id: created.id,
+        account_id: created.account_id || drillGeneral.account_id,
+        account_code: created.full_code,
+        account_name: created.name,
+      }
+      await selectDrillSubsidiary(newRow)
+      syncLedgerAccountContext({ level: 'subsidiary', row: newRow })
+      return
+    }
+    if (level === 'detailed' && drillSubsidiary) {
+      const rows = await loadDrillDetailed(drillSubsidiary.subsidiary_id)
+      const newRow = rows.find((r) => r.detailed_id === created.id) || {
+        detailed_id: created.id,
+        subsidiary_id: created.subsidiary_id || drillSubsidiary.subsidiary_id,
+        account_id: drillSubsidiary.account_id,
+        account_code: created.full_code,
+        account_name: created.name,
+      }
+      await selectDrillDetailed(newRow)
+      syncLedgerAccountContext({ level: 'detailed', row: newRow })
+    }
+  }, [
+    drillGeneral,
+    drillSubsidiary,
+    loadAccounts,
+    loadDrillDetailed,
+    loadDrillSubsidiary,
+    loadLedgerGeneral,
+    selectDrillDetailed,
+    selectDrillSubsidiary,
+    syncLedgerAccountContext,
+  ])
+
+  const saveLedgerAccountEdit = async (e) => {
+    e.preventDefault()
+    if (!ledgerAccountSelected || !ledgerAccountEditForm || !canEditChart) return
+    setLedgerAccountEditSaving(true)
+    try {
+      const updated = await saveAccountEdit(api, ledgerAccountSelected, ledgerAccountEditForm)
+      await loadAccounts()
+      syncLedgerAccountContext({
+        level: ledgerAccountSelected.level,
+        row: { ...updated, id: ledgerAccountSelected.id },
+      })
+      setError('')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLedgerAccountEditSaving(false)
+    }
+  }
+
+  const saveLedgerAccountChild = async (e) => {
+    e.preventDefault()
+    if (!canCreate || !ledgerAccountSelected || ledgerAccountSelected.level === 'detailed') return
+    const code = ledgerAccountChildForm.code.trim()
+    const name = ledgerAccountChildForm.name.trim()
+    if (!code || !name) return
+
+    setLedgerAccountChildSaving(true)
+    try {
+      const created = await saveAccountChild(api, ledgerAccountSelected, ledgerAccountChildForm)
+      const childLevel = ledgerAccountSelected.level === 'general' ? 'subsidiary' : 'detailed'
+      await refreshLedgerAfterAccountChange(childLevel, created)
+      setLedgerAccountChildForm(EMPTY_CHART_CHILD)
+      setLedgerAccountPanelTab('edit')
+      setError('')
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLedgerAccountChildSaving(false)
+    }
+  }
+
   const closeChartDetail = () => {
     setChartSelected(null)
     setChartEditForm(null)
     setChartChildForm(EMPTY_CHART_CHILD)
+    setChartPanelTab('edit')
   }
 
   const openDetailFromTrial = async (row) => {
@@ -1269,6 +1956,53 @@ export default function Accounting() {
     }
   }
 
+  const runTransferPreview = async (e) => {
+    e?.preventDefault?.()
+    const code = transferDocCode.trim()
+    const num = transferDocNumber.trim()
+    if (!code && !num) {
+      setTransferError('کد یا شماره سند کارخانه را وارد کنید.')
+      return
+    }
+    setTransferLoading(true)
+    setTransferError('')
+    setTransferSuccess('')
+    setTransferPreview(null)
+    try {
+      const preview = await api.transferPreview({
+        documentCode: code,
+        documentNumber: num || undefined,
+      })
+      setTransferPreview(preview)
+    } catch (err) {
+      setTransferError(err.message)
+    } finally {
+      setTransferLoading(false)
+    }
+  }
+
+  const runTransferDocument = async () => {
+    if (!transferPreview?.can_transfer) return
+    setTransferSaving(true)
+    setTransferError('')
+    setTransferSuccess('')
+    try {
+      const result = await api.transferDocument({
+        document_code: transferPreview.factory_document_code,
+      })
+      setTransferSuccess(
+        `سند ${result.factory_document_code} به اداری منتقل شد — سند اداری شماره ${formatNumber(result.office_document_number)} (${result.office_document_code})`,
+      )
+      setTransferPreview(null)
+      setTransferDocCode('')
+      setTransferDocNumber('')
+    } catch (err) {
+      setTransferError(err.message)
+    } finally {
+      setTransferSaving(false)
+    }
+  }
+
   const runExcelImport = async (e) => {
     e?.preventDefault?.()
     if (!importFile) {
@@ -1280,7 +2014,7 @@ export default function Accounting() {
     setImportSuccess('')
     setImportResult(null)
     try {
-      const result = await accountingApi.importExcel(importFile, {
+      const result = await api.importExcel(importFile, {
         dryRun: importDryRun,
         approve: true,
       })
@@ -1319,6 +2053,9 @@ export default function Accounting() {
     if (TRIAL_TABS.includes(activeTab)) {
       setTrialTextFilter(EMPTY_TRIAL_BALANCE_FILTER)
     }
+    if (activeTab !== 'ledger') {
+      ledgerQueryRef.current = ''
+    }
   }, [activeTab])
 
   const trialFilterConfig = TRIAL_BALANCE_FILTERS[activeTab]
@@ -1338,26 +2075,44 @@ export default function Accounting() {
   return (
     <div className="page accounting-page">
       <div className="accounting-toolbar">
-        {canCreate && activeTab === 'entry' && (
+        {canCreate && activeTab === 'documents' && docView === 'form' && docCanEdit && (
           <Button type="button" onClick={saveDocument} disabled={docSaving || !docTotals.hasAmounts}>
-            {docSaving ? 'در حال ثبت…' : `ثبت ${TERMS.document}`}
+            {docSaving ? 'در حال ثبت…' : docEditCode ? 'ذخیره تغییرات' : `ثبت ${TERMS.document}`}
           </Button>
         )}
-        {canCreate && activeTab === 'chart-of-accounts' && (
-          <>
-            <Button type="button" onClick={() => setChartModal('subsidiary')}>+ {TERMS.subsidiaryAccount}</Button>
-            <Button type="button" variant="ghost" onClick={() => setChartModal('detailed')}>+ {TERMS.detailedAccount}</Button>
-          </>
+        {canCreate && activeTab === 'documents' && docView === 'list' && (
+          <Button type="button" onClick={openNewDocument}>+ سند جدید</Button>
+        )}
+        {activeTab === 'documents' && docView === 'form' && (
+          <Button type="button" variant="ghost" onClick={() => { resetDocForm(); setDocView('list') }}>
+            بازگشت به فهرست
+          </Button>
         )}
         {canCreate && activeTab === 'upload-excel' && (
           <Button type="button" onClick={runExcelImport} disabled={importLoading || !importFile}>
             {importLoading ? 'در حال پردازش…' : importDryRun ? 'اعتبارسنجی فایل' : 'بارگذاری و ثبت'}
           </Button>
         )}
+        {(canCreate || canEditChart) && activeTab === 'ledger' && (
+          <Button
+            type="button"
+            onClick={() => {
+              if (activeLedgerCard === 'ledger') {
+                openLedgerAccountPanel('document')
+              } else if (ledgerAccountSelection && ledgerAccountSelection.level !== 'detailed') {
+                openLedgerAccountPanel('add')
+              } else {
+                openLedgerAccountPanel('edit')
+              }
+            }}
+          >
+            {ledgerAccountPanelOpen ? 'پنل ساخت' : '+ ساخت حساب / سند'}
+          </Button>
+        )}
       </div>
 
       <div className="accounting-tabs">
-        {ACCOUNTING_TABS.map((tab) => (
+        {visibleTabs.map((tab) => (
           <button
             key={tab.id}
             type="button"
@@ -1383,12 +2138,44 @@ export default function Accounting() {
         </Card>
       )}
 
-      {[...TRIAL_TABS, 'ledger'].includes(activeTab) && (
+      {activeTab === 'ledger' && (
+        <Card title={LEDGER_DRILL_FILTER.title} className="section-record-filter accounting-section-filter">
+          <TrialBalanceFilterPanel
+            codeLabel={LEDGER_DRILL_FILTER.codeLabel}
+            nameLabel={LEDGER_DRILL_FILTER.nameLabel}
+            value={ledgerTextFilter}
+            onChange={setLedgerTextFilter}
+            onReset={() => setLedgerTextFilter(EMPTY_TRIAL_BALANCE_FILTER)}
+            shownCount={filteredLedgerGeneralRows.length}
+            totalCount={ledgerGeneralRows.length}
+          />
+          {ledgerFilterOn && (ledgerFilterCounts.subsidiary.shown !== ledgerFilterCounts.subsidiary.total
+            || ledgerFilterCounts.detailed.shown !== ledgerFilterCounts.detailed.total) && (
+            <p className="record-filter-count muted ledger-drill-filter-meta">
+              {drillGeneral && ledgerFilterCounts.subsidiary.total > 0 && (
+                <span>
+                  معین: <strong>{formatNumber(ledgerFilterCounts.subsidiary.shown)}</strong>
+                  {' '}از {formatNumber(ledgerFilterCounts.subsidiary.total)}
+                  {' · '}
+                </span>
+              )}
+              {drillSubsidiary && ledgerFilterCounts.detailed.total > 0 && (
+                <span>
+                  تفصیلی: <strong>{formatNumber(ledgerFilterCounts.detailed.shown)}</strong>
+                  {' '}از {formatNumber(ledgerFilterCounts.detailed.total)}
+                </span>
+              )}
+            </p>
+          )}
+        </Card>
+      )}
+
+      {[...TRIAL_TABS, 'ledger', 'documents'].includes(activeTab) && (
         <FilterBar>
           <Field label={TERMS.accountGroup}>
             <Select value={classFilter} onChange={setClassFilter} options={ACCOUNT_CLASS_OPTIONS} placeholder="همه" />
           </Field>
-          {TRIAL_TABS.includes(activeTab) && (
+          {(TRIAL_TABS.includes(activeTab) || activeTab === 'ledger') && (
             <>
               <Field label={TERMS.dateFrom}>
                 <PersianDateInput
@@ -1434,8 +2221,114 @@ export default function Accounting() {
         </Card>
       )}
 
-      {activeTab === 'entry' && (
-        <Card title={ACCOUNTING_MENU.entry}>
+      {activeTab === 'documents' && docView === 'list' && (
+        <Card title={ACCOUNTING_MENU.documents}>
+          <FilterBar>
+            <Field label="جستجو">
+              <input
+                className="search-input"
+                value={docListSearch}
+                onChange={(e) => setDocListSearch(e.target.value)}
+                placeholder="شرح، کد یا شماره سند…"
+              />
+            </Field>
+            <Field label="وضعیت تایید">
+              <Select
+                value={docListApproved}
+                onChange={setDocListApproved}
+                options={[
+                  { value: '', label: 'همه' },
+                  { value: 'true', label: 'تایید شده' },
+                  { value: 'false', label: 'در انتظار' },
+                ]}
+                placeholder="همه"
+              />
+            </Field>
+          </FilterBar>
+          {docListLoading ? (
+            <div className="loading">در حال بارگذاری…</div>
+          ) : !docListRows.length ? (
+            <EmptyState text="سندی یافت نشد." />
+          ) : (
+            <>
+              <div className="table-wrap accounting-ledger-wrap accounting-table-desktop">
+                <table className="table accounting-ledger-table">
+                  <thead>
+                    <tr>
+                      <th>{TERMS.documentNumber}</th>
+                      <th>تاریخ</th>
+                      <th>کد سند</th>
+                      <th>{TERMS.description}</th>
+                      <th>{TERMS.debit}</th>
+                      <th>{TERMS.credit}</th>
+                      <th>ردیف</th>
+                      <th>وضعیت</th>
+                      <th>عملیات</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {docListRows.map((doc) => (
+                      <tr key={doc.document_code}>
+                        <td>{doc.document_number ? formatNumber(doc.document_number) : '—'}</td>
+                        <td>{doc.entry_date ? formatDate(doc.entry_date) : '—'}</td>
+                        <td><strong>{doc.document_code}</strong></td>
+                        <td className="text-cell">
+                          {doc.description}
+                          {doc.is_transferred && (
+                            <span className="accounting-transfer-badge" title={doc.office_document_code || ''}>
+                              {' '}منتقل‌شده
+                            </span>
+                          )}
+                          {doc.has_system_entries && (
+                            <span className="muted small"> (سیستمی)</span>
+                          )}
+                        </td>
+                        <td>{formatRial(doc.total_debit)}</td>
+                        <td>{formatRial(doc.total_credit)}</td>
+                        <td>{formatNumber(doc.line_count)}</td>
+                        <td>
+                          {doc.is_approved ? '✓ تایید' : '○ در انتظار'}
+                          {!doc.balanced && <span className="doc-unbalanced"> · {TERMS.unbalanced}</span>}
+                        </td>
+                        <td className="ledger-entry-actions">
+                          <button type="button" className="link" onClick={() => openEditDocument(doc.document_code)} title="مشاهده/ویرایش">✎</button>
+                          {canDelete && !doc.is_transferred && !doc.has_system_entries && (
+                            <button type="button" className="link danger" onClick={() => deleteDocumentByCode(doc.document_code)} title="حذف">×</button>
+                          )}
+                          {canApprove && !doc.is_transferred && (
+                            doc.is_approved ? (
+                              <button type="button" className="link" onClick={() => toggleDocumentApproval(doc, false)} title="لغو تایید">↩</button>
+                            ) : (
+                              <button type="button" className="link" onClick={() => toggleDocumentApproval(doc, true)} title="تایید">✓</button>
+                            )
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="accounting-pagination">
+                <Button type="button" variant="ghost" disabled={docListOffset <= 0} onClick={() => loadDocumentList(Math.max(0, docListOffset - DOC_LIST_LIMIT))}>
+                  قبلی
+                </Button>
+                <span className="muted">
+                  {formatNumber(docListOffset + 1)}–{formatNumber(Math.min(docListOffset + DOC_LIST_LIMIT, docListTotal))} از {formatNumber(docListTotal)}
+                </span>
+                <Button type="button" variant="ghost" disabled={docListOffset + DOC_LIST_LIMIT >= docListTotal} onClick={() => loadDocumentList(docListOffset + DOC_LIST_LIMIT)}>
+                  بعدی
+                </Button>
+              </div>
+            </>
+          )}
+        </Card>
+      )}
+
+      {activeTab === 'documents' && docView === 'form' && (
+        <Card title={docEditCode ? (docCanEdit ? `ویرایش ${TERMS.document}` : `مشاهده ${TERMS.document}`) : ACCOUNTING_MENU.documents}>
+          {!docCanEdit && docEditCode && (
+            <div className="alert-error">این سند قابل ویرایش نیست (سیستمی یا منتقل‌شده).</div>
+          )}
           {docSuccess && <div className="alert-success">{docSuccess}</div>}
           {docError && <div className="alert-error">{docError}</div>}
           <form onSubmit={saveDocument} className="form accounting-doc-form">
@@ -1456,10 +2349,24 @@ export default function Accounting() {
                   required
                 />
               </Field>
+              <Field label="تاریخ سند">
+                <PersianDateInput
+                  value={docHeader.entry_date}
+                  onChange={(v) => setDocHeader({ ...docHeader, entry_date: v })}
+                  placeholder="اختیاری — پیش‌فرض امروز"
+                  onClear={() => setDocHeader({ ...docHeader, entry_date: '' })}
+                  clearLabel="پاک کردن"
+                />
+              </Field>
+              <Field label={TERMS.documentNumber}>
+                <input
+                  value={docHeader.document_number}
+                  onChange={(e) => setDocHeader({ ...docHeader, document_number: e.target.value })}
+                  placeholder="اختیاری — خودکار"
+                  inputMode="numeric"
+                />
+              </Field>
             </div>
-            <p className="muted small accounting-doc-header-hint">
-              تاریخ و {TERMS.documentNumber} به‌صورت خودکار ثبت می‌شود؛ ردیف‌ها فقط حساب و مبلغ دارند.
-            </p>
             <div className="table-wrap accounting-ledger-wrap accounting-doc-table-desktop">
               <table className="table accounting-ledger-table accounting-doc-table">
                 <thead>
@@ -1596,8 +2503,8 @@ export default function Accounting() {
 
             <div className="form-actions-row">
               <Button type="button" variant="ghost" onClick={addDocLine}>+ ردیف</Button>
-              <Button type="submit" disabled={docSaving || !docTotals.hasAmounts || !canCreate}>
-                {docSaving ? 'در حال ثبت…' : `ثبت ${TERMS.document}`}
+              <Button type="submit" disabled={docSaving || !docTotals.hasAmounts || !canCreate || (docEditCode && !docCanEdit)}>
+                {docSaving ? 'در حال ثبت…' : docEditCode ? 'ذخیره تغییرات' : `ثبت ${TERMS.document}`}
               </Button>
             </div>
           </form>
@@ -1605,78 +2512,82 @@ export default function Accounting() {
       )}
 
       {activeTab === 'ledger' && (
-        <Card title={`${ACCOUNTING_MENU.ledger} — ${reportMeta}`}>
-          <div className={`ledger-drill-layout${drillLayoutHasMaximized ? ' ledger-drill-layout-has-maximized' : ''}`}>
-            <DrillTrialPanel
-              panelId="general"
-              layoutMode={drillPanelLayout.general}
-              onToggleMinimize={toggleDrillPanelMinimize}
-              onToggleMaximize={toggleDrillPanelMaximize}
-              title={ACCOUNTING_MENU['trial-balance']}
-              hint="حساب کل را انتخاب کنید"
-              rows={ledgerGeneralRows}
-              loading={ledgerGeneralLoading}
-              selectedId={drillGeneral?.account_id}
-              idKey="account_id"
-              onSelect={selectDrillGeneral}
-            />
-            {drillGeneral && (
-              <DrillTrialPanel
-                panelId="subsidiary"
-                layoutMode={drillPanelLayout.subsidiary}
-                onToggleMinimize={toggleDrillPanelMinimize}
-                onToggleMaximize={toggleDrillPanelMaximize}
-                title={ACCOUNTING_MENU['subsidiary-trial']}
-                hint={drillGeneral.account_name}
-                rows={drillSubsidiaryRows}
-                loading={drillSubsidiaryLoading}
-                selectedId={drillSubsidiary?.subsidiary_id}
-                idKey="subsidiary_id"
-                onSelect={selectDrillSubsidiary}
+        <LedgerWorkspace
+          title={`${ACCOUNTING_MENU.ledger} — ${reportMeta}`}
+          breadcrumb={ledgerBreadcrumb || null}
+        >
+          <div
+            ref={ledgerLayoutRef}
+            className={`ld-layout${ledgerAccountPanelOpen ? ' ld-layout--with-side' : ''}${drillLayoutHasMaximized ? ' ld-layout--maximized' : ''}`}
+          >
+            <div className="ld-main">
+              {drillLayoutHasMaximized && (
+                <div className="ld-rail">
+                  {maximizedPanelId !== 'general' && renderGeneralPanel(true)}
+                  {maximizedPanelId !== 'subsidiary' && renderSubsidiaryPanel(true)}
+                  {maximizedPanelId !== 'detailed' && renderDetailedPanel(true)}
+                  {maximizedPanelId !== 'ledger' && renderLedgerPanel(true)}
+                </div>
+              )}
+              <div ref={drillStageWrapRef} className="ld-stage-wrap">
+                {drillLayoutHasMaximized ? (
+                  <div className="ld-stage ld-stage--single">
+                    {maximizedPanelId === 'general' && renderGeneralPanel()}
+                    {maximizedPanelId === 'subsidiary' && renderSubsidiaryPanel()}
+                    {maximizedPanelId === 'detailed' && renderDetailedPanel()}
+                    {maximizedPanelId === 'ledger' && renderLedgerPanel()}
+                  </div>
+                ) : (
+                  renderDrillStageResizable()
+                )}
+              </div>
+            </div>
+
+            <LedgerSidePanel
+              open={ledgerAccountPanelOpen}
+              minimized={ledgerAccountPanelMinimized}
+              width={ledgerAccountPanelWidth}
+              title="ساخت / ویرایش"
+              panelRef={ledgerAccountPanelRef}
+              onToggleMinimize={() => setLedgerAccountPanelMinimized((v) => !v)}
+              onClose={closeLedgerAccountPanel}
+              onResize={resizeLedgerAccountPanel}
+            >
+              <LedgerSidePanelContent
+                activeCard={activeLedgerCard}
+                selection={ledgerAccountSelection}
+                sideTab={ledgerSidePanelTab}
+                onSideTabChange={setLedgerSidePanelTab}
+                canCreate={canCreate}
+                quickDocForm={quickDocForm}
+                onQuickDocFormChange={setQuickDocForm}
+                onSaveQuickDoc={saveQuickLedgerDocument}
+                quickDocSaving={quickDocSaving}
+                quickDocError={quickDocError}
+                quickDocSuccess={quickDocSuccess}
+                accountProps={{
+                  selected: ledgerAccountSelected,
+                  editForm: ledgerAccountEditForm,
+                  onEditFormChange: setLedgerAccountEditForm,
+                  childForm: ledgerAccountChildForm,
+                  onChildFormChange: setLedgerAccountChildForm,
+                  panelTab: ledgerAccountPanelTab,
+                  onPanelTabChange: setLedgerAccountPanelTab,
+                  onSaveEdit: saveLedgerAccountEdit,
+                  onSaveChild: saveLedgerAccountChild,
+                  editSaving: ledgerAccountEditSaving,
+                  childSaving: ledgerAccountChildSaving,
+                  canCreate,
+                  canEdit: canEditChart,
+                }}
               />
-            )}
-            {drillSubsidiary && drillDetailedRows.length > 0 && (
-              <DrillTrialPanel
-                panelId="detailed"
-                layoutMode={drillPanelLayout.detailed}
-                onToggleMinimize={toggleDrillPanelMinimize}
-                onToggleMaximize={toggleDrillPanelMaximize}
-                title={ACCOUNTING_MENU['detailed-trial']}
-                hint={drillSubsidiary.account_name}
-                rows={drillDetailedRows}
-                loading={drillDetailedLoading}
-                selectedId={drillDetailed?.detailed_id}
-                idKey="detailed_id"
-                onSelect={selectDrillDetailed}
-              />
-            )}
-            {(detailLedger || detailLoading) && (
-              <DrillPanelShell
-                panelId="ledger"
-                layoutMode={drillPanelLayout.ledger}
-                onToggleMinimize={toggleDrillPanelMinimize}
-                onToggleMaximize={toggleDrillPanelMaximize}
-                title={TERMS.ledger}
-                hint={
-                  drillDetailed
-                    ? `${drillDetailed.account_code} — ${drillDetailed.account_name}`
-                    : drillSubsidiary
-                      ? `${drillSubsidiary.account_code} — ${drillSubsidiary.account_name}`
-                      : drillGeneral
-                        ? `${drillGeneral.account_code} — ${drillGeneral.account_name}`
-                        : ''
-                }
-                className="ledger-drill-panel-ledger"
-              >
-                <DetailLedgerTable ledger={detailLedger} loading={detailLoading} />
-              </DrillPanelShell>
-            )}
+            </LedgerSidePanel>
           </div>
-        </Card>
+        </LedgerWorkspace>
       )}
 
       {activeTab === 'chart-of-accounts' && (
-        <Card title={ACCOUNTING_MENU['chart-of-accounts']}>
+        <Card title={ACCOUNTING_MENU['chart-of-accounts']} className="chart-of-accounts-card">
           <div className="chart-of-accounts-layout">
             <div className="chart-of-accounts-main">
               <FilterBar>
@@ -1712,7 +2623,22 @@ export default function Accounting() {
                             }}
                           >
                             <strong>{acc.code} — {acc.name}</strong>
-                            <span className="muted small">{formatNumber(subs.length)} {TERMS.subsidiaryAccount}</span>
+                            <span className="chart-account-head-actions">
+                              <span className="muted small">{formatNumber(subs.length)} {TERMS.subsidiaryAccount}</span>
+                              {canCreate && (
+                                <button
+                                  type="button"
+                                  className="chart-quick-add"
+                                  title={`افزودن ${TERMS.subsidiaryAccount}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    selectChartAccount('general', acc, { tab: 'add' })
+                                  }}
+                                >
+                                  +
+                                </button>
+                              )}
+                            </span>
                           </div>
                           {subs.map(({ sub, dets }) => (
                             <div key={sub.id} className="chart-subsidiary-block">
@@ -1729,7 +2655,22 @@ export default function Accounting() {
                                 }}
                               >
                                 <strong>{sub.full_code} — {sub.name}</strong>
-                                <span className="muted small">{formatNumber(dets.length)} {TERMS.detailedAccount}</span>
+                                <span className="chart-account-head-actions">
+                                  <span className="muted small">{formatNumber(dets.length)} {TERMS.detailedAccount}</span>
+                                  {canCreate && (
+                                    <button
+                                      type="button"
+                                      className="chart-quick-add"
+                                      title={`افزودن ${TERMS.detailedAccount}`}
+                                      onClick={(e) => {
+                                        e.stopPropagation()
+                                        selectChartAccount('subsidiary', sub, { tab: 'add' })
+                                      }}
+                                    >
+                                      +
+                                    </button>
+                                  )}
+                                </span>
                               </div>
                               {dets.length > 0 && (
                                 <ul className="chart-detail-list">
@@ -1756,113 +2697,26 @@ export default function Accounting() {
               )}
             </div>
 
-            {chartSelected && chartEditForm && (
-              <aside className="chart-account-detail">
-                <h3 className="chart-account-detail-title">
-                  {chartSelected.level === 'general' && TERMS.generalAccount}
-                  {chartSelected.level === 'subsidiary' && TERMS.subsidiaryAccount}
-                  {chartSelected.level === 'detailed' && TERMS.detailedAccount}
-                </h3>
-                <dl className="chart-account-detail-meta">
-                  {chartEditForm.full_code && (
-                    <>
-                      <dt>کد کامل</dt>
-                      <dd>{chartEditForm.full_code}</dd>
-                    </>
-                  )}
-                  {chartEditForm.general_name && chartSelected.level !== 'general' && (
-                    <>
-                      <dt>{TERMS.generalAccount}</dt>
-                      <dd>{chartEditForm.general_name}</dd>
-                    </>
-                  )}
-                  {chartEditForm.subsidiary_name && (
-                    <>
-                      <dt>{TERMS.subsidiaryAccount}</dt>
-                      <dd>{chartEditForm.subsidiary_name}</dd>
-                    </>
-                  )}
-                  {chartEditForm.class_label && (
-                    <>
-                      <dt>طبقه</dt>
-                      <dd>{chartEditForm.class_label}</dd>
-                    </>
-                  )}
-                </dl>
-                <form onSubmit={saveChartEdit} className="form chart-account-detail-form">
-                  {chartSelected.level === 'general' ? (
-                    <Field label={TERMS.accountCode}>
-                      <input value={chartEditForm.code} readOnly disabled />
-                    </Field>
-                  ) : (
-                    <Field label={TERMS.accountCode}>
-                      <input
-                        value={chartEditForm.code}
-                        onChange={(e) => setChartEditForm({ ...chartEditForm, code: e.target.value })}
-                        required
-                        disabled={!canEditChart}
-                      />
-                    </Field>
-                  )}
-                  <Field label={TERMS.accountTitle}>
-                    <input
-                      value={chartEditForm.name}
-                      onChange={(e) => setChartEditForm({ ...chartEditForm, name: e.target.value })}
-                      required
-                      disabled={!canEditChart}
-                    />
-                  </Field>
-                  <label className="checkbox-field">
-                    <input
-                      type="checkbox"
-                      checked={chartEditForm.is_active}
-                      onChange={(e) => setChartEditForm({ ...chartEditForm, is_active: e.target.checked })}
-                      disabled={!canEditChart}
-                    />
-                    فعال
-                  </label>
-                  {canEditChart ? (
-                    <Button type="submit" disabled={chartEditSaving}>
-                      {chartEditSaving ? 'در حال ذخیره…' : 'ذخیره تغییرات'}
-                    </Button>
-                  ) : (
-                    <p className="muted small">برای ویرایش، مجوز «ویرایش حسابداری» لازم است.</p>
-                  )}
-                  <Button type="button" variant="ghost" onClick={closeChartDetail}>
-                    بستن
-                  </Button>
-                </form>
-
-                {canCreate && chartSelected.level !== 'detailed' && (
-                  <div className="chart-account-detail-add">
-                    <h4 className="chart-account-detail-add-title">
-                      {chartSelected.level === 'general'
-                        ? `افزودن ${TERMS.subsidiaryAccount}`
-                        : `افزودن ${TERMS.detailedAccount}`}
-                    </h4>
-                    <form onSubmit={saveChartChild} className="form chart-account-detail-form">
-                      <Field label={TERMS.accountCode}>
-                        <input
-                          value={chartChildForm.code}
-                          onChange={(e) => setChartChildForm({ ...chartChildForm, code: e.target.value })}
-                          required
-                        />
-                      </Field>
-                      <Field label={TERMS.accountTitle}>
-                        <input
-                          value={chartChildForm.name}
-                          onChange={(e) => setChartChildForm({ ...chartChildForm, name: e.target.value })}
-                          required
-                        />
-                      </Field>
-                      <Button type="submit" disabled={chartChildSaving}>
-                        {chartChildSaving ? 'در حال ثبت…' : 'ثبت زیرمجموعه'}
-                      </Button>
-                    </form>
-                  </div>
-                )}
-              </aside>
-            )}
+            <aside ref={chartDetailRef} className="chart-account-detail">
+              <AccountDetailPanel
+                selected={chartSelected}
+                editForm={chartEditForm}
+                onEditFormChange={setChartEditForm}
+                childForm={chartChildForm}
+                onChildFormChange={setChartChildForm}
+                panelTab={chartPanelTab}
+                onPanelTabChange={setChartPanelTab}
+                onSaveEdit={saveChartEdit}
+                onSaveChild={saveChartChild}
+                editSaving={chartEditSaving}
+                childSaving={chartChildSaving}
+                canCreate={canCreate}
+                canEdit={canEditChart}
+                showClose
+                onClose={closeChartDetail}
+                emptyHint={canCreate ? ' دکمه «+» کنار هر ردیف، مستقیم فرم افزودن را باز می‌کند.' : ''}
+              />
+            </aside>
           </div>
         </Card>
       )}
@@ -1968,6 +2822,125 @@ export default function Accounting() {
         </Card>
       )}
 
+      {activeTab === 'transfer-to-office' && canTransfer && (
+        <Card title="انتقال سند به حسابداری اداری">
+          <p className="muted small">
+            سند کارخانه را با کد (F-*) یا شماره سند وارد کنید. انتقال فقط وقتی ممکن است که همه حساب‌های سند در هر دو دفتر مشترک باشند.
+          </p>
+          {transferSuccess && <div className="alert-success">{transferSuccess}</div>}
+          {transferError && <div className="alert-error">{transferError}</div>}
+          <form onSubmit={runTransferPreview} className="form accounting-transfer-form">
+            <div className="form-grid-2">
+              <Field label="کد سند کارخانه">
+                <input
+                  value={transferDocCode}
+                  onChange={(e) => setTransferDocCode(e.target.value)}
+                  placeholder="F-1404-001"
+                />
+              </Field>
+              <Field label={TERMS.documentNumber}>
+                <input
+                  value={transferDocNumber}
+                  onChange={(e) => setTransferDocNumber(e.target.value)}
+                  placeholder="شماره سند"
+                  inputMode="numeric"
+                />
+              </Field>
+            </div>
+            <div className="form-actions-row">
+              <Button type="submit" disabled={transferLoading}>
+                {transferLoading ? 'در حال بررسی…' : 'بررسی امکان انتقال'}
+              </Button>
+              {transferPreview?.can_transfer && (
+                <Button type="button" onClick={runTransferDocument} disabled={transferSaving}>
+                  {transferSaving ? 'در حال انتقال…' : 'انتقال به اداری'}
+                </Button>
+              )}
+            </div>
+          </form>
+
+          {transferPreview && (
+            <div className="accounting-transfer-preview">
+              <p className="accounting-footer-summary">
+                سند {transferPreview.factory_document_code}
+                {transferPreview.document_number != null ? ` — شماره ${formatNumber(transferPreview.document_number)}` : ''}
+                {' · '}
+                {formatNumber(transferPreview.lines?.length || 0)} ردیف
+              </p>
+              {transferPreview.already_transferred && (
+                <div className="alert-error">
+                  این سند قبلاً منتقل شده است
+                  {transferPreview.office_document_code ? ` (${transferPreview.office_document_code})` : ''}.
+                </div>
+              )}
+              {transferPreview.unmappable_count > 0 && (
+                <div className="alert-error">
+                  حساب‌های غیرمشترک: {transferPreview.unmappable_accounts.join('، ')}
+                </div>
+              )}
+              {transferPreview.can_transfer && (
+                <p className="alert-success">همه ردیف‌ها قابل انتقال هستند.</p>
+              )}
+              {transferPreview.lines?.length > 0 && (
+                <div className="table-wrap">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>حساب</th>
+                        <th>{TERMS.debit}</th>
+                        <th>{TERMS.credit}</th>
+                        <th>وضعیت</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {transferPreview.lines.map((line) => (
+                        <tr key={line.entry_id}>
+                          <td>{line.account_label}</td>
+                          <td>{renderAmount(line.debit)}</td>
+                          <td>{renderAmount(line.credit)}</td>
+                          <td>{line.mappable ? '✓ مشترک' : line.error}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </Card>
+      )}
+
+      <Modal title="ویرایش ردیف" open={Boolean(entryEdit)} onClose={() => setEntryEdit(null)}>
+        {entryEdit && (
+          <form onSubmit={saveEntryEdit} className="form">
+            <Field label={TERMS.description}>
+              <input
+                value={entryEdit.description}
+                onChange={(e) => setEntryEdit({ ...entryEdit, description: e.target.value })}
+                required
+              />
+            </Field>
+            <Field label="تاریخ">
+              <PersianDateInput
+                value={entryEdit.entry_date}
+                onChange={(v) => setEntryEdit({ ...entryEdit, entry_date: v })}
+                onClear={() => setEntryEdit({ ...entryEdit, entry_date: '' })}
+                clearLabel="پاک کردن"
+              />
+            </Field>
+            <div className="form-grid-2">
+              <Field label={TERMS.debit}>
+                <MoneyInput min="0" value={entryEdit.debit} onChange={(e) => setEntryEdit({ ...entryEdit, debit: e.target.value })} unit={TERMS.currency} />
+              </Field>
+              <Field label={TERMS.credit}>
+                <MoneyInput min="0" value={entryEdit.credit} onChange={(e) => setEntryEdit({ ...entryEdit, credit: e.target.value })} unit={TERMS.currency} />
+              </Field>
+            </div>
+            <Button type="submit" disabled={entryEditSaving}>{entryEditSaving ? '…' : 'ذخیره'}</Button>
+          </form>
+        )}
+      </Modal>
+
       <Modal
         title={lineAccountPick?.title || 'انتخاب حساب'}
         open={Boolean(lineAccountPick)}
@@ -1983,22 +2956,6 @@ export default function Accounting() {
         </div>
       </Modal>
 
-      <Modal title={chartModal === 'subsidiary' ? `افزودن ${TERMS.subsidiaryAccount}` : `افزودن ${TERMS.detailedAccount}`} open={Boolean(chartModal)} onClose={() => setChartModal(null)}>
-        <form onSubmit={saveChartAccount} className="form">
-          {chartModal === 'subsidiary' ? (
-            <Field label={TERMS.generalAccount}>
-              <Select value={chartForm.account_id} onChange={(v) => setChartForm({ ...chartForm, account_id: v })} options={accountOptions} required />
-            </Field>
-          ) : (
-            <Field label={TERMS.subsidiaryAccount}>
-              <Select value={chartForm.subsidiary_id} onChange={(v) => setChartForm({ ...chartForm, subsidiary_id: v })} options={subsidiaryOptions} required />
-            </Field>
-          )}
-          <Field label={TERMS.accountCode}><input value={chartForm.code} onChange={(e) => setChartForm({ ...chartForm, code: e.target.value })} required /></Field>
-          <Field label={TERMS.accountTitle}><input value={chartForm.name} onChange={(e) => setChartForm({ ...chartForm, name: e.target.value })} required /></Field>
-          <Button type="submit" disabled={chartSaving}>{chartSaving ? '…' : 'ثبت'}</Button>
-        </form>
-      </Modal>
     </div>
   )
 }

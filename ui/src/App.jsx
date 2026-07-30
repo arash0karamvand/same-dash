@@ -19,6 +19,7 @@ import Factory from './pages/Factory'
 import FactoryBuilt from './pages/FactoryBuilt'
 import FreightOrders from './pages/FreightOrders'
 import Accounting from './pages/Accounting'
+import FactoryAccounting from './pages/FactoryAccounting'
 import Levels from './pages/Levels'
 import Sms from './pages/Sms'
 import Users from './pages/Users'
@@ -47,6 +48,7 @@ const PAGES = {
   products: Products,
   materials: Materials,
   accounting: Accounting,
+  'factory-accounting': FactoryAccounting,
   levels: Levels,
   sms: Sms,
   users: Users,
@@ -153,7 +155,7 @@ function Shell() {
       onNavigate={setRouteWithUrl}
     >
       {allowed ? (
-        <PageComponent portal={route.portal} />
+        <PageComponent portal={route.portal} page={route.page} />
       ) : (
         <div className="page">
           <div className="alert-error">دسترسی به این بخش را ندارید.</div>

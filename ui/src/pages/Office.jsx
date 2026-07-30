@@ -3,15 +3,17 @@
 import { useState } from 'react'
 import { officeApi, salesApi } from '../api/client'
 import { useConfig } from '../context/ConfigContext'
+import CheckAccountPicker from '../components/CheckAccountPicker'
 import InstallmentLines, { EMPTY_INSTALLMENT } from '../components/InstallmentLines'
 import MoneyInput from '../components/MoneyInput'
 import PersianDateInput from '../components/PersianDateInput'
 import ProductLines from '../components/ProductLines'
-import RecordFilterPanel from '../components/RecordFilterPanel'
-import { OFFICE_APPROVE_FILTER } from '../config/recordFilterSections'
+import OfficeSectionCard from '../components/OfficeSectionCard'
+import { OFFICE_APPROVE_FILTER, recordFiltersToQueryString } from '../config/recordFilterSections'
 import SaleDiscountFields, { saleBalanceDue } from '../components/SaleDiscountFields'
 import Select from '../components/Select'
-import { Button, Card, Field, Modal } from '../components/ui'
+import { Button, Field, Modal } from '../components/ui'
+import { formatDate, formatMoney } from '../utils/format'
 import WorkflowOrdersPage from './WorkflowOrdersPage'
 
 const ORDER_KINDS = [
@@ -27,6 +29,10 @@ const PAYMENT_STATUSES = [
 ]
 
 const OFFICE_QUEUE_FILTER_DEFAULTS = OFFICE_APPROVE_FILTER.initialFilters
+
+function buildOfficeListQuery(filters) {
+  return recordFiltersToQueryString(filters, { limit: OFFICE_APPROVE_FILTER.resultLimit })
+}
 
 const EMPTY_EDIT = {
   description: '',
@@ -47,10 +53,11 @@ function mapInstallmentsFromSale(items = []) {
   return items.map((i) => ({
     amount: String(i.amount ?? ''),
     due_date: i.due_date?.slice(0, 10) || '',
-    payment_method: i.payment_method || 'check',
     check_number: i.check_number || '',
     bank_name: i.bank_name || '',
     notes: i.notes || '',
+    received_at: i.received_at?.slice(0, 10) || '',
+    receiver_name: i.receiver_name || '',
   }))
 }
 
@@ -85,6 +92,16 @@ export default function Office() {
   const [editLoading, setEditLoading] = useState(false)
   const [editError, setEditError] = useState('')
   const [reloadKey, setReloadKey] = useState(0)
+  const [approveOrder, setApproveOrder] = useState(null)
+  const [approveDetail, setApproveDetail] = useState(null)
+  const [approveLoading, setApproveLoading] = useState(false)
+  const [approveError, setApproveError] = useState('')
+  const [regAccountId, setRegAccountId] = useState('')
+  const [depAccountId, setDepAccountId] = useState('')
+  const [saveCheckDefault, setSaveCheckDefault] = useState(true)
+  const [listFilterQuery, setListFilterQuery] = useState(() =>
+    buildOfficeListQuery({ ...OFFICE_QUEUE_FILTER_DEFAULTS, model: 'office_order' }),
+  )
 
   const showInstallments = form.payment_status === 'installment' || form.payment_method === 'check'
   const balanceDue = saleBalanceDue(form)
@@ -177,10 +194,12 @@ export default function Office() {
       payload.installments = form.installments.map((i) => ({
         amount: Number(i.amount || 0),
         due_date: i.due_date,
-        payment_method: i.payment_method || 'check',
+        payment_method: 'check',
         check_number: i.check_number || '',
         bank_name: i.bank_name || '',
         notes: i.notes || '',
+        received_at: i.received_at || null,
+        receiver_name: i.receiver_name || '',
       }))
     } else {
       payload.installments = []
@@ -233,36 +252,85 @@ export default function Office() {
     }
   }
 
+  const openApprove = async (order) => {
+    if (!order?.has_pending_checks) {
+      try {
+        await officeApi.approve(order.id)
+        setReloadKey((k) => k + 1)
+      } catch (err) {
+        setApproveError(err.message)
+      }
+      return
+    }
+    setApproveError('')
+    setRegAccountId('')
+    setDepAccountId('')
+    setSaveCheckDefault(true)
+    setApproveOrder(order)
+    setApproveDetail(null)
+    try {
+      const detail = await officeApi.get(order.id)
+      setApproveDetail(detail)
+    } catch (err) {
+      setApproveError(err.message)
+    }
+  }
+
+  const confirmApprove = async (e) => {
+    e.preventDefault()
+    if (!approveOrder) return
+    if (!regAccountId) {
+      setApproveError('حساب ثبت چک را انتخاب کنید.')
+      return
+    }
+    setApproveLoading(true)
+    setApproveError('')
+    try {
+      await officeApi.approve(approveOrder.id, {
+        check_registration_account_id: Number(regAccountId),
+        check_deposit_account_id: depAccountId ? Number(depAccountId) : undefined,
+        save_as_default: saveCheckDefault,
+      })
+      setApproveOrder(null)
+      setApproveDetail(null)
+      setReloadKey((k) => k + 1)
+    } catch (err) {
+      setApproveError(err.message)
+    } finally {
+      setApproveLoading(false)
+    }
+  }
+
+  const checkItems = (approveDetail?.installments || []).filter((i) => i.payment_method === 'check')
+
   return (
     <>
-      <Card title={OFFICE_APPROVE_FILTER.title} className="section-record-filter office-approve-filter">
-        <RecordFilterPanel
-          scope={OFFICE_APPROVE_FILTER.scope}
-          lockModel={OFFICE_APPROVE_FILTER.lockModel}
-          compact
-          liveSearch
-          initialFilters={OFFICE_QUEUE_FILTER_DEFAULTS}
-        />
-      </Card>
-      <WorkflowOrdersPage
-        key={reloadKey}
-        title="اداری"
-        subtitle="وضعیت کالا، مسئول فعلی، تایید و امکان برگشت به مرحله قبل"
-        emptyTitle="سفارشی برای بررسی اداری نیست"
-        listApi={officeApi.list}
-        showStage
-        showWorkflowHolder
-        showStatus={false}
-        showBranch
-        showAmounts
-        onEditOrder={openEdit}
-        actions={[
+      <OfficeSectionCard
+        section={OFFICE_APPROVE_FILTER}
+        onFiltersChange={(filters) => setListFilterQuery(buildOfficeListQuery(filters))}
+      >
+        <WorkflowOrdersPage
+          key={`${reloadKey}-${listFilterQuery}`}
+          embedInSection
+          filterQuery={listFilterQuery}
+          title="اداری"
+          subtitle=""
+          emptyTitle="سفارشی برای بررسی اداری نیست"
+          listApi={officeApi.list}
+          showStage
+          showWorkflowHolder
+          showAccountingMode
+          showStatus={false}
+          showBranch
+          showAmounts
+          onEditOrder={openEdit}
+          actions={[
           {
             key: 'approve',
             label: 'تایید و ارسال به کارخانه',
             permission: 'approve_sale_accounting',
             when: (o) => o.status === 'pending_accounting',
-            run: (id) => officeApi.approve(id),
+            run: (_id, order) => openApprove(order),
           },
           {
             key: 'reject',
@@ -302,6 +370,7 @@ export default function Office() {
           },
         ]}
       />
+      </OfficeSectionCard>
 
       <Modal
         title={editOrder ? `اصلاح فاکتور ${editOrder.invoice_number || editOrder.id}` : 'اصلاح فاکتور'}
@@ -394,6 +463,7 @@ export default function Office() {
                 installments={form.installments}
                 onChange={(installments) => setForm({ ...form, installments })}
                 balanceDue={balanceDue}
+                customerName={editOrder?.customer_name || ''}
               />
             )}
 
@@ -474,6 +544,52 @@ export default function Office() {
               </Button>
               <Button type="submit" variant="danger" disabled={rollingBack}>
                 {rollingBack ? 'در حال برگردانی…' : (rollbackOrder.rollback_label || 'تایید برگشت')}
+              </Button>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      <Modal
+        title={approveOrder ? `تایید و ثبت چک — ${approveOrder.invoice_number || approveOrder.id}` : 'تایید اداری'}
+        open={Boolean(approveOrder)}
+        onClose={() => { if (!approveLoading) { setApproveOrder(null); setApproveDetail(null) } }}
+        wide
+      >
+        {approveOrder && (
+          <form onSubmit={confirmApprove} className="form">
+            <p className="muted">مشتری: {approveOrder.customer_name}</p>
+            {approveError && <div className="alert alert-error">{approveError}</div>}
+            {checkItems.length > 0 && (
+              <div className="check-approve-list">
+                <h4>چک‌های سفارش</h4>
+                <ul className="check-approve-items">
+                  {checkItems.map((c) => (
+                    <li key={c.id}>
+                      <strong>{formatMoney(c.amount)}</strong>
+                      {' — '}
+                      سررسید {formatDate(c.due_date)}
+                      {c.check_number && <> — <span className="ltr">{c.check_number}</span></>}
+                      {c.bank_name && <> — {c.bank_name}</>}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <CheckAccountPicker
+              registrationAccountId={regAccountId}
+              depositAccountId={depAccountId}
+              saveAsDefault={saveCheckDefault}
+              onRegistrationChange={setRegAccountId}
+              onDepositChange={setDepAccountId}
+              onSaveAsDefaultChange={setSaveCheckDefault}
+            />
+            <div className="form-actions">
+              <Button type="button" variant="ghost" onClick={() => setApproveOrder(null)} disabled={approveLoading}>
+                انصراف
+              </Button>
+              <Button type="submit" disabled={approveLoading}>
+                {approveLoading ? 'در حال تایید…' : 'تایید و ارسال به کارخانه'}
               </Button>
             </div>
           </form>

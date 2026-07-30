@@ -11,6 +11,7 @@ from api.views import (
     config,
     customers,
     dashboard,
+    factory_accounting,
     factory_orders,
     installments,
     loyalty_levels,
@@ -107,6 +108,7 @@ urlpatterns = [
     ),
     path("sales/<int:pk>/confirm/", sales.sale_confirm, name="sale-confirm"),
     path("sales/<int:pk>/cancel/", sales.sale_cancel, name="sale-cancel"),
+    path("sales/<int:pk>/export-excel/", sales.sale_export_excel, name="sale-export-excel"),
     path("sales/<int:pk>/", sales.sale_detail, name="sale-detail"),
 
     # --- Office queue (جدول جدا) ---
@@ -134,6 +136,7 @@ urlpatterns = [
 
     # --- Installments & Checks ---
     path("installments/", installments.installment_list, name="installment-list"),
+    path("installments/export-excel/", installments.installments_export_excel, name="installments-export-excel"),
     path("installments/checks-report/", installments.checks_monthly_report, name="checks-report"),
     path("installments/<int:pk>/pay/", installments.installment_pay, name="installment-pay"),
     path("installments/<int:pk>/", installments.installment_detail, name="installment-detail"),
@@ -168,7 +171,17 @@ urlpatterns = [
     path("accounting/ledger/", accounting.ledger, name="accounting-ledger"),
     path("accounting/trial-balance/", accounting.trial_balance, name="accounting-trial-balance"),
     path("accounting/detail-ledger/", accounting.detail_ledger_view, name="accounting-detail-ledger"),
-    path("accounting/documents/", accounting.document_create, name="accounting-document-create"),
+    path("accounting/documents/", accounting.document_list, name="accounting-document-list"),
+    path(
+        "accounting/documents/<str:document_code>/approve/",
+        accounting.document_approve,
+        name="accounting-document-approve",
+    ),
+    path(
+        "accounting/documents/<str:document_code>/",
+        accounting.document_detail,
+        name="accounting-document-detail",
+    ),
     path("accounting/subsidiaries/", accounting.subsidiary_accounts, name="accounting-subsidiaries"),
     path("accounting/subsidiaries/<int:pk>/", accounting.subsidiary_account_detail, name="accounting-subsidiary-detail"),
     path("accounting/details/", accounting.detailed_accounts, name="accounting-details"),
@@ -178,6 +191,8 @@ urlpatterns = [
     path("accounting/sales-report/", accounting.sales_report, name="accounting-sales-report"),
     path("accounting/bulk-approve/", accounting.bulk_approve, name="accounting-bulk-approve"),
     path("accounting/import-excel/", accounting.excel_import, name="accounting-import-excel"),
+    path("accounting/preferences/", accounting.accounting_preferences, name="accounting-preferences"),
+    path("accounting/check-accounts/", accounting.check_accounts, name="accounting-check-accounts"),
     path(
         "accounting/customer/<int:customer_id>/",
         accounting.customer_accounting,
@@ -189,6 +204,37 @@ urlpatterns = [
         name="accounting-approve",
     ),
     path("accounting/<int:pk>/", accounting.entry_detail, name="accounting-detail"),
+
+    # --- Factory accounting (جدول مجزا) ---
+    path("factory-accounting/", factory_accounting.entry_list, name="factory-accounting-list"),
+    path("factory-accounting/accounts/", factory_accounting.account_list, name="factory-accounting-accounts"),
+    path("factory-accounting/models/", factory_accounting.document_models, name="factory-accounting-document-models"),
+    path("factory-accounting/ledger/", factory_accounting.ledger, name="factory-accounting-ledger"),
+    path("factory-accounting/trial-balance/", factory_accounting.trial_balance, name="factory-accounting-trial-balance"),
+    path("factory-accounting/detail-ledger/", factory_accounting.detail_ledger_view, name="factory-accounting-detail-ledger"),
+    path("factory-accounting/documents/", factory_accounting.document_list, name="factory-accounting-document-list"),
+    path(
+        "factory-accounting/documents/<str:document_code>/approve/",
+        factory_accounting.document_approve,
+        name="factory-accounting-document-approve",
+    ),
+    path(
+        "factory-accounting/documents/<str:document_code>/",
+        factory_accounting.document_detail,
+        name="factory-accounting-document-detail",
+    ),
+    path("factory-accounting/subsidiaries/", factory_accounting.subsidiary_accounts, name="factory-accounting-subsidiaries"),
+    path("factory-accounting/subsidiaries/<int:pk>/", factory_accounting.subsidiary_account_detail, name="factory-accounting-subsidiary-detail"),
+    path("factory-accounting/details/", factory_accounting.detailed_accounts, name="factory-accounting-details"),
+    path("factory-accounting/details/<int:pk>/", factory_accounting.detailed_account_detail, name="factory-accounting-detail-account"),
+    path("factory-accounting/accounts/<int:pk>/", factory_accounting.account_detail, name="factory-accounting-account-detail"),
+    path("factory-accounting/summary/", factory_accounting.summary, name="factory-accounting-summary"),
+    path("factory-accounting/bulk-approve/", factory_accounting.bulk_approve, name="factory-accounting-bulk-approve"),
+    path("factory-accounting/import-excel/", factory_accounting.excel_import, name="factory-accounting-import-excel"),
+    path("factory-accounting/transfer-preview/", factory_accounting.transfer_preview, name="factory-accounting-transfer-preview"),
+    path("factory-accounting/transfer/", factory_accounting.transfer_document, name="factory-accounting-transfer"),
+    path("factory-accounting/<int:pk>/approve/", factory_accounting.entry_approve, name="factory-accounting-approve"),
+    path("factory-accounting/<int:pk>/", factory_accounting.entry_detail, name="factory-accounting-detail"),
 
     # --- Loyalty Levels ---
     path("loyalty-levels/", loyalty_levels.level_list, name="loyalty-level-list"),

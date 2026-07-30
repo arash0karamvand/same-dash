@@ -4,9 +4,8 @@ from decimal import Decimal
 
 from django.db.models import Q, Sum
 
-from backend.models import Account, AccountingEntry
-
 from logic.accounting_accounts import account_to_dict, seed_accounts
+from logic.ledger import OFFICE_LEDGER
 
 
 def _money(value):
@@ -21,25 +20,26 @@ def _split_balance(debit_sum, credit_sum):
     return 0, _money(-net)
 
 
-def _entry_base_qs(*, approved_only=False):
-    qs = AccountingEntry.objects.filter(
-        Q(sale__isnull=True) | Q(sale__is_deleted=False),
-        account__isnull=False,
-    )
+def _entry_base_qs(*, approved_only=False, ledger=OFFICE_LEDGER):
+    EntryModel = ledger.AccountingEntry
+    qs = EntryModel.objects.filter(account__isnull=False)
+    if ledger.syncs_sales:
+        qs = qs.filter(Q(sale__isnull=True) | Q(sale__is_deleted=False))
     if approved_only:
         qs = qs.filter(is_approved=True)
     return qs
 
 
-def ledger_for_accounts(*, date_from=None, date_to=None, account_class=None, approved_only=False):
+def ledger_for_accounts(*, date_from=None, date_to=None, account_class=None, approved_only=False, ledger=OFFICE_LEDGER):
     """ردیف دفتر کل برای هر حساب فعال."""
-    seed_accounts()
+    seed_accounts(ledger=ledger)
+    AccountModel = ledger.Account
 
-    accounts = Account.objects.filter(is_active=True).order_by("sort_order", "name")
+    accounts = AccountModel.objects.filter(is_active=True).order_by("sort_order", "name")
     if account_class:
         accounts = accounts.filter(account_class=account_class)
 
-    base = _entry_base_qs(approved_only=approved_only)
+    base = _entry_base_qs(approved_only=approved_only, ledger=ledger)
 
     rows = []
     for account in accounts:

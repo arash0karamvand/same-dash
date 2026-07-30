@@ -18,6 +18,10 @@ import { parseRoute } from '../utils/routing'
 
 import { hasPermission } from '../utils/permissions'
 
+import { PAGE_GUIDE_DEFAULTS } from '../config/pageGuideDefaults'
+
+import { useRegisterPageGuide } from '../context/PageGuideContext'
+
 
 
 const COLOR_PRESETS = [
@@ -98,7 +102,10 @@ export default function Materials() {
 
   const canApprove = hasPermission(user, 'approve_materials')
 
-
+  useRegisterPageGuide(
+    'materials',
+    isOffice ? PAGE_GUIDE_DEFAULTS.materials_office : PAGE_GUIDE_DEFAULTS.materials_shop,
+  )
 
   const [materials, setMaterials] = useState([])
 
@@ -372,14 +379,6 @@ export default function Materials() {
 
           <h1 className="page-title">{isOffice ? 'تایید متریال' : 'متریال'}</h1>
 
-          <p className="muted">
-
-            {isOffice && 'بررسی، تایید، ویرایش و حذف متریال‌های ثبت‌شده توسط کارخانه'}
-
-            {!isOffice && 'ثبت متریال جدید — پس از ثبت «در انتظار تایید» می‌ماند و از بخش اداری تایید می‌شود؛ موجودی فقط با پایان ساخت کم می‌شود'}
-
-          </p>
-
         </div>
 
         {canCreate && !isOffice && (
@@ -634,17 +633,6 @@ export default function Materials() {
 
         <form onSubmit={saveMaterial} className="form">
 
-          {!isOffice && !editing && (
-
-            <p className="muted small" style={{ marginBottom: 12 }}>
-
-              پس از ثبت، متریال قابل ویرایش نیست و تا تایید اداری «در انتظار تایید» می‌ماند.
-              موجودی فقط هنگام «پایان ساخت» سفارش در کارخانه کسر می‌شود.
-
-            </p>
-
-          )}
-
           <Field label="نام متریال">
 
             <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
@@ -729,9 +717,6 @@ export default function Materials() {
             <div className="material-value-preview">
               <span className="muted">ارزش موجودی (موجودی × قیمت واحد):</span>
               <strong>{formatMoney(previewInventoryValue)}</strong>
-              {isOffice && (
-                <span className="muted small"> — پس از تایید، سند حسابداری ثبت می‌شود</span>
-              )}
             </div>
           )}
 

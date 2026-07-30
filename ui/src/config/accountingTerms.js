@@ -5,7 +5,7 @@ export const ACCOUNTING_MENU = {
   'subsidiary-trial': 'تراز معین',
   'detailed-trial': 'تراز تفصیلی',
   ledger: 'دفتر کل',
-  entry: 'ثبت سند حسابداری',
+  documents: 'مدیریت اسناد',
   'chart-of-accounts': 'ایجاد حساب',
   'upload-excel': 'بارگذاری اکسل',
 }

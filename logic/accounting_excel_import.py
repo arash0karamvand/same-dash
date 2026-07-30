@@ -14,6 +14,7 @@ from backend.models import Account, AccountingEntry, DetailedAccount, Subsidiary
 from logic.accounting import generate_document_code
 from logic.accounting_accounts import CHART_OF_ACCOUNTS, seed_accounts
 from logic.jalali import parse_jalali_date
+from logic.ledger import OFFICE_LEDGER
 
 SHEET_ALIASES = {
     "general": ("تراز کل",),
@@ -350,8 +351,9 @@ def parse_excel_file(file_obj):
     return parsed
 
 
-def _get_or_create_general_account(code, name):
-    account = Account.objects.filter(code=code).first()
+def _get_or_create_general_account(code, name, *, ledger=OFFICE_LEDGER):
+    AccountModel = ledger.Account
+    account = AccountModel.objects.filter(code=code).first()
     if account:
         clean_name = name.strip()
         if clean_name and account.name != clean_name:
@@ -361,7 +363,7 @@ def _get_or_create_general_account(code, name):
 
     slug = _slug_for_code(code)
     account_class = infer_account_class(code)
-    account, created = Account.objects.get_or_create(
+    account, created = AccountModel.objects.get_or_create(
         slug=slug,
         defaults={
             "code": code,
@@ -378,18 +380,20 @@ def _get_or_create_general_account(code, name):
     return account, created
 
 
-def _get_or_create_subsidiary(general_code, sub_code, name):
-    account = Account.objects.filter(code=general_code).first()
+def _get_or_create_subsidiary(general_code, sub_code, name, *, ledger=OFFICE_LEDGER):
+    AccountModel = ledger.Account
+    SubsidiaryModel = ledger.SubsidiaryAccount
+    account = AccountModel.objects.filter(code=general_code).first()
     if not account:
-        account, _ = _get_or_create_general_account(general_code, name)
-    sub = SubsidiaryAccount.objects.filter(account=account, code=sub_code).first()
+        account, _ = _get_or_create_general_account(general_code, name, ledger=ledger)
+    sub = SubsidiaryModel.objects.filter(account=account, code=sub_code).first()
     if sub:
         clean_name = name.strip()
         if clean_name and sub.name != clean_name:
             sub.name = clean_name
             sub.save(update_fields=["name"])
         return sub, False
-    sub = SubsidiaryAccount.objects.create(
+    sub = SubsidiaryModel.objects.create(
         account=account,
         code=sub_code,
         name=name.strip() or f"معین {general_code}/{sub_code}",
@@ -397,18 +401,20 @@ def _get_or_create_subsidiary(general_code, sub_code, name):
     return sub, True
 
 
-def _get_or_create_detailed(general_code, sub_code, detail_code, name):
-    subsidiary = SubsidiaryAccount.objects.filter(account__code=general_code, code=sub_code).first()
+def _get_or_create_detailed(general_code, sub_code, detail_code, name, *, ledger=OFFICE_LEDGER):
+    SubsidiaryModel = ledger.SubsidiaryAccount
+    DetailedModel = ledger.DetailedAccount
+    subsidiary = SubsidiaryModel.objects.filter(account__code=general_code, code=sub_code).first()
     if not subsidiary:
-        subsidiary, _ = _get_or_create_subsidiary(general_code, sub_code, name)
-    detail = DetailedAccount.objects.filter(subsidiary=subsidiary, code=detail_code).first()
+        subsidiary, _ = _get_or_create_subsidiary(general_code, sub_code, name, ledger=ledger)
+    detail = DetailedModel.objects.filter(subsidiary=subsidiary, code=detail_code).first()
     if detail:
         clean_name = name.strip()
         if clean_name and detail.name != clean_name:
             detail.name = clean_name
             detail.save(update_fields=["name"])
         return detail, False
-    detail = DetailedAccount.objects.create(
+    detail = DetailedModel.objects.create(
         subsidiary=subsidiary,
         code=detail_code,
         name=name.strip() or f"تفصیلی {general_code}/{sub_code}/{detail_code}",
@@ -416,16 +422,17 @@ def _get_or_create_detailed(general_code, sub_code, detail_code, name):
     return detail, True
 
 
-def _resolve_detailed_by_code(full_code, fallback_name=""):
+def _resolve_detailed_by_code(full_code, fallback_name="", *, ledger=OFFICE_LEDGER):
     level, general_code, sub_code, detail_code = parse_account_code(full_code)
     if level != "detailed":
         raise ValueError(f"کد تفصیلی نامعتبر: {full_code}")
-    return _get_or_create_detailed(general_code, sub_code, detail_code, fallback_name)
+    return _get_or_create_detailed(general_code, sub_code, detail_code, fallback_name, ledger=ledger)
 
 
 @transaction.atomic
-def import_excel_file(file_obj, *, dry_run=False, approve=False, force=False):
-    seed_accounts()
+def import_excel_file(file_obj, *, dry_run=False, approve=False, force=False, ledger=OFFICE_LEDGER):
+    seed_accounts(ledger=ledger)
+    EntryModel = ledger.AccountingEntry
     parsed = parse_excel_file(file_obj)
     if parsed.errors:
         return _build_report(parsed, dry_run=dry_run, committed=False)
@@ -442,7 +449,7 @@ def import_excel_file(file_obj, *, dry_run=False, approve=False, force=False):
     }
 
     for row in parsed.general_rows:
-        _, created = _get_or_create_general_account(row.code, row.name)
+        _, created = _get_or_create_general_account(row.code, row.name, ledger=ledger)
         if created:
             stats["accounts_created"] += 1
         else:
@@ -453,7 +460,7 @@ def import_excel_file(file_obj, *, dry_run=False, approve=False, force=False):
         if level != "subsidiary":
             parsed.warnings.append(f"ردیف معین نادیده گرفته شد: {row.code}")
             continue
-        _, created = _get_or_create_subsidiary(general_code, sub_code, row.name)
+        _, created = _get_or_create_subsidiary(general_code, sub_code, row.name, ledger=ledger)
         if created:
             stats["subsidiaries_created"] += 1
         else:
@@ -464,7 +471,7 @@ def import_excel_file(file_obj, *, dry_run=False, approve=False, force=False):
         if level != "detailed":
             parsed.warnings.append(f"ردیف تفصیلی نادیده گرفته شد: {row.code}")
             continue
-        _, created = _get_or_create_detailed(general_code, sub_code, detail_code, row.name)
+        _, created = _get_or_create_detailed(general_code, sub_code, detail_code, row.name, ledger=ledger)
         if created:
             stats["details_created"] += 1
         else:
@@ -478,6 +485,7 @@ def import_excel_file(file_obj, *, dry_run=False, approve=False, force=False):
         detailed, _ = _resolve_detailed_by_code(
             parsed.detail_ledger_account_code,
             parsed.detail_ledger_account_name,
+            ledger=ledger,
         )
         subsidiary = detailed.subsidiary
         account = subsidiary.account
@@ -492,7 +500,7 @@ def import_excel_file(file_obj, *, dry_run=False, approve=False, force=False):
                 parsed.warnings.append(f"تاریخ نامعتبر {row.entry_date}: {exc}")
                 continue
 
-            exists = AccountingEntry.objects.filter(
+            exists = EntryModel.objects.filter(
                 detailed=detailed,
                 document_number=row.document_number,
                 entry_date__date=entry_date.date(),
@@ -506,11 +514,11 @@ def import_excel_file(file_obj, *, dry_run=False, approve=False, force=False):
 
             doc_code = doc_codes.get(row.document_number)
             if not doc_code:
-                doc_code = generate_document_code(entry_date=entry_date)
+                doc_code = generate_document_code(entry_date=entry_date, ledger=ledger)
                 doc_codes[row.document_number] = doc_code
 
             amount = row.debit or row.credit
-            AccountingEntry.objects.create(
+            EntryModel.objects.create(
                 entry_type="manual",
                 account=account,
                 subsidiary=subsidiary,

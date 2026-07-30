@@ -13,6 +13,7 @@ from logic.office_orders import (
     list_office_orders,
     office_tracking_queryset,
 )
+from logic.record_filter import _parse_limit, apply_office_order_search_filters
 from logic.sale_workflow import approve_office_order, reject_office_order, rollback_office_workflow_step
 
 
@@ -35,12 +36,21 @@ def office_order_list(request):
             qs = qs.filter(status=status)
     else:
         qs = list_office_orders(request.user, status=status)
+
+    qs = apply_office_order_search_filters(qs, request.GET)
+    limit = _parse_limit(request.GET)
+    total = qs.count()
+    summary_qs = qs
+    qs = qs[:limit]
+
     return success(
         {
             "results": [
                 office_order_to_dict(o, include_lines=True, user=request.user) for o in qs
             ],
-            "summary": aggregate_office_orders(qs),
+            "summary": aggregate_office_orders(summary_qs),
+            "total": total,
+            "limit": limit,
         }
     )
 
@@ -70,8 +80,15 @@ def office_order_approve(request, pk):
         return fail("فقط سفارش‌های در انتظار تایید اداری قابل ارسال به کارخانه هستند.", status=400)
     if not can_view_office_order(request.user, order):
         return fail("Permission denied", status=403)
+    body = parse_json(request) if request.body else {}
     try:
-        order = approve_office_order(order, request.user)
+        order = approve_office_order(
+            order,
+            request.user,
+            check_registration_account_id=body.get("check_registration_account_id"),
+            check_deposit_account_id=body.get("check_deposit_account_id"),
+            save_check_accounts_as_default=bool(body.get("save_as_default")),
+        )
     except ValueError as exc:
         return fail(str(exc), status=400)
     log_action(

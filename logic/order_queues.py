@@ -33,6 +33,7 @@ def _copy_sale_fields(sale):
         "branch": sale.branch or "",
         "recorded_by": sale.recorded_by,
         "seller": sale.seller,
+        "accounting_mode": sale.accounting_mode,
     }
 
 
@@ -117,6 +118,9 @@ def create_office_order_from_sale(sale, user):
             "workflow_stage",
         ]
     )
+    from logic.sales import ensure_draft_sale_accounting
+
+    ensure_draft_sale_accounting(sale)
     return office
 
 

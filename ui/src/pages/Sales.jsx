@@ -5,6 +5,8 @@
 import { useEffect, useState } from 'react'
 
 import { salesApi } from '../api/client'
+import { PAGE_GUIDE_DEFAULTS } from '../config/pageGuideDefaults'
+import { useRegisterPageGuide } from '../context/PageGuideContext'
 
 import { useAuth } from '../context/AuthContext'
 import { useConfig } from '../context/ConfigContext'
@@ -12,13 +14,14 @@ import { useConfirm } from '../context/ConfirmContext'
 
 import CustomerSearch from '../components/CustomerSearch'
 import InstallmentLines, { EMPTY_INSTALLMENT } from '../components/InstallmentLines'
+import { CHECK_FORM_MAX_ROWS } from '../config/checkForm'
 import InvoiceModal from '../components/InvoiceModal'
 import MoneyInput from '../components/MoneyInput'
 import ProductLines from '../components/ProductLines'
 import PersianDateInput from '../components/PersianDateInput'
 import SaleDiscountFields, { saleBalanceDue } from '../components/SaleDiscountFields'
 import Select from '../components/Select'
-import { Badge, Button, Card, EmptyState, Field, FilterBar, Modal } from '../components/ui'
+import { Badge, Button, Card, EmptyState, Field, FilterBar, Modal, StatCard } from '../components/ui'
 import PersonalSalesPanel from '../components/PersonalSalesPanel'
 import PersianMonthPicker from '../components/PersianMonthPicker'
 import { formatDate, formatMoney } from '../utils/format'
@@ -44,6 +47,11 @@ const ORDER_KINDS = [
   { value: 'normal', label: 'فروش عادی' },
   { value: 'pre_invoice', label: 'پیش‌فاکتور (بیعانه + تایید/لغو)' },
   { value: 'deposit', label: 'بیعانیه (پرداخت روز قبل تحویل)' },
+]
+
+const ACCOUNTING_MODES = [
+  { value: 'automatic', label: 'خودکار — ثبت در حساب متناسب با روش پرداخت' },
+  { value: 'manual', label: 'دستی — فقط ارسال اطلاعات به اداری' },
 ]
 
 const ORDER_STATUS_COLORS = {
@@ -73,6 +81,8 @@ const EMPTY_FORM = {
 
   order_kind: 'normal',
 
+  accounting_mode: 'automatic',
+
   delivery_date: '',
 
   invoice_number: '',
@@ -96,14 +106,16 @@ const EMPTY_EDIT = {
 }
 
 function showInstallmentSection(form, isShop) {
-  if (form.order_kind !== 'normal' || isShop) return false
-  return form.payment_method === 'check'
+  if (form.payment_method !== 'check') return false
+  if (isDeposit(form)) return false
+  if (isShop) return true
+  return form.order_kind === 'normal'
 }
 
 function resolvePaymentStatus(form, isShop) {
+  if (form.payment_method === 'check') return 'installment'
   if (isPreInvoice(form) || isDeposit(form)) return 'unpaid'
   if (isShop) return 'paid'
-  if (form.payment_method === 'check') return 'installment'
   return 'paid'
 }
 
@@ -115,12 +127,20 @@ function isDeposit(form) {
   return form.order_kind === 'deposit'
 }
 
-function ShopDailyBreakdownSection({ data, loading, breakdownMonth, onMonthChange }) {
+function ShopDailyBreakdownSection({ data, loading, breakdownMonth, onMonthChange, compact = false }) {
   const monthLabel = `${PERSIAN_MONTHS[breakdownMonth.month - 1]} ${toPersianDigits(breakdownMonth.year)}`
   return (
-    <div className="shop-daily-breakdown">
+    <div className={`shop-daily-breakdown${compact ? ' shop-daily-breakdown-compact' : ''}`}>
       <div className="shop-daily-breakdown-head">
-        <h3 className="shop-daily-breakdown-title">خلاصه فروش روزانه</h3>
+        <div>
+          <h3 className="shop-daily-breakdown-title">خلاصه فروش روزانه</h3>
+          {data && (
+            <p className="shop-daily-breakdown-total">
+              جمع {monthLabel}: <strong>{formatMoney(data.total_final || 0)}</strong>
+              <span className="shop-daily-breakdown-count">{toPersianDigits(data.count || 0)} سفارش</span>
+            </p>
+          )}
+        </div>
         <Field label="ماه">
           <PersianMonthPicker
             year={breakdownMonth.year}
@@ -131,47 +151,44 @@ function ShopDailyBreakdownSection({ data, loading, breakdownMonth, onMonthChang
       </div>
       {loading && !data ? (
         <div className="loading">در حال بارگذاری…</div>
+      ) : !data?.days?.length ? (
+        <EmptyState text="در این ماه فروشی ثبت نشده." />
       ) : (
-        <>
-          {data && (
-            <p className="muted shop-daily-breakdown-total">
-              جمع {monthLabel}: <strong>{formatMoney(data.total_final || 0)}</strong>
-              {' — '}{toPersianDigits(data.count || 0)} سفارش
-            </p>
-          )}
-          {!data?.days?.length ? (
-            <EmptyState text="در این ماه فروشی ثبت نشده." />
-          ) : (
-            <div className="table-wrap">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>تاریخ</th>
-                    <th>تعداد</th>
-                    <th>مبلغ فروش</th>
+        <div className="shop-daily-breakdown-table">
+          <div className="table-wrap">
+            <table className="table shop-daily-table">
+              <thead>
+                <tr>
+                  <th>تاریخ</th>
+                  <th>تعداد</th>
+                  <th>مبلغ فروش</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.days.map((d) => (
+                  <tr key={`${d.jalali_year}-${d.jalali_month}-${d.jalali_day}`}>
+                    <td>{formatJalali(jalaliToIso(d.jalali_year, d.jalali_month, d.jalali_day))}</td>
+                    <td>{toPersianDigits(d.count)}</td>
+                    <td>{formatMoney(d.total_final)}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {data.days.map((d) => (
-                    <tr key={`${d.jalali_year}-${d.jalali_month}-${d.jalali_day}`}>
-                      <td>{formatJalali(jalaliToIso(d.jalali_year, d.jalali_month, d.jalali_day))}</td>
-                      <td>{toPersianDigits(d.count)}</td>
-                      <td>{formatMoney(d.total_final)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
     </div>
   )
 }
 
 
-export default function Sales({ portal = 'sales' }) {
+export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
   const isShop = portal === 'shop'
+  const salesGuideKey = pageKey === 'orders' ? 'orders' : isShop ? 'shop' : pageKey
+  useRegisterPageGuide(
+    isShop || pageKey === 'orders' ? salesGuideKey : null,
+    PAGE_GUIDE_DEFAULTS[salesGuideKey] || '',
+  )
 
   const { user } = useAuth()
   const confirm = useConfirm()
@@ -196,6 +213,7 @@ export default function Sales({ portal = 'sales' }) {
   const branchQueueOnly = canApproveBranch && !viewAllSales
   const branchQueueView = branchQueueOnly || (isShop && canApproveBranch && isExecutiveUser(user))
   const shopBranchSupervisor = isShop && (branchQueueOnly || isBranchSupervisor(user))
+  const shopOfficeQueue = isShop && branchQueueView
   const accountingQueueOnly = canApproveAccounting && !viewAllSales && !viewOwnSales
   const workflowColors = Object.fromEntries(
     (choices('workflow_stage').length ? choices('workflow_stage') : []).map((o) => [o.value, o.meta?.color || '#6366f1'])
@@ -272,6 +290,7 @@ export default function Sales({ portal = 'sales' }) {
 
   const [invoiceSale, setInvoiceSale] = useState(null)
   const [invoiceLoadingId, setInvoiceLoadingId] = useState(null)
+  const [excelLoadingId, setExcelLoadingId] = useState(null)
 
   const [form, setForm] = useState(EMPTY_FORM)
 
@@ -474,6 +493,18 @@ export default function Sales({ portal = 'sales' }) {
     }
   }
 
+  const downloadExcel = async (sale) => {
+    setExcelLoadingId(sale.id)
+    setError('')
+    try {
+      await salesApi.exportExcel(sale.id)
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setExcelLoadingId(null)
+    }
+  }
+
   const setPaymentMethod = (value) => {
     setForm((f) => {
       const next = { ...f, payment_method: value }
@@ -563,7 +594,6 @@ export default function Sales({ portal = 'sales' }) {
       }
       if (value === 'normal') {
         next.delivery_date = ''
-        if (isShop) next.payment_method = 'cash'
       }
       return next
     })
@@ -593,8 +623,9 @@ export default function Sales({ portal = 'sales' }) {
           amount: Number(form.amount),
           discount_type: form.discount_type || 'amount',
           discount_value: Number(form.discount_value) || 0,
-          payment_method: isShop && !isPreInvoice(form) && !isDeposit(form) ? 'cash' : form.payment_method,
+          payment_method: form.payment_method,
           order_kind: form.order_kind || 'normal',
+          accounting_mode: form.accounting_mode || 'automatic',
           payment_status: resolvePaymentStatus(form, isShop),
           invoice_number: form.invoice_number,
           description: form.description,
@@ -674,24 +705,30 @@ export default function Sales({ portal = 'sales' }) {
           return
         }
 
-        if (form.payment_method === 'check' && !isPreInvoice(form) && !isDeposit(form) && !isShop) {
+        if (form.payment_method === 'check' && !isPreInvoice(form) && !isDeposit(form)) {
           payload.paid_amount = Number(form.paid_amount || 0)
         }
 
         if (showInstallmentSection(form, isShop) && form.installments.length) {
+          if (form.installments.length > CHECK_FORM_MAX_ROWS) {
+            setError(`حداکثر ${CHECK_FORM_MAX_ROWS} چک مطابق فرم اکسل قابل ثبت است.`)
+            return
+          }
           payload.installments = form.installments
             .filter((i) => Number(i.amount) > 0)
             .map((i) => ({
               amount: Number(i.amount),
               due_date: i.due_date,
-              payment_method: i.payment_method || 'check',
+              payment_method: 'check',
               check_number: i.check_number || '',
               bank_name: i.bank_name || '',
               notes: i.notes || '',
+              received_at: i.received_at || null,
+              receiver_name: i.receiver_name || '',
             }))
         }
 
-        if (form.payment_method === 'check' && !isPreInvoice(form) && !isDeposit(form) && !isShop && form.paid_amount === '') {
+        if (form.payment_method === 'check' && !isPreInvoice(form) && !isDeposit(form) && form.paid_amount === '') {
           setError('برای فروش با چک، پرداخت اولیه را وارد کنید (۰ اگر پرداختی نبود).')
           return
         }
@@ -790,12 +827,13 @@ export default function Sales({ portal = 'sales' }) {
   const monthLabel = `${PERSIAN_MONTHS[jNow.month - 1]} ${toPersianDigits(jNow.year)}`
   const yearLabel = toPersianDigits(jNow.year)
   const branchStatsTitle = isExecutiveUser(user) ? 'همه شعب' : (user?.branch_label || 'شعبه من')
+  const pendingSendCount = sales.filter((s) => s.workflow_stage === 'pending_branch').length
 
 
 
   return (
 
-    <div className="page sales-page">
+    <div className={`page sales-page${shopOfficeQueue ? ' sales-page-shop-office' : ''}`}>
 
       {(summaryOnly || (viewOwnSales && !branchQueueOnly)) && (
         <PersonalSalesPanel
@@ -827,7 +865,48 @@ export default function Sales({ portal = 'sales' }) {
       </div>
       )}
 
-      {branchQueueView && !viewAllSales && (
+      {shopOfficeQueue && (
+      <div className="shop-office-queue-hero">
+        <div className="shop-office-queue-hero-main">
+          <span className="shop-office-queue-hero-icon" aria-hidden>📤</span>
+          <div>
+            <h2 className="shop-office-queue-hero-title">صف ارسال به اداری</h2>
+            <p className="shop-office-queue-hero-desc">
+              سفارش‌های ثبت‌شده را بررسی کنید و برای تایید حسابداری ارسال کنید.
+            </p>
+          </div>
+        </div>
+        <div className="shop-office-queue-hero-badge">
+          <span className="shop-office-queue-hero-count">{toPersianDigits(pendingSendCount)}</span>
+          <span className="shop-office-queue-hero-label">در انتظار ارسال</span>
+        </div>
+      </div>
+      )}
+
+      {shopOfficeQueue && !viewAllSales && (
+      <div className="stat-grid shop-office-stats">
+        <StatCard
+          label={`فروش ${monthLabel}`}
+          value={formatMoney(monthly?.total_final || 0)}
+          hint={`${toPersianDigits(monthly?.count || 0)} فقره — ${branchStatsTitle}`}
+          accent="#6366f1"
+        />
+        <StatCard
+          label={`فروش سال ${yearLabel}`}
+          value={formatMoney(yearly?.total_final || 0)}
+          hint={`${toPersianDigits(yearly?.count || 0)} فقره — سال جاری`}
+          accent="#8b5cf6"
+        />
+        <StatCard
+          label="منتظر ارسال"
+          value={toPersianDigits(pendingSendCount)}
+          hint="سفارش در صف شعبه"
+          accent={pendingSendCount > 0 ? '#f59e0b' : '#10b981'}
+        />
+      </div>
+      )}
+
+      {branchQueueView && !viewAllSales && !shopOfficeQueue && (
       <div className="stats-grid">
         <Card title={`فروش ماه ${monthLabel} — ${branchStatsTitle}`}>
           <p className="stat-value">{formatMoney(monthly?.total_final || 0)}</p>
@@ -842,10 +921,17 @@ export default function Sales({ portal = 'sales' }) {
 
       <Card
         title={salesPageTitle()}
+        className={shopOfficeQueue ? 'shop-office-queue-card-wrap' : ''}
         actions={canCreateSale ? <Button onClick={openCreate}>+ ثبت فروش</Button> : null}
       >
 
         {error && <div className="alert-error">{error}</div>}
+
+        {shopOfficeQueue && !loading && pendingSendCount > 0 && (
+          <p className="shop-office-queue-hint">
+            {toPersianDigits(pendingSendCount)} سفارش هنوز به اداری ارسال نشده — پس از بررسی، دکمه «ارسال به اداری» را بزنید.
+          </p>
+        )}
 
         {summaryOnly && isShop && (
           <ShopDailyBreakdownSection
@@ -859,18 +945,13 @@ export default function Sales({ portal = 'sales' }) {
         {summaryOnly && !isShop && monthly && (
           <Card title={`فروش ماه ${monthLabel}`}>
             <p className="stat-value">{formatMoney(monthly.total_final || 0)}</p>
-            <p className="muted">{monthly.count || 0} سفارش ثبت‌شده — جزئیات سفارش‌ها نمایش داده نمی‌شود.</p>
+            <p className="muted">{monthly.count || 0} سفارش ثبت‌شده</p>
           </Card>
         )}
 
         {!summaryOnly && (
         <>
-        {shopBranchSupervisor ? (
-          <p className="branch-queue-hint muted">
-            سفارش‌های زیر منتظر ارسال به اداری هستند.
-          </p>
-        ) : null}
-        <form onSubmit={applyFilters} className={shopBranchSupervisor ? 'sales-filters-branch-queue' : ''}>
+        <form onSubmit={applyFilters} className={shopOfficeQueue ? 'sales-filters-shop-office' : shopBranchSupervisor ? 'sales-filters-branch-queue' : ''}>
           <FilterBar>
             <Field label="روش پرداخت">
               <Select
@@ -914,15 +995,15 @@ export default function Sales({ portal = 'sales' }) {
 
         {loading ? <div className="loading">در حال بارگذاری…</div> : sales.length === 0 ? (
 
-          <EmptyState text="فروشی یافت نشد." />
+          <EmptyState text={shopOfficeQueue ? 'سفارشی در صف ارسال نیست — همه به اداری ارسال شده‌اند.' : 'فروشی یافت نشد.'} />
 
         ) : (
 
           <>
 
-          <div className="table-wrap sales-table-desktop">
+          <div className={`table-wrap sales-table-desktop${shopOfficeQueue ? ' shop-office-table-wrap' : ''}`}>
 
-          <table className="table">
+          <table className={`table${shopOfficeQueue ? ' shop-office-table' : ''}`}>
 
             <thead>
 
@@ -932,7 +1013,7 @@ export default function Sales({ portal = 'sales' }) {
                 {isShop && branchQueueView && <th>شعبه</th>}
                 <th>مشتری</th><th>نوع</th>
                 {!hideWorkflowStage && <th>مرحله</th>}
-                <th>نهایی</th><th>پرداخت‌شده</th><th>مانده</th><th>تاریخ</th><th>فاکتور</th>
+                <th>نهایی</th><th>پرداخت‌شده</th><th>مانده</th><th>تاریخ</th><th>فاکتور</th><th>اکسل</th>
 
                 {showActionsColumn && <th>عملیات</th>}
 
@@ -942,9 +1023,11 @@ export default function Sales({ portal = 'sales' }) {
 
             <tbody>
 
-              {sales.map((s) => (
+              {sales.map((s) => {
 
-                <tr key={s.id}>
+                const pendingSend = s.workflow_stage === 'pending_branch'
+                return (
+                <tr key={s.id} className={shopOfficeQueue && pendingSend ? 'shop-office-pending-row' : ''}>
 
                   <td>{s.invoice_number || s.id}</td>
 
@@ -983,12 +1066,24 @@ export default function Sales({ portal = 'sales' }) {
                     </button>
                   </td>
 
+                  <td>
+                    <button type="button" className="link" onClick={() => downloadExcel(s)} disabled={excelLoadingId === s.id}>
+                      {excelLoadingId === s.id ? '…' : 'اکسل'}
+                    </button>
+                  </td>
+
                   {(canActOnSale(s)) && (
 
                     <td className="row-actions">
 
-                      {canApproveBranch && s.workflow_stage === 'pending_branch' && (
-                        <button type="button" className="link" onClick={() => approveBranch(s)}>{isShop ? 'ارسال به اداری' : 'تایید شعبه'}</button>
+                      {canApproveBranch && pendingSend && (
+                        shopOfficeQueue ? (
+                          <Button type="button" className="btn-sm shop-office-send-btn" onClick={() => approveBranch(s)}>
+                            ارسال به اداری
+                          </Button>
+                        ) : (
+                          <button type="button" className="link" onClick={() => approveBranch(s)}>{isShop ? 'ارسال به اداری' : 'تایید شعبه'}</button>
+                        )
                       )}
 
                       {canApproveAccounting && s.workflow_stage === 'branch_approved' && (
@@ -1025,8 +1120,8 @@ export default function Sales({ portal = 'sales' }) {
                   )}
 
                 </tr>
-
-              ))}
+                )
+              })}
 
             </tbody>
 
@@ -1034,8 +1129,85 @@ export default function Sales({ portal = 'sales' }) {
 
           </div>
 
-          <div className={`sales-cards-mobile${shopBranchSupervisor ? ' sales-branch-queue-mobile' : ''}`}>
-            {sales.map((s) => (
+          <div className={`sales-cards-mobile${shopOfficeQueue ? ' shop-office-cards-mobile' : shopBranchSupervisor ? ' sales-branch-queue-mobile' : ''}`}>
+            {sales.map((s) => {
+              const pendingSend = s.workflow_stage === 'pending_branch'
+              if (shopOfficeQueue) {
+                return (
+                  <div key={s.id} className={`shop-office-card${pendingSend ? ' shop-office-card-pending' : ''}`}>
+                    <div className="shop-office-card-head">
+                      <div className="shop-office-card-meta">
+                        <span className="shop-office-card-invoice">{s.invoice_number || `#${s.id}`}</span>
+                        {isShop && branchQueueView && (
+                          <span className="shop-office-card-branch">{s.branch_label || s.branch || '—'}</span>
+                        )}
+                      </div>
+                      <Badge color={resolvedOrderStatusColors[s.order_status] || '#6366f1'}>
+                        {s.order_kind_display}
+                      </Badge>
+                    </div>
+                    <div className="shop-office-card-customer">{s.customer_name}</div>
+                    <div className="shop-office-card-grid">
+                      <div className="shop-office-card-stat">
+                        <span className="shop-office-card-stat-label">مبلغ نهایی</span>
+                        <strong>{s.amounts_masked ? '—' : formatMoney(s.final_amount)}</strong>
+                      </div>
+                      <div className="shop-office-card-stat">
+                        <span className="shop-office-card-stat-label">مانده</span>
+                        <strong className={!s.amounts_masked && s.balance_due > 0 ? 'shop-office-balance-due' : ''}>
+                          {s.amounts_masked ? '—' : formatMoney(s.balance_due)}
+                        </strong>
+                      </div>
+                      <div className="shop-office-card-stat">
+                        <span className="shop-office-card-stat-label">پرداخت‌شده</span>
+                        <span>{s.amounts_masked ? '—' : formatMoney(s.paid_amount)}</span>
+                      </div>
+                      <div className="shop-office-card-stat">
+                        <span className="shop-office-card-stat-label">تاریخ</span>
+                        <span>{formatDate(s.sold_at)}</span>
+                      </div>
+                    </div>
+                    {canApproveBranch && pendingSend && (
+                      <Button
+                        type="button"
+                        className="shop-office-send-btn"
+                        onClick={() => approveBranch(s)}
+                      >
+                        ارسال به اداری
+                      </Button>
+                    )}
+                    <div className="shop-office-card-tools">
+                      <button type="button" className="link" onClick={() => openInvoice(s)} disabled={invoiceLoadingId === s.id}>
+                        {invoiceLoadingId === s.id ? '…' : 'فاکتور'}
+                      </button>
+                      <button type="button" className="link" onClick={() => downloadExcel(s)} disabled={excelLoadingId === s.id}>
+                        {excelLoadingId === s.id ? '…' : 'اکسل'}
+                      </button>
+                      {canEditSale(s) && (
+                        <>
+                          <button type="button" className="link" onClick={() => openEdit(s)}>ویرایش</button>
+                          {s.balance_due > 0 && s.order_status !== 'cancelled' && !s.amounts_masked && (
+                            <button type="button" className="link" onClick={() => { setPayModal(s); setPayAmount(String(s.balance_due)) }}>پرداخت</button>
+                          )}
+                          {s.order_kind === 'pre_invoice' && s.order_status === 'pending' && (
+                            <>
+                              <button type="button" className="link" onClick={() => confirmOrder(s)}>تایید</button>
+                              <button type="button" className="link danger" onClick={() => cancelOrder(s)}>لغو</button>
+                            </>
+                          )}
+                          {s.order_kind === 'deposit' && s.order_status === 'pending' && (
+                            <button type="button" className="link danger" onClick={() => cancelOrder(s)}>لغو</button>
+                          )}
+                          {s.order_status !== 'cancelled' && hasPermission(user, 'delete_sale') && (
+                            <button type="button" className="link danger" onClick={() => remove(s.id)}>حذف</button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                )
+              }
+              return (
               <div key={s.id} className={`m-card${shopBranchSupervisor ? ' sales-branch-queue-card' : ''}`}>
                 <div className="m-card-head">
                   <div>
@@ -1071,6 +1243,9 @@ export default function Sales({ portal = 'sales' }) {
                   <button type="button" className="link" onClick={() => openInvoice(s)} disabled={invoiceLoadingId === s.id}>
                     {invoiceLoadingId === s.id ? '…' : 'فاکتور'}
                   </button>
+                  <button type="button" className="link" onClick={() => downloadExcel(s)} disabled={excelLoadingId === s.id}>
+                    {excelLoadingId === s.id ? '…' : 'اکسل'}
+                  </button>
                   {canApproveAccounting && s.workflow_stage === 'branch_approved' && (
                     <button type="button" className="link" onClick={() => approveAccounting(s)}>تایید حسابداری</button>
                   )}
@@ -1096,7 +1271,8 @@ export default function Sales({ portal = 'sales' }) {
                   )}
                 </div>
               </div>
-            ))}
+              )
+            })}
           </div>
 
           </>
@@ -1106,12 +1282,13 @@ export default function Sales({ portal = 'sales' }) {
         </>
         )}
 
-        {isShop && branchQueueView && (
+        {shopOfficeQueue && (
           <ShopDailyBreakdownSection
             data={dailyBreakdown}
             loading={loading || breakdownLoading}
             breakdownMonth={breakdownMonth}
             onMonthChange={onBreakdownMonthChange}
+            compact
           />
         )}
 
@@ -1188,23 +1365,6 @@ export default function Sales({ portal = 'sales' }) {
                 />
               </Field>
 
-              {isPreInvoice(form) && (
-                <p className="muted small">
-                  پیش‌فاکتور: بیعانه اختیاری ثبت می‌شود. بعداً «تایید» یا «لغو» کنید.
-                </p>
-              )}
-
-              {isDeposit(form) && (
-                <p className="muted small">
-                  بیعانیه: مانده حساب یک روز قبل از تحویل سررسید می‌شود.
-                </p>
-              )}
-
-              {isShop && !isPreInvoice(form) && !isDeposit(form) && (
-                <p className="muted small">
-                  فروش عادی فروشگاه: مشتری کالا را نقد می‌خرد و مبلغ نهایی همان لحظه تسویه می‌شود.
-                </p>
-              )}
 
               <ProductLines
                 lines={form.line_items}
@@ -1244,7 +1404,6 @@ export default function Sales({ portal = 'sales' }) {
                   </Field>
                   <Field label="بیعانه اولیه">
                     <MoneyInput min="0" value={form.paid_amount} onChange={(e) => setForm({ ...form, paid_amount: e.target.value })} />
-                    <span className="muted">مبلغی که همین الان دریافت می‌شود (۰ اگر نبود)</span>
                   </Field>
                 </>
               )}
@@ -1252,18 +1411,15 @@ export default function Sales({ portal = 'sales' }) {
               {isPreInvoice(form) && (
                 <Field label="مبلغ بیعانه (اختیاری)">
                   <MoneyInput min="0" value={form.paid_amount} onChange={(e) => setForm({ ...form, paid_amount: e.target.value })} />
-                  <span className="muted">می‌توانید بعداً از حسابداری یا دکمه پرداخت هم اضافه کنید</span>
                 </Field>
               )}
 
-              {!isPreInvoice(form) && !isDeposit(form) && !isShop && form.payment_method === 'check' && (
+              {!isPreInvoice(form) && !isDeposit(form) && form.payment_method === 'check' && (
                 <Field label="پرداخت اولیه">
                   <MoneyInput min="0" value={form.paid_amount} onChange={(e) => setForm({ ...form, paid_amount: e.target.value })} required />
-                  <span className="muted">مبلغی که همین الان دریافت شده (۰ اگر نبود)</span>
                 </Field>
               )}
 
-              {!isPreInvoice(form) && !isDeposit(form) && !(isShop && form.order_kind === 'normal') && (
               <Field label="روش پرداخت">
                 <Select
                   value={form.payment_method}
@@ -1271,6 +1427,15 @@ export default function Sales({ portal = 'sales' }) {
                   options={paymentMethods}
                 />
               </Field>
+
+              {!editing && (
+                <Field label="ثبت حسابداری">
+                  <Select
+                    value={form.accounting_mode}
+                    onChange={(v) => setForm({ ...form, accounting_mode: v })}
+                    options={ACCOUNTING_MODES}
+                  />
+                </Field>
               )}
 
               {showInstallmentSection(form, isShop) && (
@@ -1278,6 +1443,7 @@ export default function Sales({ portal = 'sales' }) {
                   installments={form.installments}
                   onChange={(installments) => setForm({ ...form, installments })}
                   balanceDue={saleBalanceDue(form, walletBalance)}
+                  customerName={selectedCustomer?.full_name || ''}
                 />
               )}
 
@@ -1290,7 +1456,6 @@ export default function Sales({ portal = 'sales' }) {
                     onChange={(v) => setForm({ ...form, delivery_date: v })}
                     {...shopDeliveryDateProps}
                   />
-                  <span className="muted">اختیاری — روی فاکتور نمایش داده می‌شود</span>
                 </Field>
               )}
 

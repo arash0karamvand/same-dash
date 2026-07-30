@@ -104,9 +104,6 @@ export default function PersonalSalesPanel({
     >
       {!collapsed && (
         <>
-          <p className="muted small panel-hint">
-            {monthOnly ? 'فقط جمع فروش ماهانه — بدون دسترسی به جزئیات سفارش‌ها.' : 'فقط فروش‌های ثبت‌شده توسط شما در شعبه‌تان.'}
-          </p>
           <div className="personal-sales-filters">
             {!monthOnly && (
             <Field label="بازه">

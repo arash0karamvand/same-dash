@@ -1,6 +1,7 @@
 """طرح حساب‌ها (دفتر کل) — seed و کمک‌تابع‌های حساب."""
 
 from backend.models import Account, DetailedAccount, SubsidiaryAccount
+from logic.ledger import OFFICE_LEDGER, LedgerConfig
 
 ACCOUNT_CLASS_LABELS = {
     "asset": "دارایی",
@@ -70,9 +71,31 @@ PAYMENT_METHOD_ACCOUNT_SLUGS = {
 }
 
 
-def seed_accounts():
+def resolve_sale_accounting_mode(requested, payment_method):
+    """حالت خودکار فقط وقتی روش پرداخت به حساب معین وصل است."""
+    from backend.models import Sale
+
+    mode = (requested or Sale.ACCOUNTING_MODE_AUTOMATIC).strip()
+    if mode not in (Sale.ACCOUNTING_MODE_AUTOMATIC, Sale.ACCOUNTING_MODE_MANUAL):
+        raise ValueError("نوع ثبت حسابداری نامعتبر است.")
+    if mode == Sale.ACCOUNTING_MODE_AUTOMATIC:
+        method = (payment_method or "cash").strip()
+        if method not in PAYMENT_METHOD_ACCOUNT_SLUGS:
+            return Sale.ACCOUNTING_MODE_MANUAL
+    return mode
+
+
+def payment_account_label_for_sale(sale):
+    account = payment_account_for_sale(sale)
+    code = getattr(account, "code", "") or ""
+    name = account.name if account else "—"
+    return f"{code} — {name}".strip(" —") if code or name else "—"
+
+
+def seed_accounts(*, ledger=OFFICE_LEDGER):
     """ایجاد یا به‌روزرسانی حساب‌های طرح حساب."""
-    has_code = any(f.name == "code" for f in Account._meta.get_fields())
+    AccountModel = ledger.Account
+    has_code = any(f.name == "code" for f in AccountModel._meta.get_fields())
     for row in CHART_OF_ACCOUNTS:
         defaults = {
             "name": row["name"],
@@ -84,45 +107,47 @@ def seed_accounts():
         }
         if has_code:
             defaults["code"] = row.get("code", "")
-        Account.objects.update_or_create(
+        AccountModel.objects.update_or_create(
             slug=row["slug"],
             defaults=defaults,
         )
 
 
-def get_account(slug, *, required=True):
-    account = Account.objects.filter(slug=slug, is_active=True).first()
+def get_account(slug, *, required=True, ledger=OFFICE_LEDGER):
+    AccountModel = ledger.Account
+    account = AccountModel.objects.filter(slug=slug, is_active=True).first()
     if account:
         return account
-    if not Account.objects.exists():
-        seed_accounts()
-        account = Account.objects.filter(slug=slug, is_active=True).first()
+    if not AccountModel.objects.exists():
+        seed_accounts(ledger=ledger)
+        account = AccountModel.objects.filter(slug=slug, is_active=True).first()
     if account or not required:
         return account
     raise ValueError(f"حساب «{slug}» یافت نشد.")
 
 
-def resolve_account_for_entry(*, account_id=None, account_slug=None, entry_type=None):
+def resolve_account_for_entry(*, account_id=None, account_slug=None, entry_type=None, ledger=OFFICE_LEDGER):
+    AccountModel = ledger.Account
     if account_id:
-        return Account.objects.get(pk=account_id, is_active=True)
+        return AccountModel.objects.get(pk=account_id, is_active=True)
     if account_slug:
-        return get_account(account_slug)
+        return get_account(account_slug, ledger=ledger)
     if entry_type == "manual":
-        return get_account("other_revenue")
+        return get_account("other_revenue", ledger=ledger)
     if entry_type:
-        account = Account.objects.filter(legacy_entry_type=entry_type, is_active=True).first()
+        account = AccountModel.objects.filter(legacy_entry_type=entry_type, is_active=True).first()
         if account:
             return account
         slug = ENTRY_TYPE_ACCOUNT_SLUGS.get(entry_type)
         if slug:
-            return get_account(slug)
+            return get_account(slug, ledger=ledger)
     raise ValueError("حساب سند مشخص نشده است.")
 
 
-def payment_account_for_sale(sale):
+def payment_account_for_sale(sale, *, ledger=OFFICE_LEDGER):
     method = getattr(sale, "payment_method", None) or "cash"
     slug = PAYMENT_METHOD_ACCOUNT_SLUGS.get(method, "bank")
-    return get_account(slug)
+    return get_account(slug, ledger=ledger)
 
 
 def subsidiary_to_dict(sub):
@@ -154,11 +179,12 @@ def detailed_to_dict(detail):
     }
 
 
-def accounts_grouped():
-    seed_accounts()
+def accounts_grouped(*, ledger=OFFICE_LEDGER):
+    seed_accounts(ledger=ledger)
+    AccountModel = ledger.Account
     groups = []
     for class_key, class_label in ACCOUNT_CLASS_LABELS.items():
-        accounts = Account.objects.filter(account_class=class_key, is_active=True).order_by("sort_order", "name")
+        accounts = AccountModel.objects.filter(account_class=class_key, is_active=True).order_by("sort_order", "name")
         groups.append(
             {
                 "class": class_key,
@@ -184,44 +210,50 @@ def account_to_dict(account):
     }
 
 
-def resolve_line_accounts(*, account_id=None, subsidiary_id=None, detailed_id=None):
+def resolve_line_accounts(*, account_id=None, subsidiary_id=None, detailed_id=None, ledger=OFFICE_LEDGER):
     """حل حساب کل/معین/تفصیلی برای یک ردیف سند."""
+    DetailedModel = ledger.DetailedAccount
+    SubsidiaryModel = ledger.SubsidiaryAccount
+    AccountModel = ledger.Account
     detailed = subsidiary = account = None
     if detailed_id:
-        detailed = DetailedAccount.objects.select_related("subsidiary", "subsidiary__account").get(
+        detailed = DetailedModel.objects.select_related("subsidiary", "subsidiary__account").get(
             pk=detailed_id, is_active=True
         )
         subsidiary = detailed.subsidiary
         account = subsidiary.account
     elif subsidiary_id:
-        subsidiary = SubsidiaryAccount.objects.select_related("account").get(pk=subsidiary_id, is_active=True)
+        subsidiary = SubsidiaryModel.objects.select_related("account").get(pk=subsidiary_id, is_active=True)
         account = subsidiary.account
     elif account_id:
-        account = Account.objects.get(pk=account_id, is_active=True)
+        account = AccountModel.objects.get(pk=account_id, is_active=True)
     else:
         raise ValueError("حداقل حساب کل باید مشخص شود.")
     return account, subsidiary, detailed
 
 
-def list_document_models(params):
+def list_document_models(params, *, ledger=OFFICE_LEDGER):
     """مدل‌های سند (حساب‌های دفتر کل) به همراه تعداد اسناد."""
     from django.db.models import Count, Q
 
-    from backend.models import AccountingEntry
     from logic.accounting_entries import apply_entry_filters
 
-    seed_accounts()
-    accounts = Account.objects.filter(is_active=True).order_by("sort_order", "name")
+    seed_accounts(ledger=ledger)
+    AccountModel = ledger.Account
+    EntryModel = ledger.AccountingEntry
+    accounts = AccountModel.objects.filter(is_active=True).order_by("sort_order", "name")
     account_class = (params.get("account_class") or "").strip()
     if account_class:
         accounts = accounts.filter(account_class=account_class)
 
     entry_qs = apply_entry_filters(
-        AccountingEntry.objects.filter(account__isnull=False).filter(
-            Q(sale__isnull=True) | Q(sale__is_deleted=False)
-        ),
+        EntryModel.objects.filter(account__isnull=False),
         params,
+        ledger=ledger,
     )
+    if ledger.syncs_sales:
+        entry_qs = entry_qs.filter(Q(sale__isnull=True) | Q(sale__is_deleted=False))
+
     counts = {
         row["account_id"]: row["count"]
         for row in entry_qs.values("account_id").annotate(count=Count("id"))
@@ -234,12 +266,12 @@ def list_document_models(params):
         info["entry_count"] = counts.get(account.id, 0)
         models.append(info)
 
-    return {"models": models, "accounts": accounts_grouped()}
+    return {"models": models, "accounts": accounts_grouped(ledger=ledger)}
 
 
-def list_subsidiary_accounts(params):
+def list_subsidiary_accounts(params, *, ledger=OFFICE_LEDGER):
     account_id = (params.get("account_id") or "").strip()
-    qs = SubsidiaryAccount.objects.filter(is_active=True).select_related("account").order_by(
+    qs = ledger.SubsidiaryAccount.objects.filter(is_active=True).select_related("account").order_by(
         "account__sort_order", "code"
     )
     if account_id.isdigit():
@@ -247,24 +279,26 @@ def list_subsidiary_accounts(params):
     return [subsidiary_to_dict(s) for s in qs]
 
 
-def create_subsidiary_account(*, account_id, code, name):
+def create_subsidiary_account(*, account_id, code, name, ledger=OFFICE_LEDGER):
     code = (code or "").strip()
     name = (name or "").strip()
     if not account_id or not code or not name:
         raise ValueError("حساب کل، کد و عنوان معین الزامی است.")
+    AccountModel = ledger.Account
+    SubsidiaryModel = ledger.SubsidiaryAccount
     try:
-        account = Account.objects.get(pk=account_id, is_active=True)
-    except Account.DoesNotExist as exc:
+        account = AccountModel.objects.get(pk=account_id, is_active=True)
+    except AccountModel.DoesNotExist as exc:
         raise LookupError("حساب کل یافت نشد.") from exc
-    if SubsidiaryAccount.objects.filter(account=account, code=code).exists():
+    if SubsidiaryModel.objects.filter(account=account, code=code).exists():
         raise ValueError("این کد معین قبلاً ثبت شده است.")
-    return SubsidiaryAccount.objects.create(account=account, code=code, name=name)
+    return SubsidiaryModel.objects.create(account=account, code=code, name=name)
 
 
-def list_detailed_accounts(params):
+def list_detailed_accounts(params, *, ledger=OFFICE_LEDGER):
     subsidiary_id = (params.get("subsidiary_id") or "").strip()
     account_id = (params.get("account_id") or "").strip()
-    qs = DetailedAccount.objects.filter(is_active=True).select_related(
+    qs = ledger.DetailedAccount.objects.filter(is_active=True).select_related(
         "subsidiary", "subsidiary__account"
     ).order_by("subsidiary__account__sort_order", "subsidiary__code", "code")
     if subsidiary_id.isdigit():
@@ -274,26 +308,29 @@ def list_detailed_accounts(params):
     return [detailed_to_dict(d) for d in qs]
 
 
-def create_detailed_account(*, subsidiary_id, code, name):
+def create_detailed_account(*, subsidiary_id, code, name, ledger=OFFICE_LEDGER):
     code = (code or "").strip()
     name = (name or "").strip()
     if not subsidiary_id or not code or not name:
         raise ValueError("حساب معین، کد و عنوان تفصیلی الزامی است.")
+    SubsidiaryModel = ledger.SubsidiaryAccount
+    DetailedModel = ledger.DetailedAccount
     try:
-        subsidiary = SubsidiaryAccount.objects.select_related("account").get(
+        subsidiary = SubsidiaryModel.objects.select_related("account").get(
             pk=subsidiary_id, is_active=True
         )
-    except SubsidiaryAccount.DoesNotExist as exc:
+    except SubsidiaryModel.DoesNotExist as exc:
         raise LookupError("حساب معین یافت نشد.") from exc
-    if DetailedAccount.objects.filter(subsidiary=subsidiary, code=code).exists():
+    if DetailedModel.objects.filter(subsidiary=subsidiary, code=code).exists():
         raise ValueError("این کد تفصیلی قبلاً ثبت شده است.")
-    return DetailedAccount.objects.create(subsidiary=subsidiary, code=code, name=name)
+    return DetailedModel.objects.create(subsidiary=subsidiary, code=code, name=name)
 
 
-def update_general_account(*, account_id, name=None, is_active=None):
+def update_general_account(*, account_id, name=None, is_active=None, ledger=OFFICE_LEDGER):
+    AccountModel = ledger.Account
     try:
-        account = Account.objects.get(pk=account_id)
-    except Account.DoesNotExist as exc:
+        account = AccountModel.objects.get(pk=account_id)
+    except AccountModel.DoesNotExist as exc:
         raise LookupError("حساب کل یافت نشد.") from exc
     if name is not None:
         name = (name or "").strip()
@@ -306,16 +343,17 @@ def update_general_account(*, account_id, name=None, is_active=None):
     return account
 
 
-def update_subsidiary_account(*, sub_id, code=None, name=None, is_active=None):
+def update_subsidiary_account(*, sub_id, code=None, name=None, is_active=None, ledger=OFFICE_LEDGER):
+    SubsidiaryModel = ledger.SubsidiaryAccount
     try:
-        sub = SubsidiaryAccount.objects.select_related("account").get(pk=sub_id)
-    except SubsidiaryAccount.DoesNotExist as exc:
+        sub = SubsidiaryModel.objects.select_related("account").get(pk=sub_id)
+    except SubsidiaryModel.DoesNotExist as exc:
         raise LookupError("حساب معین یافت نشد.") from exc
     if code is not None:
         code = (code or "").strip()
         if not code:
             raise ValueError("کد معین الزامی است.")
-        if SubsidiaryAccount.objects.filter(account=sub.account, code=code).exclude(pk=sub.pk).exists():
+        if SubsidiaryModel.objects.filter(account=sub.account, code=code).exclude(pk=sub.pk).exists():
             raise ValueError("این کد معین قبلاً ثبت شده است.")
         sub.code = code
     if name is not None:
@@ -329,16 +367,17 @@ def update_subsidiary_account(*, sub_id, code=None, name=None, is_active=None):
     return sub
 
 
-def update_detailed_account(*, detail_id, code=None, name=None, is_active=None):
+def update_detailed_account(*, detail_id, code=None, name=None, is_active=None, ledger=OFFICE_LEDGER):
+    DetailedModel = ledger.DetailedAccount
     try:
-        detail = DetailedAccount.objects.select_related("subsidiary", "subsidiary__account").get(pk=detail_id)
-    except DetailedAccount.DoesNotExist as exc:
+        detail = DetailedModel.objects.select_related("subsidiary", "subsidiary__account").get(pk=detail_id)
+    except DetailedModel.DoesNotExist as exc:
         raise LookupError("حساب تفصیلی یافت نشد.") from exc
     if code is not None:
         code = (code or "").strip()
         if not code:
             raise ValueError("کد تفصیلی الزامی است.")
-        if DetailedAccount.objects.filter(subsidiary=detail.subsidiary, code=code).exclude(pk=detail.pk).exists():
+        if DetailedModel.objects.filter(subsidiary=detail.subsidiary, code=code).exclude(pk=detail.pk).exists():
             raise ValueError("این کد تفصیلی قبلاً ثبت شده است.")
         detail.code = code
     if name is not None:

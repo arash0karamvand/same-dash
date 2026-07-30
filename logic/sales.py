@@ -195,7 +195,7 @@ def _refresh_customer_last_purchase(customer, exclude_sale_id=None):
     customer.save(update_fields=["last_purchase_at"])
 
 
-def _create_sale_accounting(sale, outstanding):
+def _create_sale_accounting(sale, outstanding, *, is_approved=True):
     """سند فروش — بستانکار درآمد (7240) + بدهکار مطالبات (1310) و/یا بانک (1210)."""
     if is_pre_invoice_pending(sale):
         return
@@ -217,7 +217,7 @@ def _create_sale_accounting(sale, outstanding):
         amount=final_amount,
         description=f"درآمد فروش فاکتور {sale.invoice_number or sale.pk}",
         sale=sale,
-        is_approved=True,
+        is_approved=is_approved,
         document_code=doc_code,
         document_number=doc_num,
         entry_date=sale.sold_at,
@@ -229,7 +229,7 @@ def _create_sale_accounting(sale, outstanding):
             amount=outstanding,
             description=f"مطالبات مشتری فاکتور {sale.invoice_number or sale.pk}",
             sale=sale,
-            is_approved=True,
+            is_approved=is_approved,
             document_code=doc_code,
             document_number=doc_num,
             entry_date=sale.sold_at,
@@ -242,11 +242,24 @@ def _create_sale_accounting(sale, outstanding):
             amount=paid,
             description=f"دریافت وجه فاکتور {sale.invoice_number or sale.pk}",
             sale=sale,
-            is_approved=True,
+            is_approved=is_approved,
             document_code=doc_code,
             document_number=doc_num,
             entry_date=sale.sold_at,
         )
+
+
+def ensure_draft_sale_accounting(sale):
+    """پیش‌نویس سند حسابداری هنگام ارسال به اداری — فقط حالت خودکار."""
+    from backend.models import Sale
+
+    if sale.accounting_mode != Sale.ACCOUNTING_MODE_AUTOMATIC:
+        return
+    if is_pre_invoice_pending(sale):
+        return
+    if sale.accounting_entries.exists():
+        return
+    _create_sale_accounting(sale, balance_due(sale), is_approved=False)
 
 
 def _create_pre_invoice_deposit_accounting(sale, paid_amount, recorded_by=None):
@@ -329,6 +342,7 @@ def record_sale(
     seller=None,
     order_kind=Sale.ORDER_KIND_NORMAL,
     delivery_date=None,
+    accounting_mode=None,
 ):
     resolved_items = None
     if line_items:
@@ -348,6 +362,9 @@ def record_sale(
         discount_value = discount
     discount = resolve_discount_amount(amount, discount_type, discount_value, customer=customer)
     payment_method = normalize_payment_method(payment_method)
+    from logic.accounting_accounts import resolve_sale_accounting_mode
+
+    resolved_accounting_mode = resolve_sale_accounting_mode(accounting_mode, payment_method)
     if amount <= 0:
         raise ValueError("مبلغ فروش باید مثبت باشد.")
 
@@ -406,6 +423,7 @@ def record_sale(
         "paid_amount": resolved_paid,
         "payment_method": payment_method,
         "payment_status": resolved_status,
+        "accounting_mode": resolved_accounting_mode,
         "invoice_number": invoice_number,
         "description": description,
         "recorded_by": recorded_by,

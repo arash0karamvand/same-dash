@@ -3,15 +3,45 @@
 import { TERMS } from './accountingTerms'
 
 export const PAGE_GUIDE_DEFAULTS = {
+  office:
+    'جستجوی زنده در صف تایید؛ نمایش ۳۰ سفارش آخر با فیلتر وضعیت، تاریخ، مشتری و مبلغ.',
+  'office-orders':
+    '۳۰ سفارش اخیر اداری — فیلتر روی وضعیت، نوع سفارش، تاریخ و مبلغ.',
+  checks:
+    '۳۰ فاکتور قسطی اخیر — برای یافتن سفارش مرتبط با چک. جستجوی زنده با فیلتر تاریخ، نام و مبلغ.',
+  customers:
+    '۳۰ مشتری اخیر — جستجو با نام، موبایل، تاریخ عضویت و بازه خرید/کیف پول.',
+  customers_shop:
+    'فهرست و جستجوی مشتریان؛ کیف پول و تاریخچه خرید. «مشتریان وفادار»: حداقل ۲ خرید در ۱ سال — ۲۰ نفر اول بر اساس مجموع مبلغ.',
+  filter:
+    'انتخاب نوع رکورد و فیلتر — حداکثر ۳۰ نتیجه اخیر. همه شرط‌ها با هم اعمال می‌شوند؛ جستجو زنده است.',
+  filter_managers: 'فیلتر رکورد فقط در پورتال اداری فعال است.',
+  shop:
+    'پیش‌فاکتور: بیعانه اختیاری؛ بعداً تایید یا لغو. بیعانه: مانده یک روز قبل از تحویل سررسید می‌شود. فروش عادی: تسویه نقد همان لحظه. ثبت حسابداری — خودکار: سند پیش‌نویس با حساب متناسب پرداخت و قطعی پس از تایید اداری؛ دستی: فقط برای اداری، سند در حسابداری دستی. بیعانه/پرداخت اولیه: مبلغ دریافتی فعلی (۰ مجاز). تاریخ تحویل روی فاکتور اختیاری است. پنل «فروش من»: جمع روز/ماه/سال — فقط فروش‌های شما در شعبه (یا فقط جمع ماه بدون جزئیات).',
+  orders:
+    'سفارش‌های زیر منتظر ارسال به اداری هستند. فیلتر و ثبت مانند فروشگاه.',
   'accounting__trial-balance': `${TERMS.accountCode} | ${TERMS.accountTitle} | ${TERMS.openingBalance} | ${TERMS.turnover} | ${TERMS.balance} — کلیک روی ردیف برای ${TERMS.ledger}`,
   'accounting__subsidiary-trial': `${TERMS.accountCode} | ${TERMS.accountTitle} | ${TERMS.openingBalance} | ${TERMS.turnover} | ${TERMS.balance} — کلیک روی ردیف برای ${TERMS.ledger}`,
   'accounting__detailed-trial': `${TERMS.accountCode} | ${TERMS.accountTitle} | ${TERMS.openingBalance} | ${TERMS.turnover} | ${TERMS.balance} — کلیک روی ردیف برای ${TERMS.ledger}`,
-  'accounting__subsidiary-trial': `${TERMS.accountCode} | ${TERMS.accountTitle} | ${TERMS.openingBalance} | ${TERMS.turnover} | ${TERMS.balance} — کلیک روی ردیف برای ${TERMS.ledger}`,
-  'accounting__detailed-trial': `${TERMS.accountCode} | ${TERMS.accountTitle} | ${TERMS.openingBalance} | ${TERMS.turnover} | ${TERMS.balance} — کلیک روی ردیف برای ${TERMS.ledger}`,
-  'accounting__entry': `${TERMS.entry} چندردیفی متوازن — اولویت: ${TERMS.detailedAccount} → ${TERMS.subsidiaryAccount} → ${TERMS.generalAccount}`,
-  'accounting__ledger': `${TERMS.generalAccount} → ${TERMS.subsidiaryAccount} → ${TERMS.detailedAccount} → ${TERMS.ledger} — روی هر سطح کلیک کنید؛ با دکمه‌های − و ⛶ هر پنجره را جمع یا بزرگ کنید.`,
-  'accounting__upload-excel': 'فایل اکسل باید شیت‌های «تراز کل»، «تراز معین»، «تراز تفصیلی» و «ریز نمونه» (اختیاری) داشته باشد.',
-  sms: 'ثبت سفارش، خوش‌آمدگویی، ارتقای سطح و تخفیف ویژه — جزئیات در تب‌های پیامک و باشگاه.',
+  'accounting__documents': `فهرست اسناد — جستجو، ویرایش، حذف و تایید. «سند جدید» برای ثبت ${TERMS.entry} چندردیفی. غیرفعال کردن حساب در «ایجاد حساب» = حذف نرم.`,
+  'factory-accounting__documents': `فهرست اسناد کارخانه — ویرایش/حذف تا قبل از انتقال به اداری. «سند جدید» برای ثبت ${TERMS.entry} چندردیفی.`,
+  'factory-accounting__ledger': `${TERMS.ledger} کارخانه — هر مرحله (کل/معین/تفصیلی/دفتر) همیشه قابل باز شدن است؛ در حالت بزرگ روی نوار بالا یا + کلیک کنید.`,
+  'accounting__ledger': `${TERMS.generalAccount} → ${TERMS.subsidiaryAccount} → ${TERMS.detailedAccount} → ${TERMS.ledger} — هر چهار مرحله همیشه نمایش داده می‌شود؛ در حالت ⛶ با کلیک روی نوار بالا یا + همان مرحله باز می‌شود.`,
+  'accounting__upload-excel':
+    'فایل اکسل باید شیت‌های «تراز کل»، «تراز معین»، «تراز تفصیلی» و «ریز نمونه» (اختیاری) داشته باشد.',
+  sms:
+    'ثبت سفارش: با هر فروش جدید، در صورت فعال بودن، پیامک ارسال می‌شود. خوش‌آمدگویی: هنگام ثبت مشتری جدید. ارتقای سطح: پس از تغییر سطح باشگاه. تخفیف ویژه: از تب «تخفیف ویژه» دستی یا گروهی. متغیرهای قالب: name, shop_name, phone, amount, invoice, level, discount_label.',
+  products_shop: 'مدیریت کاتالوگ، دسته‌بندی و رنگ‌بندی محصولات.',
+  products_office: 'نمای کامل محصول — قیمت فروش، متریال و سود.',
+  products_factory: 'تعریف محصول برای کارخانه — بدون قیمت فروش.',
+  products_analytics: 'پرفروش‌ترین کالاها بر اساس فروش ثبت‌شده.',
+  materials_shop:
+    'ثبت متریال — پس از ثبت «در انتظار تایید» می‌ماند؛ تا تایید اداری قابل ویرایش نیست. موجودی با «پایان ساخت» در کارخانه کم می‌شود.',
+  materials_office: 'بررسی، تایید، ویرایش و حذف متریال‌های ثبت‌شده توسط کارخانه. پس از تایید، سند حسابداری ثبت می‌شود.',
+  ranking:
+    'شعبه ثابت کارمند، شعب حضور در بازه، و فروش به تفکیک هر شعبه نمایش داده می‌شود.',
+  personal_sales:
+    'فقط جمع فروش ماهانه — بدون جزئیات سفارش؛ یا فقط فروش‌های ثبت‌شده توسط شما در شعبه‌تان.',
 }
 
 export function resolvePageGuideText(code, savedGuides = {}) {

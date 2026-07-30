@@ -5,8 +5,10 @@ import { customersApi } from '../api/client'
 import PersianDateInput from '../components/PersianDateInput'
 import MoneyInput from '../components/MoneyInput'
 import Select from '../components/Select'
-import RecordFilterPanel from '../components/RecordFilterPanel'
+import OfficeSectionCard from '../components/OfficeSectionCard'
 import { OFFICE_CUSTOMERS_FILTER } from '../config/recordFilterSections'
+import { PAGE_GUIDE_DEFAULTS } from '../config/pageGuideDefaults'
+import { useRegisterPageGuide } from '../context/PageGuideContext'
 import { Badge, Button, Card, EmptyState, Field, FilterBar, Modal } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmContext'
@@ -40,6 +42,11 @@ export default function Customers({ portal }) {
   const [walletForm, setWalletForm] = useState(EMPTY_WALLET_FORM)
   const [walletSaving, setWalletSaving] = useState(false)
   const [topBuyers, setTopBuyers] = useState(null)
+
+  useRegisterPageGuide(
+    portal !== 'office' ? 'customers' : null,
+    PAGE_GUIDE_DEFAULTS.customers_shop || '',
+  )
 
   const load = async (searchValue = '') => {
     setLoading(true)
@@ -175,9 +182,6 @@ export default function Customers({ portal }) {
     <div className="page customers-page">
       {topBuyers?.results?.length > 0 && (
         <Card title="مشتریان وفادار — ۱ سال اخیر" className="top-buyers-card analytics-card">
-          <p className="muted small" style={{ marginBottom: 12 }}>
-            مشتریانی که حداقل ۲ بار خرید کرده‌اند — ۲۰ نفر اول بر اساس مجموع مبلغ
-          </p>
           <div className="table-wrap">
             <table className="table table-compact">
               <thead>
@@ -206,17 +210,10 @@ export default function Customers({ portal }) {
       )}
 
       {portal === 'office' && (
-        <Card title={OFFICE_CUSTOMERS_FILTER.title} className="section-record-filter">
-          <RecordFilterPanel
-            scope={OFFICE_CUSTOMERS_FILTER.scope}
-            lockModel={OFFICE_CUSTOMERS_FILTER.lockModel}
-            compact
-            liveSearch
-            initialFilters={OFFICE_CUSTOMERS_FILTER.initialFilters}
-          />
-        </Card>
+        <OfficeSectionCard section={OFFICE_CUSTOMERS_FILTER} />
       )}
 
+      {portal !== 'office' && (
       <Card
         title="فهرست مشتریان"
         actions={canEdit ? <Button onClick={openCreate}>+ مشتری جدید</Button> : null}
@@ -318,6 +315,7 @@ export default function Customers({ portal }) {
           </>
         )}
       </Card>
+      )}
 
       <Modal title={editing ? 'ویرایش مشتری' : 'مشتری جدید'} open={modalOpen} onClose={() => setModalOpen(false)}>
         <form onSubmit={save} className="form">

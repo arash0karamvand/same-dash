@@ -1,31 +1,38 @@
 import PersianDateInput from './PersianDateInput'
 import MoneyInput from './MoneyInput'
-import Select from './Select'
 import { Button, Field } from './ui'
+import {
+  CHECK_FORM_MAX_ROWS,
+  CHECK_NOTES_LABEL,
+  CHECK_ROW_FIELDS,
+  EMPTY_CHECK_ROW,
+} from '../config/checkForm'
 import { formatMoney } from '../utils/format'
 import { todayIso } from '../utils/jalali'
 
 export const EMPTY_INSTALLMENT = {
-  amount: '',
+  ...EMPTY_CHECK_ROW,
+  received_at: todayIso(),
   due_date: todayIso(),
-  payment_method: 'check',
-  check_number: '',
-  bank_name: '',
-  notes: '',
 }
 
 export default function InstallmentLines({
   installments,
   onChange,
   balanceDue = 0,
-  title = 'چک‌ها و اقساط',
+  title = 'فرم لیست چک‌های دریافتی',
+  customerName = '',
 }) {
   const update = (idx, key, val) => {
     onChange(installments.map((row, i) => (i === idx ? { ...row, [key]: val } : row)))
   }
 
+  const slotsLeft = CHECK_FORM_MAX_ROWS - installments.length
+
   const addRows = (count = 1) => {
-    const rows = Array.from({ length: count }, () => ({ ...EMPTY_INSTALLMENT }))
+    const n = Math.min(count, slotsLeft)
+    if (n <= 0) return
+    const rows = Array.from({ length: n }, () => ({ ...EMPTY_INSTALLMENT }))
     onChange([...installments, ...rows])
   }
 
@@ -35,12 +42,13 @@ export default function InstallmentLines({
 
   const splitEvenly = (count) => {
     const due = Number(balanceDue) || 0
-    if (due <= 0 || count < 1) return
-    const base = Math.floor(due / count)
-    const remainder = due - base * count
-    const rows = Array.from({ length: count }, (_, i) => ({
+    const n = Math.min(count, CHECK_FORM_MAX_ROWS)
+    if (due <= 0 || n < 1) return
+    const base = Math.floor(due / n)
+    const remainder = due - base * n
+    const rows = Array.from({ length: n }, (_, i) => ({
       ...EMPTY_INSTALLMENT,
-      amount: String(base + (i === count - 1 ? remainder : 0)),
+      amount: String(base + (i === n - 1 ? remainder : 0)),
     }))
     onChange(rows)
   }
@@ -48,65 +56,90 @@ export default function InstallmentLines({
   const checksTotal = installments.reduce((s, r) => s + (Number(r.amount) || 0), 0)
   const diff = Number(balanceDue) - checksTotal
 
+  const renderField = (inst, idx, field) => {
+    const { key, label, type, ltr } = field
+    if (type === 'date') {
+      return (
+        <Field key={key} label={label}>
+          <PersianDateInput
+            value={inst[key] || todayIso()}
+            onChange={(v) => update(idx, key, v)}
+            required={key === 'due_date'}
+          />
+        </Field>
+      )
+    }
+    if (type === 'money') {
+      return (
+        <Field key={key} label={label}>
+          <MoneyInput
+            min="1"
+            value={inst.amount}
+            onChange={(e) => update(idx, 'amount', e.target.value)}
+            required
+          />
+        </Field>
+      )
+    }
+    return (
+      <Field key={key} label={label}>
+        <input
+          className={ltr ? 'ltr' : undefined}
+          value={inst[key] || ''}
+          onChange={(e) => update(idx, key, e.target.value)}
+          required={key === 'check_number'}
+        />
+      </Field>
+    )
+  }
+
   return (
-    <div className="installment-lines">
+    <div className="installment-lines check-form-lines">
       <div className="installment-lines-head">
         <h4 className="installment-lines-title">{title}</h4>
-        <span className="muted">مانده قابل ثبت: {formatMoney(balanceDue)}</span>
+        <span className="muted">
+          {customerName ? `مشتری: ${customerName} — ` : ''}
+          حداکثر {CHECK_FORM_MAX_ROWS} چک — مانده: {formatMoney(balanceDue)}
+        </span>
       </div>
 
-      <div className="installment-quick-add">
-        <span className="muted">افزودن سریع:</span>
-        {[1, 2, 3, 4, 5].map((n) => (
-          <button key={n} type="button" className="btn btn-ghost btn-sm" onClick={() => addRows(n)}>
-            +{n} چک
-          </button>
-        ))}
-        <button type="button" className="btn btn-ghost btn-sm" onClick={() => splitEvenly(installments.length || 3)}>
-          تقسیم مساوی مانده
-        </button>
-      </div>
+      {slotsLeft > 0 && (
+        <div className="installment-quick-add">
+          <span className="muted">افزودن:</span>
+          {[1, 2, 3, 4, 5].filter((n) => n <= slotsLeft).map((n) => (
+            <button key={n} type="button" className="btn btn-ghost btn-sm" onClick={() => addRows(n)}>
+              +{n}
+            </button>
+          ))}
+          {balanceDue > 0 && (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => splitEvenly(Math.max(installments.length, 1))}
+            >
+              تقسیم مساوی مانده
+            </button>
+          )}
+        </div>
+      )}
 
       {installments.length === 0 ? (
-        <p className="muted">هنوز چکی ثبت نشده — با دکمه‌های بالا یا «+ یک چک» اضافه کنید.</p>
+        <p className="muted">چکی ثبت نشده — حداکثر {CHECK_FORM_MAX_ROWS} ردیف مطابق فرم اکسل.</p>
       ) : (
         installments.map((inst, idx) => (
-          <div key={idx} className="installment-card">
+          <div key={idx} className="installment-card check-form-row">
             <div className="installment-card-head">
-              <strong>چک {idx + 1}</strong>
+              <strong>ردیف {idx + 1}</strong>
               <button type="button" className="link danger" onClick={() => removeRow(idx)}>حذف</button>
             </div>
             <div className="form-grid">
-              <Field label="مبلغ">
-                <MoneyInput
-                  min="1"
-                  value={inst.amount}
-                  onChange={(e) => update(idx, 'amount', e.target.value)}
-                  required
+              {CHECK_ROW_FIELDS.map((field) => renderField(inst, idx, field))}
+              <Field label={CHECK_NOTES_LABEL}>
+                <input
+                  value={inst.notes || ''}
+                  onChange={(e) => update(idx, 'notes', e.target.value)}
+                  placeholder="توضیح اختیاری…"
                 />
-              </Field>
-              <Field label="تاریخ سررسید">
-                <PersianDateInput value={inst.due_date || todayIso()} onChange={(v) => update(idx, 'due_date', v)} />
-              </Field>
-              <Field label="شماره چک">
-                <input className="ltr" value={inst.check_number} onChange={(e) => update(idx, 'check_number', e.target.value)} />
-              </Field>
-              <Field label="بانک">
-                <input value={inst.bank_name} onChange={(e) => update(idx, 'bank_name', e.target.value)} />
-              </Field>
-              <Field label="روش">
-                <Select
-                  value={inst.payment_method || 'check'}
-                  onChange={(v) => update(idx, 'payment_method', v)}
-                  options={[
-                    { value: 'cash', label: 'نقدی' },
-                    { value: 'card', label: 'کارت‌خوان' },
-                    { value: 'check', label: 'چک' },
-                  ]}
-                />
-              </Field>
-              <Field label="توضیحات / یادداشت">
-                <input value={inst.notes} onChange={(e) => update(idx, 'notes', e.target.value)} placeholder="توضیح چک…" />
               </Field>
             </div>
           </div>
@@ -115,8 +148,8 @@ export default function InstallmentLines({
 
       {installments.length > 0 && (
         <div className={`installment-summary ${Math.abs(diff) > 0 ? 'installment-summary-warn' : ''}`}>
-          <span>جمع چک‌ها: {formatMoney(checksTotal)}</span>
-          {Math.abs(diff) > 0 && (
+          <span>جمع مبلغ چک‌ها: {formatMoney(checksTotal)}</span>
+          {Math.abs(diff) > 0 && balanceDue > 0 && (
             <span className="muted">
               {diff > 0 ? `کمتر از مانده (${formatMoney(diff)})` : `بیشتر از مانده (${formatMoney(Math.abs(diff))})`}
             </span>
@@ -124,7 +157,9 @@ export default function InstallmentLines({
         </div>
       )}
 
-      <Button type="button" variant="ghost" onClick={() => addRows(1)}>+ یک چک</Button>
+      {slotsLeft > 0 && (
+        <Button type="button" variant="ghost" onClick={() => addRows(1)}>+ یک چک</Button>
+      )}
     </div>
   )
 }

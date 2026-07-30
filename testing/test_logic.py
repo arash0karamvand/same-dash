@@ -24,6 +24,8 @@ from logic.sale_workflow import (
     reject_office_order,
     rollback_factory_receive,
 )
+from logic.checks_excel_export import checks_excel_bytes
+from logic.installments import pay_installment
 from logic.sales import delete_sale, record_payment, record_sale, update_sale
 from logic.sms import (
     is_valid_phone,
@@ -191,6 +193,59 @@ class SalesLogicTest(TestCase):
         self.assertEqual(office2.id, office.id)
         self.assertEqual(office2.status, OfficeOrder.STATUS_PENDING)
 
+    def test_automatic_accounting_draft_when_sent_to_office(self):
+        from backend.models import AccountingEntry
+        from logic.accounting_accounts import get_account
+
+        user = User.objects.create_user(username="wfauto", password="secret123")
+        sale = record_sale(
+            self.customer,
+            Decimal("5000000"),
+            payment_status="paid",
+            payment_method="card",
+            accounting_mode="automatic",
+            recorded_by=user,
+        )
+        office = create_office_order_from_sale(sale, user)
+        self.assertIsNotNone(office)
+        entries = AccountingEntry.objects.filter(sale=sale)
+        self.assertTrue(entries.filter(entry_type="sale", is_approved=False).exists())
+        payment = entries.filter(entry_type="payment").first()
+        self.assertIsNotNone(payment)
+        self.assertEqual(payment.account_id, get_account("bank").id)
+
+    def test_manual_accounting_skips_entries_until_manual_posting(self):
+        from backend.models import AccountingEntry
+
+        user = User.objects.create_user(username="wfmanual", password="secret123")
+        sale = record_sale(
+            self.customer,
+            Decimal("5000000"),
+            payment_status="paid",
+            accounting_mode="manual",
+            recorded_by=user,
+        )
+        office = create_office_order_from_sale(sale, user)
+        self.assertFalse(AccountingEntry.objects.filter(sale=sale).exists())
+        approve_office_order(office, user)
+        self.assertFalse(AccountingEntry.objects.filter(sale=sale).exists())
+
+    def test_automatic_office_approve_approves_accounting_entries(self):
+        from backend.models import AccountingEntry
+
+        user = User.objects.create_user(username="wfauto2", password="secret123")
+        sale = record_sale(
+            self.customer,
+            Decimal("5000000"),
+            payment_status="paid",
+            accounting_mode="automatic",
+            recorded_by=user,
+        )
+        office = create_office_order_from_sale(sale, user)
+        approve_office_order(office, user)
+        self.assertFalse(AccountingEntry.objects.filter(sale=sale, is_approved=False).exists())
+        self.assertTrue(AccountingEntry.objects.filter(sale=sale, is_approved=True).exists())
+
     def test_recall_factory_order_to_office(self):
         user = User.objects.create_user(username="wfuser5", password="secret123")
         sale = record_sale(self.customer, Decimal("5000000"), payment_status="paid")
@@ -250,6 +305,134 @@ class SalesLogicTest(TestCase):
         self.assertTrue(office.is_deleted)
 
 
+class CheckAccountingLogicTest(TestCase):
+    def setUp(self):
+        LoyaltyLevel.objects.create(name="برنز", min_purchase=0, max_purchase=10_000_000)
+        self.customer = Customer.objects.create(full_name="چک", phone="09120000099")
+        self.user = User.objects.create_user(username="checkuser", password="secret123")
+
+    def test_office_approve_registers_checks_in_selected_account(self):
+        from datetime import date, timedelta
+
+        from logic.accounting_accounts import get_account
+        from logic.check_accounting import get_user_accounting_preference
+
+        due = (date.today() + timedelta(days=30)).isoformat()
+        sale = record_sale(
+            self.customer,
+            Decimal("10000000"),
+            payment_status="installment",
+            payment_method="check",
+            paid_amount=Decimal("0"),
+            accounting_mode="automatic",
+            installments=[
+                {
+                    "amount": 10000000,
+                    "due_date": due,
+                    "payment_method": "check",
+                    "check_number": "998877",
+                    "bank_name": "ملی",
+                }
+            ],
+            recorded_by=self.user,
+        )
+        office = create_office_order_from_sale(sale, self.user)
+        reg = get_account("collection_at_bank")
+        dep = get_account("bank")
+        approve_office_order(
+            office,
+            self.user,
+            check_registration_account_id=reg.id,
+            check_deposit_account_id=dep.id,
+            save_check_accounts_as_default=True,
+        )
+        inst = sale.installments.first()
+        self.assertIsNotNone(inst.accounting_registered_at)
+        self.assertEqual(inst.registration_account_id, reg.id)
+        payment = AccountingEntry.objects.filter(
+            sale=sale,
+            entry_type="payment",
+            account=reg,
+            debit=Decimal("10000000"),
+        ).exists()
+        self.assertTrue(payment)
+        prefs = get_user_accounting_preference(self.user)
+        self.assertEqual(prefs["default_check_registration_account_id"], reg.id)
+
+    def test_pay_registered_check_transfers_to_deposit_account(self):
+        from datetime import date, timedelta
+
+        from logic.accounting_accounts import get_account
+
+        due = (date.today() + timedelta(days=30)).isoformat()
+        sale = record_sale(
+            self.customer,
+            Decimal("5000000"),
+            payment_status="installment",
+            payment_method="check",
+            paid_amount=Decimal("0"),
+            accounting_mode="automatic",
+            installments=[
+                {
+                    "amount": 5000000,
+                    "due_date": due,
+                    "payment_method": "check",
+                    "check_number": "111",
+                    "bank_name": "صادرات",
+                }
+            ],
+            recorded_by=self.user,
+        )
+        office = create_office_order_from_sale(sale, self.user)
+        reg = get_account("collection_at_bank")
+        dep = get_account("bank")
+        approve_office_order(
+            office,
+            self.user,
+            check_registration_account_id=reg.id,
+            check_deposit_account_id=dep.id,
+        )
+        inst = sale.installments.first()
+        pay_installment(inst, recorded_by=self.user)
+        sale.refresh_from_db()
+        inst.refresh_from_db()
+        self.assertEqual(inst.status, "paid")
+        self.assertEqual(sale.paid_amount, Decimal("5000000"))
+        self.assertTrue(
+            AccountingEntry.objects.filter(
+                sale=sale,
+                entry_type="payment",
+                account=dep,
+                debit=Decimal("5000000"),
+            ).exists()
+        )
+
+    def test_checks_excel_export_bytes(self):
+        from datetime import date, timedelta
+
+        due = (date.today() + timedelta(days=15)).isoformat()
+        sale = record_sale(
+            self.customer,
+            Decimal("3000000"),
+            payment_status="installment",
+            payment_method="check",
+            paid_amount=Decimal("0"),
+            installments=[
+                {
+                    "amount": 3000000,
+                    "due_date": due,
+                    "payment_method": "check",
+                    "check_number": "555",
+                    "bank_name": "ملت",
+                    "receiver_name": "علی",
+                }
+            ],
+        )
+        inst = sale.installments.first()
+        content = checks_excel_bytes([inst])
+        self.assertTrue(content.startswith(b"PK"))
+
+
 class SmsLogicTest(TestCase):
     def setUp(self):
         self.user = User.objects.create_user(username="smsuser", password="secret123")
@@ -287,3 +470,240 @@ class SmsLogicTest(TestCase):
         Customer.objects.create(full_name="Inactive", phone="09120000010", level=level, is_active=False)
         result = send_sms_to_level(level.id, "پیشنهاد ویژه", user=self.user)
         self.assertEqual(len(result["results"]), 1)
+
+
+class FactoryAccountingTransferTest(TestCase):
+    def setUp(self):
+        from logic.accounting_accounts import seed_accounts
+        from logic.accounting_documents import create_accounting_document
+        from logic.ledger import FACTORY_LEDGER, OFFICE_LEDGER
+
+        seed_accounts(ledger=OFFICE_LEDGER)
+        seed_accounts(ledger=FACTORY_LEDGER)
+        self.office_bank = OFFICE_LEDGER.Account.objects.get(slug="bank")
+        self.factory_bank = FACTORY_LEDGER.Account.objects.get(slug="bank")
+        self.factory_admin = FACTORY_LEDGER.Account.objects.get(slug="admin_overhead")
+
+        factory_doc = create_accounting_document(
+            lines=[
+                {
+                    "account_id": self.factory_bank.id,
+                    "debit": 100000,
+                    "credit": 0,
+                    "description": "بدهکار بانک",
+                },
+                {
+                    "account_id": self.factory_admin.id,
+                    "debit": 0,
+                    "credit": 100000,
+                    "description": "بستانکار سربار",
+                },
+            ],
+            description="سند تست کارخانه",
+            is_approved=True,
+            ledger=FACTORY_LEDGER,
+        )
+        self.factory_document_code = factory_doc["document_code"]
+        self.factory_entries = list(
+            FACTORY_LEDGER.AccountingEntry.objects.filter(document_code=self.factory_document_code)
+        )
+
+    def test_preview_marks_shared_general_accounts(self):
+        from logic.accounting_transfer import preview_transfer
+
+        preview = preview_transfer(document_code=self.factory_document_code)
+        self.assertEqual(preview["mappable_count"], 2)
+        self.assertEqual(preview["unmappable_count"], 0)
+        self.assertTrue(preview["can_transfer"])
+
+    def test_transfer_creates_office_document_and_locks_factory(self):
+        from logic.accounting import entry_permissions
+        from logic.accounting_transfer import preview_transfer, transfer_factory_document_to_office
+        from logic.ledger import FACTORY_LEDGER, OFFICE_LEDGER
+
+        result = transfer_factory_document_to_office(document_code=self.factory_document_code)
+        self.assertTrue(result["office_document_code"].startswith("S-"))
+        self.assertEqual(result["lines_transferred"], 2)
+
+        office_entries = OFFICE_LEDGER.AccountingEntry.objects.filter(
+            document_code=result["office_document_code"]
+        )
+        self.assertEqual(office_entries.count(), 2)
+        self.assertEqual(office_entries.first().attach_code, self.factory_document_code)
+
+        factory_entries = FACTORY_LEDGER.AccountingEntry.objects.filter(
+            document_code=self.factory_document_code
+        )
+        for entry in factory_entries:
+            self.assertIsNotNone(entry.transferred_to_office_at)
+            self.assertEqual(entry.office_document_code, result["office_document_code"])
+            perms = entry_permissions(entry, user=None, ledger=FACTORY_LEDGER)
+            self.assertFalse(perms["can_edit"])
+            self.assertFalse(perms["can_delete"])
+
+        preview = preview_transfer(document_code=self.factory_document_code)
+        self.assertTrue(preview["already_transferred"])
+
+    def test_duplicate_transfer_rejected(self):
+        from logic.accounting_transfer import transfer_factory_document_to_office
+
+        transfer_factory_document_to_office(document_code=self.factory_document_code)
+        with self.assertRaises(ValueError) as ctx:
+            transfer_factory_document_to_office(document_code=self.factory_document_code)
+        self.assertIn("قبلاً", str(ctx.exception))
+
+    def test_unshared_subsidiary_blocks_transfer(self):
+        from backend.models import FactorySubsidiaryAccount, SubsidiaryAccount
+        from logic.accounting_documents import create_accounting_document
+        from logic.accounting_transfer import preview_transfer, transfer_factory_document_to_office
+        from logic.ledger import FACTORY_LEDGER, OFFICE_LEDGER
+
+        office_sub = SubsidiaryAccount.objects.create(
+            account=self.office_bank,
+            code="99",
+            name="معین اداری",
+        )
+        factory_sub = FactorySubsidiaryAccount.objects.create(
+            account=self.factory_bank,
+            code="88",
+            name="معین کارخانه",
+        )
+        doc = create_accounting_document(
+            lines=[
+                {
+                    "account_id": self.factory_bank.id,
+                    "subsidiary_id": factory_sub.id,
+                    "debit": 50000,
+                    "credit": 0,
+                    "description": "با معین",
+                },
+                {
+                    "account_id": self.factory_admin.id,
+                    "debit": 0,
+                    "credit": 50000,
+                    "description": "طرف",
+                },
+            ],
+            description="سند با معین غیرمشترک",
+            ledger=FACTORY_LEDGER,
+        )
+        preview = preview_transfer(document_code=doc["document_code"])
+        self.assertEqual(preview["unmappable_count"], 1)
+        self.assertFalse(preview["can_transfer"])
+        with self.assertRaises(ValueError) as ctx:
+            transfer_factory_document_to_office(document_code=doc["document_code"])
+        self.assertIn("غیرمشترک", str(ctx.exception))
+        self.assertFalse(
+            OFFICE_LEDGER.AccountingEntry.objects.filter(description__contains="سند با معین").exists()
+        )
+        _ = office_sub
+
+
+class AccountingDocumentCrudTest(TestCase):
+    def setUp(self):
+        from logic.accounting_accounts import seed_accounts
+        from logic.accounting_documents import create_accounting_document
+        from logic.ledger import FACTORY_LEDGER, OFFICE_LEDGER
+
+        seed_accounts(ledger=OFFICE_LEDGER)
+        seed_accounts(ledger=FACTORY_LEDGER)
+        self.office_ledger = OFFICE_LEDGER
+        self.factory_ledger = FACTORY_LEDGER
+        self.office_bank = OFFICE_LEDGER.Account.objects.get(slug="bank")
+        self.office_admin = OFFICE_LEDGER.Account.objects.get(slug="admin_overhead")
+        self.factory_bank = FACTORY_LEDGER.Account.objects.get(slug="bank")
+        self.factory_admin = FACTORY_LEDGER.Account.objects.get(slug="admin_overhead")
+
+        office_doc = create_accounting_document(
+            lines=[
+                {"account_id": self.office_bank.id, "debit": 200000, "credit": 0, "description": "بدهکار"},
+                {"account_id": self.office_admin.id, "debit": 0, "credit": 200000, "description": "بستانکار"},
+            ],
+            description="سند اداری تست",
+            ledger=OFFICE_LEDGER,
+        )
+        self.office_document_code = office_doc["document_code"]
+
+        factory_doc = create_accounting_document(
+            lines=[
+                {"account_id": self.factory_bank.id, "debit": 150000, "credit": 0, "description": "بدهکار کارخانه"},
+                {"account_id": self.factory_admin.id, "debit": 0, "credit": 150000, "description": "بستانکار کارخانه"},
+            ],
+            description="سند کارخانه تست",
+            ledger=FACTORY_LEDGER,
+        )
+        self.factory_document_code = factory_doc["document_code"]
+
+    def test_list_and_get_office_document(self):
+        from logic.accounting_documents import get_accounting_document, list_accounting_documents
+
+        listed = list_accounting_documents({}, ledger=self.office_ledger)
+        self.assertGreaterEqual(listed["total"], 1)
+        codes = [row["document_code"] for row in listed["results"]]
+        self.assertIn(self.office_document_code, codes)
+
+        doc = get_accounting_document(self.office_document_code, ledger=self.office_ledger)
+        self.assertEqual(doc["line_count"], 2)
+        self.assertEqual(doc["total_debit"], 200000)
+        self.assertTrue(doc["can_edit"])
+
+    def test_update_office_document(self):
+        from logic.accounting_documents import get_accounting_document, update_accounting_document
+
+        doc = get_accounting_document(self.office_document_code, ledger=self.office_ledger)
+        lines = [
+            {
+                "id": line["id"],
+                "account_id": line["account_id"],
+                "subsidiary_id": line.get("subsidiary_id"),
+                "detailed_id": line.get("detailed_id"),
+                "debit": line["debit"],
+                "credit": line["credit"],
+                "description": line["description"],
+            }
+            for line in doc["lines"]
+        ]
+        lines[0]["debit"] = 300000
+        lines[0]["description"] = "سند ویرایش‌شده"
+        lines[1]["credit"] = 300000
+        lines[1]["description"] = "سند ویرایش‌شده"
+
+        updated = update_accounting_document(
+            self.office_document_code,
+            lines=lines,
+            description="سند ویرایش‌شده",
+            ledger=self.office_ledger,
+        )
+        self.assertEqual(updated["total_debit"], 300000)
+        self.assertEqual(updated["description"], "سند ویرایش‌شده")
+
+    def test_delete_office_document(self):
+        from logic.accounting_documents import delete_accounting_document, get_accounting_document
+
+        result = delete_accounting_document(self.office_document_code, ledger=self.office_ledger)
+        self.assertTrue(result["deleted"])
+        with self.assertRaises(LookupError):
+            get_accounting_document(self.office_document_code, ledger=self.office_ledger)
+
+    def test_transferred_factory_document_blocked(self):
+        from logic.accounting import entry_permissions
+        from logic.accounting_documents import delete_accounting_document, update_accounting_document
+        from logic.accounting_transfer import transfer_factory_document_to_office
+
+        transfer_factory_document_to_office(document_code=self.factory_document_code)
+        entries = list(
+            self.factory_ledger.AccountingEntry.objects.filter(document_code=self.factory_document_code)
+        )
+        for entry in entries:
+            perms = entry_permissions(entry, user=None, ledger=self.factory_ledger)
+            self.assertFalse(perms["can_edit"])
+            self.assertFalse(perms["can_delete"])
+
+        with self.assertRaises(ValueError):
+            update_accounting_document(
+                self.factory_document_code,
+                lines=[{"account_id": self.factory_bank.id, "debit": 1, "credit": 0, "description": "x"}],
+                ledger=self.factory_ledger,
+            )
+        with self.assertRaises(ValueError):
+            delete_accounting_document(self.factory_document_code, ledger=self.factory_ledger)

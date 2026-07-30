@@ -9,6 +9,8 @@ import { formatMoney } from '../utils/format'
 import { parseRoute } from '../utils/routing'
 
 import { hasAnyPermission, hasPermission } from '../utils/permissions'
+import { PAGE_GUIDE_DEFAULTS } from '../config/pageGuideDefaults'
+import { useRegisterPageGuide } from '../context/PageGuideContext'
 
 const COLOR_PRESETS = [
   { name: 'قرمز', hex: '#ef4444' },
@@ -63,6 +65,13 @@ export default function Products() {
   const showCosts = isOffice || (hasPermission(user, 'view_materials') && hasPermission(user, 'view_products'))
   const canEditMaterials = canManageFactory
   const canManageCategories = canManageSales || canManageFactory
+
+  const productsGuideText = isFactory
+    ? PAGE_GUIDE_DEFAULTS.products_factory
+    : isOffice
+      ? PAGE_GUIDE_DEFAULTS.products_office
+      : PAGE_GUIDE_DEFAULTS.products_shop
+  useRegisterPageGuide('products', productsGuideText)
 
   const [categories, setCategories] = useState([])
   const [products, setProducts] = useState([])
@@ -347,11 +356,6 @@ export default function Products() {
       <div className="products-page-header">
         <div>
           <h1 className="page-title">محصولات</h1>
-          <p className="muted">
-            {isFactory && 'تعریف محصول برای کارخانه — بدون قیمت فروش'}
-            {isOffice && 'نمای کامل محصول — قیمت فروش، متریال و سود'}
-            {!isFactory && !isOffice && 'مدیریت کاتالوگ، دسته‌بندی و رنگ‌بندی محصولات'}
-          </p>
         </div>
         {canManage && (
           <div className="products-header-actions">
@@ -367,9 +371,6 @@ export default function Products() {
 
       {topSelling.length > 0 && (
         <Card title="پرفروش‌ترین کالاها" className="analytics-card">
-          <p className="muted small" style={{ marginBottom: 12 }}>
-            بر اساس تعداد فروخته‌شده در فاکتورهای قطعی
-          </p>
           <div className="table-wrap">
             <table className="table table-compact">
               <thead>

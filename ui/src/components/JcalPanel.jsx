@@ -1,13 +1,48 @@
-// پنل تقویم شمسی — portal برای نمایش کامل روی دسکتاپ (بدون clip شدن داخل card)
+// پنل شناور — portal برای نمایش جلوی/زیر المان ماشه (بدون clip شدن داخل card)
 
 import { createPortal } from 'react-dom'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 
-const PANEL_WIDTH = { date: 380, month: 320, select: 220 }
-const PANEL_HEIGHT = { date: 300, month: 300, select: 320 }
+const PANEL_WIDTH = { date: 380, month: 320, select: 220, menu: 280 }
+const PANEL_HEIGHT = { date: 300, month: 300, select: 320, menu: 240 }
+const POPOVER_Z = 6000
 
 function isMobileViewport() {
   return window.matchMedia('(max-width: 767px)').matches
+}
+
+function computePosition(anchorRect, panelRect, variant) {
+  const margin = 8
+  const gap = 6
+  const minWidth = PANEL_WIDTH[variant] || PANEL_WIDTH.date
+  const width = variant === 'select' || variant === 'menu'
+    ? Math.max(anchorRect.width, minWidth)
+    : minWidth
+  const height = panelRect?.height || PANEL_HEIGHT[variant] || PANEL_HEIGHT.date
+
+  let top = anchorRect.bottom + gap
+  if (top + height > window.innerHeight - margin) {
+    const above = anchorRect.top - height - gap
+    if (above >= margin) {
+      top = above
+    } else {
+      top = Math.max(margin, window.innerHeight - height - margin)
+    }
+  }
+
+  let left = anchorRect.right - width
+  left = Math.max(margin, Math.min(left, window.innerWidth - width - margin))
+
+  return {
+    position: 'fixed',
+    top,
+    left,
+    width: variant === 'select' || variant === 'menu' ? width : undefined,
+    minWidth: variant === 'date' || variant === 'month' ? minWidth : undefined,
+    maxHeight: Math.max(120, window.innerHeight - margin * 2),
+    right: 'auto',
+    zIndex: POPOVER_Z,
+  }
 }
 
 export default function JcalPanel({
@@ -20,47 +55,49 @@ export default function JcalPanel({
 }) {
   const panelRef = useRef(null)
   const [style, setStyle] = useState(null)
+  const [mobileSheet, setMobileSheet] = useState(false)
 
   useLayoutEffect(() => {
-    if (!open || !anchorRef.current) return undefined
+    if (!open) {
+      setStyle(null)
+      setMobileSheet(false)
+      return undefined
+    }
 
     const update = () => {
+      const anchor = anchorRef.current
+      if (!anchor) return
+
       if (isMobileViewport()) {
+        setMobileSheet(true)
         setStyle(null)
         return
       }
 
-      const rect = anchorRef.current.getBoundingClientRect()
-      const width = variant === 'select'
-        ? Math.max(rect.width, PANEL_WIDTH.select)
-        : (PANEL_WIDTH[variant] || PANEL_WIDTH.date)
-      const height = PANEL_HEIGHT[variant] || PANEL_HEIGHT.date
-      const margin = 12
-
-      let top = rect.bottom + 6
-      if (top + height > window.innerHeight - margin) {
-        top = Math.max(margin, rect.top - height - 6)
-      }
-
-      let left = rect.right - width
-      left = Math.max(margin, Math.min(left, window.innerWidth - width - margin))
-
-      setStyle({
-        position: 'fixed',
-        top,
-        left,
-        width,
-        right: 'auto',
-        zIndex: 5000,
-      })
+      setMobileSheet(false)
+      const anchorRect = anchor.getBoundingClientRect()
+      const panelRect = panelRef.current?.getBoundingClientRect()
+      setStyle(computePosition(anchorRect, panelRect, variant))
     }
 
     update()
+    const raf = requestAnimationFrame(update)
+
     window.addEventListener('scroll', update, true)
     window.addEventListener('resize', update)
+
+    let ro
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(update)
+      if (anchorRef.current) ro.observe(anchorRef.current)
+      if (panelRef.current) ro.observe(panelRef.current)
+    }
+
     return () => {
+      cancelAnimationFrame(raf)
       window.removeEventListener('scroll', update, true)
       window.removeEventListener('resize', update)
+      ro?.disconnect()
     }
   }, [open, anchorRef, variant])
 
@@ -80,7 +117,11 @@ export default function JcalPanel({
   const panel = (
     <div
       ref={panelRef}
-      className={`jcal-panel${style ? ' jcal-panel--floating' : ''}`}
+      className={[
+        'jcal-panel',
+        mobileSheet ? 'jcal-panel--sheet' : 'jcal-panel--floating',
+        !mobileSheet && !style ? 'jcal-panel--pending' : '',
+      ].filter(Boolean).join(' ')}
       style={style || undefined}
       role="dialog"
       aria-label={ariaLabel}

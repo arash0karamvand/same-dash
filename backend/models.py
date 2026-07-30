@@ -296,6 +296,18 @@ class Sale(SoftDeleteModel):
     payment_method = models.CharField(
         "روش پرداخت", max_length=10, choices=PAYMENT_METHOD_CHOICES, default="cash"
     )
+    ACCOUNTING_MODE_AUTOMATIC = "automatic"
+    ACCOUNTING_MODE_MANUAL = "manual"
+    ACCOUNTING_MODE_CHOICES = [
+        (ACCOUNTING_MODE_AUTOMATIC, "حسابداری خودکار"),
+        (ACCOUNTING_MODE_MANUAL, "حسابداری دستی"),
+    ]
+    accounting_mode = models.CharField(
+        "نوع ثبت حسابداری",
+        max_length=12,
+        choices=ACCOUNTING_MODE_CHOICES,
+        default=ACCOUNTING_MODE_AUTOMATIC,
+    )
     order_kind = models.CharField(
         "نوع سفارش", max_length=12, choices=ORDER_KIND_CHOICES, default="normal"
     )
@@ -414,6 +426,33 @@ class SaleInstallment(SoftDeleteModel):
     )
     check_number = models.CharField("شماره چک", max_length=50, blank=True)
     bank_name = models.CharField("نام بانک", max_length=100, blank=True)
+    received_at = models.DateField("تاریخ تحویل چک به شعبه", null=True, blank=True)
+    receiver_name = models.CharField("تحویل‌گیرنده", max_length=120, blank=True)
+    registration_account = models.ForeignKey(
+        "Account",
+        verbose_name="حساب ثبت چک",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="check_registrations",
+    )
+    deposit_account = models.ForeignKey(
+        "Account",
+        verbose_name="حساب واریز چک",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="check_deposits",
+    )
+    accounting_registered_at = models.DateTimeField("تاریخ ثبت حسابداری چک", null=True, blank=True)
+    accounting_entry = models.ForeignKey(
+        "AccountingEntry",
+        verbose_name="سند ثبت چک",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="installment_checks",
+    )
     status = models.CharField("وضعیت", max_length=12, choices=STATUS_CHOICES, default="pending")
     paid_at = models.DateTimeField("تاریخ پرداخت", null=True, blank=True)
     notes = models.CharField("توضیحات", max_length=255, blank=True)
@@ -706,6 +745,12 @@ class OfficeOrder(SoftDeleteModel):
     )
     payment_method = models.CharField(
         "روش پرداخت", max_length=10, choices=Sale.PAYMENT_METHOD_CHOICES, default="cash"
+    )
+    accounting_mode = models.CharField(
+        "نوع ثبت حسابداری",
+        max_length=12,
+        choices=Sale.ACCOUNTING_MODE_CHOICES,
+        default=Sale.ACCOUNTING_MODE_AUTOMATIC,
     )
     order_kind = models.CharField(
         "نوع سفارش", max_length=12, choices=Sale.ORDER_KIND_CHOICES, default="normal"
@@ -1127,7 +1172,7 @@ class AccountingEntry(models.Model):
     amount = models.DecimalField("مبلغ", default=0, **MONEY_KWARGS)
     document_code = models.CharField("کد سند", max_length=30, blank=True, db_index=True)
     document_number = models.PositiveIntegerField("شماره سند", null=True, blank=True, db_index=True)
-    attach_code = models.CharField("ع", max_length=10, blank=True)
+    attach_code = models.CharField("ع", max_length=40, blank=True)
     general_account = models.CharField("حساب کل", max_length=120, blank=True)
     subsidiary_account = models.CharField("حساب معین", max_length=120, blank=True)
     detailed_account = models.CharField("حساب تفصیلی", max_length=120, blank=True)
@@ -1151,6 +1196,202 @@ class AccountingEntry(models.Model):
     class Meta:
         verbose_name = "سند حسابداری"
         verbose_name_plural = "اسناد حسابداری"
+        ordering = ["-entry_date"]
+
+    def __str__(self):
+        return f"{self.get_entry_type_display()} - {self.amount}"
+
+
+class UserAccountingPreference(models.Model):
+    """ترجیحات حسابداری کاربر — حساب پیش‌فرض ثبت/واریز چک."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        verbose_name="کاربر",
+        on_delete=models.CASCADE,
+        related_name="accounting_preference",
+    )
+    default_check_registration_account = models.ForeignKey(
+        Account,
+        verbose_name="حساب پیش‌فرض ثبت چک",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="preferred_for_check_registration",
+    )
+    default_check_deposit_account = models.ForeignKey(
+        Account,
+        verbose_name="حساب پیش‌فرض واریز چک",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="preferred_for_check_deposit",
+    )
+    updated_at = models.DateTimeField("به‌روزرسانی", auto_now=True)
+
+    class Meta:
+        verbose_name = "ترجیح حسابداری کاربر"
+        verbose_name_plural = "ترجیحات حسابداری کاربران"
+
+    def __str__(self):
+        return f"ترجیحات حسابداری — {self.user}"
+
+
+class FactoryAccount(models.Model):
+    """حساب کل — دفتر حسابداری کارخانه (جدول مجزا)."""
+
+    CLASS_CHOICES = Account.CLASS_CHOICES
+    NORMAL_BALANCE_CHOICES = Account.NORMAL_BALANCE_CHOICES
+
+    slug = models.SlugField("شناسه", max_length=60, unique=True)
+    code = models.CharField("کد حساب کل", max_length=10, blank=True, db_index=True)
+    name = models.CharField("نام حساب", max_length=120)
+    account_class = models.CharField("طبقه", max_length=20, choices=CLASS_CHOICES)
+    normal_balance = models.CharField("ماهیت", max_length=10, choices=NORMAL_BALANCE_CHOICES)
+    sort_order = models.PositiveSmallIntegerField("ترتیب", default=0)
+    legacy_entry_type = models.CharField("نوع سند قدیمی", max_length=20, blank=True)
+    is_active = models.BooleanField("فعال", default=True)
+
+    class Meta:
+        db_table = "factory_accounts"
+        verbose_name = "حساب کل کارخانه"
+        verbose_name_plural = "حساب‌های کل کارخانه"
+        ordering = ["sort_order", "name"]
+
+    def __str__(self):
+        return self.name
+
+
+class FactorySubsidiaryAccount(models.Model):
+    """حساب معین — دفتر حسابداری کارخانه."""
+
+    account = models.ForeignKey(
+        FactoryAccount,
+        verbose_name="حساب کل",
+        on_delete=models.PROTECT,
+        related_name="subsidiaries",
+    )
+    code = models.CharField("کد معین", max_length=10)
+    name = models.CharField("عنوان حساب", max_length=120)
+    is_active = models.BooleanField("فعال", default=True)
+
+    class Meta:
+        db_table = "factory_subsidiary_accounts"
+        verbose_name = "حساب معین کارخانه"
+        verbose_name_plural = "حساب‌های معین کارخانه"
+        ordering = ["account__sort_order", "code"]
+        constraints = [
+            models.UniqueConstraint(fields=["account", "code"], name="uniq_factory_subsidiary_account_code"),
+        ]
+
+    @property
+    def full_code(self):
+        base = (self.account.code or str(self.account.sort_order)).strip()
+        return f"{base}/{self.code}"
+
+    def __str__(self):
+        return self.name
+
+
+class FactoryDetailedAccount(models.Model):
+    """حساب تفصیلی — دفتر حسابداری کارخانه."""
+
+    subsidiary = models.ForeignKey(
+        FactorySubsidiaryAccount,
+        verbose_name="حساب معین",
+        on_delete=models.PROTECT,
+        related_name="details",
+    )
+    code = models.CharField("کد تفصیلی", max_length=10)
+    name = models.CharField("عنوان حساب", max_length=120)
+    is_active = models.BooleanField("فعال", default=True)
+
+    class Meta:
+        db_table = "factory_detailed_accounts"
+        verbose_name = "حساب تفصیلی کارخانه"
+        verbose_name_plural = "حساب‌های تفصیلی کارخانه"
+        ordering = ["subsidiary__account__sort_order", "subsidiary__code", "code"]
+        constraints = [
+            models.UniqueConstraint(fields=["subsidiary", "code"], name="uniq_factory_detailed_account_code"),
+        ]
+
+    @property
+    def full_code(self):
+        return f"{self.subsidiary.full_code}/{self.code}"
+
+    def __str__(self):
+        return self.name
+
+
+class FactoryAccountingEntry(models.Model):
+    """سند حسابداری کارخانه — جدول مجزا، بدون اتصال به دفتر اداری."""
+
+    ENTRY_TYPE_CHOICES = AccountingEntry.ENTRY_TYPE_CHOICES
+
+    entry_type = models.CharField(
+        "نوع سند", max_length=20, choices=ENTRY_TYPE_CHOICES, default="adjustment"
+    )
+    account = models.ForeignKey(
+        FactoryAccount,
+        verbose_name="حساب کل",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="entries",
+    )
+    subsidiary = models.ForeignKey(
+        FactorySubsidiaryAccount,
+        verbose_name="حساب معین",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="entries",
+    )
+    detailed = models.ForeignKey(
+        FactoryDetailedAccount,
+        verbose_name="حساب تفصیلی",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="entries",
+    )
+    debit = models.DecimalField("بدهکار", default=0, **MONEY_KWARGS)
+    credit = models.DecimalField("بستانکار", default=0, **MONEY_KWARGS)
+    amount = models.DecimalField("مبلغ", default=0, **MONEY_KWARGS)
+    document_code = models.CharField("کد سند", max_length=30, blank=True, db_index=True)
+    document_number = models.PositiveIntegerField("شماره سند", null=True, blank=True, db_index=True)
+    attach_code = models.CharField("ع", max_length=40, blank=True)
+    general_account = models.CharField("حساب کل", max_length=120, blank=True)
+    subsidiary_account = models.CharField("حساب معین", max_length=120, blank=True)
+    detailed_account = models.CharField("حساب تفصیلی", max_length=120, blank=True)
+    opening_debit = models.DecimalField("مانده ابتدای دوره (بدهکار)", default=0, **MONEY_KWARGS)
+    opening_credit = models.DecimalField("مانده ابتدای دوره (بستانکار)", default=0, **MONEY_KWARGS)
+    balance_debit = models.DecimalField("مانده بدهکار", default=0, **MONEY_KWARGS)
+    balance_credit = models.DecimalField("مانده بستانکار", default=0, **MONEY_KWARGS)
+    entry_date = models.DateTimeField("تاریخ سند", default=timezone.now)
+    description = models.CharField("توضیحات", max_length=255, blank=True)
+    factory_order = models.ForeignKey(
+        "FactoryOrder",
+        verbose_name="سفارش کارخانه",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="accounting_entries",
+    )
+    is_approved = models.BooleanField("تایید حسابداری", default=False)
+    transferred_to_office_at = models.DateTimeField(
+        "انتقال به اداری",
+        null=True,
+        blank=True,
+        db_index=True,
+    )
+    office_document_code = models.CharField("کد سند اداری", max_length=40, blank=True)
+    created_at = models.DateTimeField("تاریخ ثبت", auto_now_add=True)
+
+    class Meta:
+        db_table = "factory_accounting_entries"
+        verbose_name = "سند حسابداری کارخانه"
+        verbose_name_plural = "اسناد حسابداری کارخانه"
         ordering = ["-entry_date"]
 
     def __str__(self):

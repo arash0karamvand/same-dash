@@ -207,6 +207,47 @@ export const customersApi = {
 export const salesApi = {
   list: (params = '') => get(`/api/sales/${params ? `?${params}` : ''}`),
   get: (id) => get(`/api/sales/${id}/`),
+  exportExcel: async (id) => {
+    const response = await fetch(`/api/sales/${id}/export-excel/`, {
+      method: 'GET',
+      credentials: 'include',
+    })
+    if (!response.ok) {
+      const text = await response.text()
+      let message = 'خطا در دریافت فایل اکسل'
+      if (text) {
+        try {
+          const payload = JSON.parse(text)
+          if (payload.error) message = payload.error
+        } catch {
+          const titleMatch = /<title>([^<]+)<\/title>/i.exec(text)
+          if (titleMatch?.[1]) message = titleMatch[1].trim()
+          else if (text.length < 300) message = text.trim()
+        }
+      }
+      const error = new Error(message)
+      error.status = response.status
+      throw error
+    }
+    const blob = await response.blob()
+    let filename = `sale-${id}.xlsx`
+    const disposition = response.headers.get('Content-Disposition') || ''
+    const utf8Match = /filename\*=UTF-8''([^;\s]+)/i.exec(disposition)
+    const asciiMatch = /filename="([^"]+)"/i.exec(disposition)
+    if (utf8Match?.[1]) {
+      try {
+        filename = decodeURIComponent(utf8Match[1])
+      } catch {
+        filename = utf8Match[1]
+      }
+    } else if (asciiMatch?.[1]) filename = asciiMatch[1]
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    link.click()
+    URL.revokeObjectURL(url)
+  },
   create: (data) => post('/api/sales/', data),
   update: (id, data) => put(`/api/sales/${id}/`, data),
   remove: (id) => del(`/api/sales/${id}/`),
@@ -238,7 +279,7 @@ export const salesApi = {
 export const officeApi = {
   list: (params = '') => get(`/api/office/orders/${params ? `?${params}` : ''}`),
   get: (id) => get(`/api/office/orders/${id}/`),
-  approve: (id) => post(`/api/office/orders/${id}/approve/`),
+  approve: (id, data = {}) => post(`/api/office/orders/${id}/approve/`, data),
   reject: (id, reason = '') => post(`/api/office/orders/${id}/reject/`, { reason }),
   rollback: (id, reason = '') => post(`/api/office/orders/${id}/rollback/`, { reason }),
 }
@@ -266,6 +307,23 @@ export const installmentsApi = {
     if (opts.month) p.set('month', opts.month)
     const q = p.toString()
     return get(`/api/installments/checks-report/${q ? `?${q}` : ''}`)
+  },
+  exportExcel: async (params = '') => {
+    const q = typeof params === 'string' ? params : new URLSearchParams(params).toString()
+    const response = await fetch(`/api/installments/export-excel/${q ? `?${q}` : ''}`, {
+      method: 'GET',
+      credentials: 'include',
+    })
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}))
+      throw new Error(err.error || err.message || 'خطا در دانلود اکسل')
+    }
+    const blob = await response.blob()
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = 'checks.xlsx'
+    link.click()
+    URL.revokeObjectURL(link.href)
   },
 }
 
@@ -304,120 +362,147 @@ function accountingParams(opts = {}) {
   if (opts.creditMax != null && opts.creditMax !== '') p.set('credit_max', opts.creditMax)
   if (opts.offset != null) p.set('offset', opts.offset)
   if (opts.limit) p.set('limit', opts.limit)
+  if (opts.documentCode) p.set('document_code', opts.documentCode)
+  if (opts.documentNumber != null && opts.documentNumber !== '') p.set('document_number', opts.documentNumber)
+  if (opts.subsidiaryId) p.set('subsidiary_id', opts.subsidiaryId)
+  if (opts.detailedId) p.set('detailed_id', opts.detailedId)
   return p.toString()
 }
 
-export const accountingApi = {
-  list: (opts = {}) => {
-    const q = accountingParams(opts)
-    return get(`/api/accounting/${q ? `?${q}` : ''}`)
-  },
-  summary: (opts = {}) => {
-    const q = accountingParams(opts)
-    return get(`/api/accounting/summary/${q ? `?${q}` : ''}`)
-  },
-  salesReport: () => get('/api/accounting/sales-report/'),
-  customer: (customerId) => get(`/api/accounting/customer/${customerId}/`),
-  create: (data) => post('/api/accounting/', data),
-  get: (id) => get(`/api/accounting/${id}/`),
-  update: (id, data) => put(`/api/accounting/${id}/`, data),
-  remove: (id) => del(`/api/accounting/${id}/`),
-  approve: (id, isApproved) => put(`/api/accounting/${id}/approve/`, { is_approved: isApproved }),
-  bulkApprove: (ids) => post('/api/accounting/bulk-approve/', ids ? { ids } : {}),
-  accounts: () => get('/api/accounting/accounts/'),
-  models: (opts = {}) => {
-    const p = new URLSearchParams()
-    if (opts.accountClass) p.set('account_class', opts.accountClass)
-    if (opts.approved != null && opts.approved !== '') p.set('approved', opts.approved)
-    if (opts.dateFrom) p.set('date_from', opts.dateFrom)
-    if (opts.dateTo) p.set('date_to', opts.dateTo)
-    if (opts.search) p.set('search', opts.search)
-    const q = p.toString()
-    return get(`/api/accounting/models/${q ? `?${q}` : ''}`)
-  },
-  ledger: (opts = {}) => {
-    const p = new URLSearchParams()
-    if (opts.accountClass) p.set('account_class', opts.accountClass)
-    if (opts.dateFrom) p.set('date_from', opts.dateFrom)
-    if (opts.dateTo) p.set('date_to', opts.dateTo)
-    if (opts.approvedOnly) p.set('approved_only', 'true')
-    if (opts.limit) p.set('limit', opts.limit)
-    const q = p.toString()
-    return get(`/api/accounting/ledger/${q ? `?${q}` : ''}`)
-  },
-  trialBalance: (opts = {}) => {
-    const p = new URLSearchParams()
-    if (opts.level) p.set('level', opts.level)
-    if (opts.accountClass) p.set('account_class', opts.accountClass)
-    if (opts.accountId) p.set('account_id', opts.accountId)
-    if (opts.subsidiaryId) p.set('subsidiary_id', opts.subsidiaryId)
-    if (opts.dateFrom) p.set('date_from', opts.dateFrom)
-    if (opts.dateTo) p.set('date_to', opts.dateTo)
-    if (opts.approvedOnly) p.set('approved_only', 'true')
-    const q = p.toString()
-    return get(`/api/accounting/trial-balance/${q ? `?${q}` : ''}`)
-  },
-  detailLedger: (opts = {}) => {
-    const p = new URLSearchParams()
-    if (opts.detailedId) p.set('detailed_id', opts.detailedId)
-    if (opts.subsidiaryId) p.set('subsidiary_id', opts.subsidiaryId)
-    if (opts.accountId) p.set('account_id', opts.accountId)
-    if (opts.dateFrom) p.set('date_from', opts.dateFrom)
-    if (opts.dateTo) p.set('date_to', opts.dateTo)
-    if (opts.docFrom) p.set('doc_from', opts.docFrom)
-    if (opts.docTo) p.set('doc_to', opts.docTo)
-    if (opts.approvedOnly) p.set('approved_only', 'true')
-    const q = p.toString()
-    return get(`/api/accounting/detail-ledger/${q ? `?${q}` : ''}`)
-  },
-  createDocument: (data) => post('/api/accounting/documents/', data),
-  subsidiaries: (opts = {}) => {
-    const p = new URLSearchParams()
-    if (opts.accountId) p.set('account_id', opts.accountId)
-    const q = p.toString()
-    return get(`/api/accounting/subsidiaries/${q ? `?${q}` : ''}`)
-  },
-  createSubsidiary: (data) => post('/api/accounting/subsidiaries/', data),
-  updateSubsidiary: (id, data) => put(`/api/accounting/subsidiaries/${id}/`, data),
-  updateGeneralAccount: (id, data) => put(`/api/accounting/accounts/${id}/`, data),
-  details: (opts = {}) => {
-    const p = new URLSearchParams()
-    if (opts.subsidiaryId) p.set('subsidiary_id', opts.subsidiaryId)
-    if (opts.accountId) p.set('account_id', opts.accountId)
-    const q = p.toString()
-    return get(`/api/accounting/details/${q ? `?${q}` : ''}`)
-  },
-  createDetailed: (data) => post('/api/accounting/details/', data),
-  updateDetailed: (id, data) => put(`/api/accounting/details/${id}/`, data),
-  importExcel: async (file, opts = {}) => {
-    const form = new FormData()
-    form.append('file', file)
-    if (opts.dryRun) form.append('dry_run', 'true')
-    if (opts.approve) form.append('approve', 'true')
-    if (opts.force) form.append('force', 'true')
-    const response = await fetch('/api/accounting/import-excel/', {
-      method: 'POST',
-      credentials: 'include',
-      body: form,
-    })
-    const text = await response.text()
-    let payload = null
-    if (text) {
-      try {
-        payload = JSON.parse(text)
-      } catch {
-        payload = { ok: false, error: text }
+function createAccountingApi(basePath) {
+  return {
+    list: (opts = {}) => {
+      const q = accountingParams(opts)
+      return get(`${basePath}/${q ? `?${q}` : ''}`)
+    },
+    summary: (opts = {}) => {
+      const q = accountingParams(opts)
+      return get(`${basePath}/summary/${q ? `?${q}` : ''}`)
+    },
+    salesReport: () => get('/api/accounting/sales-report/'),
+    customer: (customerId) => get(`/api/accounting/customer/${customerId}/`),
+    create: (data) => post(`${basePath}/`, data),
+    get: (id) => get(`${basePath}/${id}/`),
+    update: (id, data) => put(`${basePath}/${id}/`, data),
+    remove: (id) => del(`${basePath}/${id}/`),
+    approve: (id, isApproved) => put(`${basePath}/${id}/approve/`, { is_approved: isApproved }),
+    bulkApprove: (ids) => post(`${basePath}/bulk-approve/`, ids ? { ids } : {}),
+    accounts: () => get(`${basePath}/accounts/`),
+    models: (opts = {}) => {
+      const p = new URLSearchParams()
+      if (opts.accountClass) p.set('account_class', opts.accountClass)
+      if (opts.approved != null && opts.approved !== '') p.set('approved', opts.approved)
+      if (opts.dateFrom) p.set('date_from', opts.dateFrom)
+      if (opts.dateTo) p.set('date_to', opts.dateTo)
+      if (opts.search) p.set('search', opts.search)
+      const q = p.toString()
+      return get(`${basePath}/models/${q ? `?${q}` : ''}`)
+    },
+    ledger: (opts = {}) => {
+      const p = new URLSearchParams()
+      if (opts.accountClass) p.set('account_class', opts.accountClass)
+      if (opts.dateFrom) p.set('date_from', opts.dateFrom)
+      if (opts.dateTo) p.set('date_to', opts.dateTo)
+      if (opts.approvedOnly) p.set('approved_only', 'true')
+      if (opts.limit) p.set('limit', opts.limit)
+      const q = p.toString()
+      return get(`${basePath}/ledger/${q ? `?${q}` : ''}`)
+    },
+    trialBalance: (opts = {}) => {
+      const p = new URLSearchParams()
+      if (opts.level) p.set('level', opts.level)
+      if (opts.accountClass) p.set('account_class', opts.accountClass)
+      if (opts.accountId) p.set('account_id', opts.accountId)
+      if (opts.subsidiaryId) p.set('subsidiary_id', opts.subsidiaryId)
+      if (opts.dateFrom) p.set('date_from', opts.dateFrom)
+      if (opts.dateTo) p.set('date_to', opts.dateTo)
+      if (opts.approvedOnly) p.set('approved_only', 'true')
+      const q = p.toString()
+      return get(`${basePath}/trial-balance/${q ? `?${q}` : ''}`)
+    },
+    detailLedger: (opts = {}) => {
+      const p = new URLSearchParams()
+      if (opts.detailedId) p.set('detailed_id', opts.detailedId)
+      if (opts.subsidiaryId) p.set('subsidiary_id', opts.subsidiaryId)
+      if (opts.accountId) p.set('account_id', opts.accountId)
+      if (opts.dateFrom) p.set('date_from', opts.dateFrom)
+      if (opts.dateTo) p.set('date_to', opts.dateTo)
+      if (opts.docFrom) p.set('doc_from', opts.docFrom)
+      if (opts.docTo) p.set('doc_to', opts.docTo)
+      if (opts.approvedOnly) p.set('approved_only', 'true')
+      const q = p.toString()
+      return get(`${basePath}/detail-ledger/${q ? `?${q}` : ''}`)
+    },
+    createDocument: (data) => post(`${basePath}/documents/`, data),
+    listDocuments: (opts = {}) => {
+      const q = accountingParams(opts)
+      return get(`${basePath}/documents/${q ? `?${q}` : ''}`)
+    },
+    getDocument: (code) => get(`${basePath}/documents/${encodeURIComponent(code)}/`),
+    updateDocument: (code, data) => put(`${basePath}/documents/${encodeURIComponent(code)}/`, data),
+    deleteDocument: (code) => del(`${basePath}/documents/${encodeURIComponent(code)}/`),
+    approveDocument: (code, isApproved) => put(`${basePath}/documents/${encodeURIComponent(code)}/approve/`, { is_approved: isApproved }),
+    subsidiaries: (opts = {}) => {
+      const p = new URLSearchParams()
+      if (opts.accountId) p.set('account_id', opts.accountId)
+      const q = p.toString()
+      return get(`${basePath}/subsidiaries/${q ? `?${q}` : ''}`)
+    },
+    createSubsidiary: (data) => post(`${basePath}/subsidiaries/`, data),
+    updateSubsidiary: (id, data) => put(`${basePath}/subsidiaries/${id}/`, data),
+    updateGeneralAccount: (id, data) => put(`${basePath}/accounts/${id}/`, data),
+    details: (opts = {}) => {
+      const p = new URLSearchParams()
+      if (opts.subsidiaryId) p.set('subsidiary_id', opts.subsidiaryId)
+      if (opts.accountId) p.set('account_id', opts.accountId)
+      const q = p.toString()
+      return get(`${basePath}/details/${q ? `?${q}` : ''}`)
+    },
+    createDetailed: (data) => post(`${basePath}/details/`, data),
+    updateDetailed: (id, data) => put(`${basePath}/details/${id}/`, data),
+    preferences: () => get(`${basePath}/preferences/`),
+    checkAccounts: () => get(`${basePath}/check-accounts/`),
+    importExcel: async (file, opts = {}) => {
+      const form = new FormData()
+      form.append('file', file)
+      if (opts.dryRun) form.append('dry_run', 'true')
+      if (opts.approve) form.append('approve', 'true')
+      if (opts.force) form.append('force', 'true')
+      const response = await fetch(`${basePath}/import-excel/`, {
+        method: 'POST',
+        credentials: 'include',
+        body: form,
+      })
+      const text = await response.text()
+      let payload = null
+      if (text) {
+        try {
+          payload = JSON.parse(text)
+        } catch {
+          payload = { ok: false, error: text }
+        }
       }
-    }
-    if (!response.ok) {
-      const error = new Error((payload && payload.error) || 'خطا در آپلود فایل')
-      error.status = response.status
-      error.data = payload && payload.data ? payload.data : payload
-      throw error
-    }
-    return payload && Object.prototype.hasOwnProperty.call(payload, 'data') ? payload.data : payload
-  },
+      if (!response.ok) {
+        const error = new Error((payload && payload.error) || 'خطا در آپلود فایل')
+        error.status = response.status
+        error.data = payload && payload.data ? payload.data : payload
+        throw error
+      }
+      return payload && Object.prototype.hasOwnProperty.call(payload, 'data') ? payload.data : payload
+    },
+    transferPreview: (opts = {}) => {
+      const p = new URLSearchParams()
+      if (opts.documentCode) p.set('document_code', opts.documentCode)
+      if (opts.documentNumber != null && opts.documentNumber !== '') p.set('document_number', opts.documentNumber)
+      const q = p.toString()
+      return get(`${basePath}/transfer-preview/${q ? `?${q}` : ''}`)
+    },
+    transferDocument: (data) => post(`${basePath}/transfer/`, data),
+  }
 }
+
+export const accountingApi = createAccountingApi('/api/accounting')
+export const factoryAccountingApi = createAccountingApi('/api/factory-accounting')
 
 export const smsApi = {
   list: () => get('/api/sms/logs/'),

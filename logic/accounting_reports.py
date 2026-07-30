@@ -7,6 +7,7 @@ from django.db.models import Count, F, Q, Sum
 from backend.models import Account, AccountingEntry, Customer, DetailedAccount, Sale, SubsidiaryAccount
 
 from logic.accounting_accounts import seed_accounts
+from logic.ledger import OFFICE_LEDGER
 
 
 def _money(value):
@@ -20,10 +21,11 @@ def _split_balance(debit_sum, credit_sum):
     return 0, _money(-net)
 
 
-def _entry_base_qs(*, approved_only=False):
-    qs = AccountingEntry.objects.filter(
-        Q(sale__isnull=True) | Q(sale__is_deleted=False),
-    )
+def _entry_base_qs(*, approved_only=False, ledger=OFFICE_LEDGER):
+    EntryModel = ledger.AccountingEntry
+    qs = EntryModel.objects.all()
+    if ledger.syncs_sales:
+        qs = qs.filter(Q(sale__isnull=True) | Q(sale__is_deleted=False))
     if approved_only:
         qs = qs.filter(is_approved=True)
     return qs
@@ -107,13 +109,14 @@ def _filter_base_by_class(base, account_class):
     return base.filter(account__account_class=account_class)
 
 
-def trial_balance_general(*, date_from=None, date_to=None, account_class=None, approved_only=False):
-    seed_accounts()
-    base = _entry_base_qs(approved_only=approved_only)
+def trial_balance_general(*, date_from=None, date_to=None, account_class=None, approved_only=False, ledger=OFFICE_LEDGER):
+    seed_accounts(ledger=ledger)
+    AccountModel = ledger.Account
+    base = _entry_base_qs(approved_only=approved_only, ledger=ledger)
     if account_class:
         base = base.filter(account__account_class=account_class)
 
-    accounts = Account.objects.filter(is_active=True).order_by("sort_order", "name")
+    accounts = AccountModel.objects.filter(is_active=True).order_by("sort_order", "name")
     if account_class:
         accounts = accounts.filter(account_class=account_class)
 
@@ -133,11 +136,12 @@ def trial_balance_general(*, date_from=None, date_to=None, account_class=None, a
     return rows, _totals_with_balance(rows, base, date_from=date_from, date_to=date_to)
 
 
-def trial_balance_subsidiary(*, date_from=None, date_to=None, account_class=None, account_id=None, approved_only=False):
-    seed_accounts()
-    base = _entry_base_qs(approved_only=approved_only)
+def trial_balance_subsidiary(*, date_from=None, date_to=None, account_class=None, account_id=None, approved_only=False, ledger=OFFICE_LEDGER):
+    seed_accounts(ledger=ledger)
+    SubsidiaryModel = ledger.SubsidiaryAccount
+    base = _entry_base_qs(approved_only=approved_only, ledger=ledger)
 
-    subsidiaries = SubsidiaryAccount.objects.filter(is_active=True).select_related("account").order_by(
+    subsidiaries = SubsidiaryModel.objects.filter(is_active=True).select_related("account").order_by(
         "account__sort_order", "code"
     )
     if account_class:
@@ -169,11 +173,12 @@ def trial_balance_subsidiary(*, date_from=None, date_to=None, account_class=None
     return rows, _totals_with_balance(rows, sub_base, date_from=date_from, date_to=date_to)
 
 
-def trial_balance_detailed(*, date_from=None, date_to=None, account_class=None, account_id=None, subsidiary_id=None, approved_only=False):
-    seed_accounts()
-    base = _entry_base_qs(approved_only=approved_only)
+def trial_balance_detailed(*, date_from=None, date_to=None, account_class=None, account_id=None, subsidiary_id=None, approved_only=False, ledger=OFFICE_LEDGER):
+    seed_accounts(ledger=ledger)
+    DetailedModel = ledger.DetailedAccount
+    base = _entry_base_qs(approved_only=approved_only, ledger=ledger)
 
-    details = DetailedAccount.objects.filter(is_active=True).select_related(
+    details = DetailedModel.objects.filter(is_active=True).select_related(
         "subsidiary", "subsidiary__account"
     ).order_by("subsidiary__account__sort_order", "subsidiary__code", "code")
     if account_class:
@@ -220,15 +225,20 @@ def detail_ledger(
     doc_from=None,
     doc_to=None,
     approved_only=False,
+    user=None,
+    ledger=OFFICE_LEDGER,
 ):
     """دفتر ریز — مانده جاری برای هر سطر."""
-    base = _entry_base_qs(approved_only=approved_only).select_related(
+    AccountModel = ledger.Account
+    SubsidiaryModel = ledger.SubsidiaryAccount
+    DetailedModel = ledger.DetailedAccount
+    base = _entry_base_qs(approved_only=approved_only, ledger=ledger).select_related(
         "account", "subsidiary", "detailed", "detailed__subsidiary", "detailed__subsidiary__account"
     )
 
     if detailed_id:
         qs = base.filter(detailed_id=detailed_id)
-        detail = DetailedAccount.objects.select_related("subsidiary", "subsidiary__account").get(pk=detailed_id)
+        detail = DetailedModel.objects.select_related("subsidiary", "subsidiary__account").get(pk=detailed_id)
         header = {
             "general_name": detail.subsidiary.account.name,
             "subsidiary_name": detail.subsidiary.name,
@@ -237,7 +247,7 @@ def detail_ledger(
         }
     elif subsidiary_id:
         qs = base.filter(subsidiary_id=subsidiary_id)
-        sub = SubsidiaryAccount.objects.select_related("account").get(pk=subsidiary_id)
+        sub = SubsidiaryModel.objects.select_related("account").get(pk=subsidiary_id)
         header = {
             "general_name": sub.account.name,
             "subsidiary_name": sub.name,
@@ -246,7 +256,7 @@ def detail_ledger(
         }
     elif account_id:
         qs = base.filter(account_id=account_id, subsidiary__isnull=True, detailed__isnull=True)
-        account = Account.objects.get(pk=account_id)
+        account = AccountModel.objects.get(pk=account_id)
         header = {
             "general_name": account.name,
             "subsidiary_name": account.name,
@@ -265,7 +275,7 @@ def detail_ledger(
     if doc_to:
         qs = qs.filter(document_number__lte=doc_to)
 
-    opening_qs = _entry_base_qs(approved_only=approved_only)
+    opening_qs = _entry_base_qs(approved_only=approved_only, ledger=ledger)
     if detailed_id:
         opening_qs = opening_qs.filter(detailed_id=detailed_id)
     elif subsidiary_id:
@@ -299,9 +309,12 @@ def detail_ledger(
         )
 
     entries = qs.order_by("entry_date", "document_number", "id")
+    from logic.accounting import entry_permissions
+
     for entry in entries:
         running += Decimal(entry.debit or 0) - Decimal(entry.credit or 0)
         balance_side = "debit" if running >= 0 else "credit"
+        perms = entry_permissions(entry, user=user, ledger=ledger)
         lines.append(
             {
                 "id": entry.id,
@@ -318,6 +331,17 @@ def detail_ledger(
                 "is_opening": False,
                 "entry_type": entry.entry_type,
                 "is_approved": entry.is_approved,
+                "can_edit": perms["can_edit"],
+                "can_delete": perms["can_delete"],
+                "account_id": entry.account_id,
+                "subsidiary_id": entry.subsidiary_id,
+                "detailed_id": entry.detailed_id,
+                "transferred_to_office_at": (
+                    entry.transferred_to_office_at.isoformat()
+                    if getattr(entry, "transferred_to_office_at", None)
+                    else None
+                ),
+                "office_document_code": getattr(entry, "office_document_code", "") or "",
             }
         )
 
@@ -339,7 +363,7 @@ def report_params_from_dict(params):
     }
 
 
-def trial_balance_for_level(params):
+def trial_balance_for_level(params, *, ledger=OFFICE_LEDGER):
     """تراز آزمایشی بر اساس سطح (general / subsidiary / detailed)."""
     level = (params.get("level") or "general").strip().lower()
     common_params = report_params_from_dict(params)
@@ -348,6 +372,7 @@ def trial_balance_for_level(params):
         "date_to": common_params["date_to"],
         "account_class": common_params["account_class"],
         "approved_only": common_params["approved_only"],
+        "ledger": ledger,
     }
     if level == "subsidiary":
         rows, totals = trial_balance_subsidiary(**common, account_id=common_params["account_id"])
@@ -362,7 +387,7 @@ def trial_balance_for_level(params):
     return {"level": level, "results": rows, "totals": totals, "total": len(rows)}
 
 
-def detail_ledger_from_params(params):
+def detail_ledger_from_params(params, *, user=None, ledger=OFFICE_LEDGER):
     """دفتر ریز از پارامترهای query — حداقل یکی از حساب‌ها لازم است."""
     common = report_params_from_dict(params)
     detailed_id = (params.get("detailed_id") or "").strip()
@@ -375,6 +400,8 @@ def detail_ledger_from_params(params):
         "date_from": common["date_from"],
         "date_to": common["date_to"],
         "approved_only": common["approved_only"],
+        "user": user,
+        "ledger": ledger,
     }
     if doc_from.isdigit():
         kwargs["doc_from"] = int(doc_from)
@@ -392,11 +419,11 @@ def detail_ledger_from_params(params):
     return detail_ledger(**kwargs)
 
 
-def accounting_summary(params):
+def accounting_summary(params, *, ledger=OFFICE_LEDGER):
     """خلاصه آمار اسناد و مانده فاکتورها."""
     from logic.accounting_entries import apply_entry_filters
 
-    entries = apply_entry_filters(AccountingEntry.objects.all(), params)
+    entries = apply_entry_filters(ledger.AccountingEntry.objects.all(), params, ledger=ledger)
     agg = entries.aggregate(
         total_debit=Sum("debit"),
         total_credit=Sum("credit"),
@@ -418,10 +445,12 @@ def accounting_summary(params):
         total_refunds=Sum("amount", filter=Q(entry_type="refund")),
     )
 
-    due_agg = Sale.objects.filter(final_amount__gt=F("paid_amount")).aggregate(
-        total=Sum(F("final_amount") - F("paid_amount")),
-        open_invoices=Count("id"),
-    )
+    due_agg = {"total": 0, "open_invoices": 0}
+    if ledger.syncs_sales:
+        due_agg = Sale.objects.filter(final_amount__gt=F("paid_amount")).aggregate(
+            total=Sum(F("final_amount") - F("paid_amount")),
+            open_invoices=Count("id"),
+        )
 
     return {
         "total_debit": int(agg["total_debit"] or 0),

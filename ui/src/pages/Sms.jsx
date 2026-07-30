@@ -12,6 +12,8 @@ import { formatDate } from '../utils/format'
 import { CURRENCY_UNIT, PERCENT_UNIT } from '../config/money'
 import { formatJalali, toPersianDigits } from '../utils/jalali'
 import { hasPermission } from '../utils/permissions'
+import { PAGE_GUIDE_DEFAULTS } from '../config/pageGuideDefaults'
+import { useRegisterPageGuide } from '../context/PageGuideContext'
 
 const STATUS_COLORS = {
   sent: '#10b981',
@@ -33,6 +35,7 @@ function formatTimeFa(hhmm) {
 }
 
 export default function Sms() {
+  useRegisterPageGuide('sms', PAGE_GUIDE_DEFAULTS.sms)
   const { user } = useAuth()
   const confirm = useConfirm()
   const canSend = hasPermission(user, 'send_sms')
@@ -517,20 +520,6 @@ export default function Sms() {
             </form>
           </Card>
 
-          <Card title="راهنما">
-            <ul className="club-help-list">
-              <li>ثبت سفارش: با هر فروش جدید، در صورت فعال بودن، پیامک ارسال می‌شود.</li>
-              <li>خوش‌آمدگویی: هنگام ثبت مشتری جدید ارسال می‌شود.</li>
-              <li>ارتقای سطح: پس از تغییر سطح باشگاه ارسال می‌شود.</li>
-              <li>تخفیف ویژه: از تب «تخفیف ویژه» به‌صورت دستی یا گروهی ارسال کنید.</li>
-            </ul>
-            {clubSettings?.template_vars && (
-              <p className="muted">
-                متغیرهای قابل استفاده در قالب‌ها: name, shop_name, phone, amount, invoice, level,
-                discount_label
-              </p>
-            )}
-          </Card>
         </div>
       )}
 

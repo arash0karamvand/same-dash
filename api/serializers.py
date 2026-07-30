@@ -103,6 +103,8 @@ def sale_to_dict(sale, include_installments=False, include_lines=False, user=Non
         "payment_status_display": sale.get_payment_status_display(),
         "payment_method": sale.payment_method,
         "payment_method_display": sale.get_payment_method_display(),
+        "accounting_mode": sale.accounting_mode,
+        "accounting_mode_display": sale.get_accounting_mode_display(),
         "recorded_by": sale.recorded_by.username if sale.recorded_by else None,
         "branch": sale.branch or "",
         "branch_label": BRANCH_LABELS.get(sale.branch, "—"),
@@ -180,6 +182,8 @@ def office_order_to_dict(order, include_installments=False, include_lines=False,
         "description": order.description,
         "payment_status": order.payment_status,
         "payment_method": order.payment_method,
+        "accounting_mode": order.accounting_mode,
+        "accounting_mode_display": order.get_accounting_mode_display(),
         "order_kind": order.order_kind,
         "order_status": order.order_status,
         "status": order.status,
@@ -212,12 +216,23 @@ def office_order_to_dict(order, include_installments=False, include_lines=False,
                 "check_number": i.check_number,
                 "bank_name": i.bank_name,
                 "status": i.status,
+                "received_at": i.received_at.isoformat() if getattr(i, "received_at", None) else None,
+                "receiver_name": getattr(i, "receiver_name", "") or "",
             }
             for i in order.installments.filter(is_deleted=False)
         ]
+    from logic.check_accounting import sale_has_pending_checks
+
+    data["has_pending_checks"] = sale_has_pending_checks(order.source_sale)
     lines = list(order.line_items.all())
     data["total_quantity"] = sum(int(i.quantity or 0) for i in lines)
     data["line_items_count"] = len(lines)
+    if order.accounting_mode == "automatic":
+        from logic.accounting_accounts import payment_account_label_for_sale
+
+        data["payment_account_label"] = payment_account_label_for_sale(order.source_sale)
+    else:
+        data["payment_account_label"] = None
     if include_lines:
         data["line_items"] = [office_line_item_to_dict(i, user=user) for i in lines]
     return data
@@ -297,6 +312,14 @@ def installment_to_dict(inst, user=None):
     from auth.org_roles import should_mask_amounts_for_user, should_mask_prices_for_user
 
     hide_money = user and (should_mask_prices_for_user(user) or should_mask_amounts_for_user(user))
+    reg = getattr(inst, "registration_account", None)
+    dep = getattr(inst, "deposit_account", None)
+    reg_label = ""
+    dep_label = ""
+    if reg:
+        reg_label = f"{reg.code} — {reg.name}" if reg.code else reg.name
+    if dep:
+        dep_label = f"{dep.code} — {dep.name}" if dep.code else dep.name
     return {
         "id": inst.id,
         "sale_id": inst.sale_id,
@@ -307,10 +330,21 @@ def installment_to_dict(inst, user=None):
         "payment_method_display": inst.get_payment_method_display(),
         "check_number": inst.check_number,
         "bank_name": inst.bank_name,
+        "received_at": inst.received_at.isoformat() if getattr(inst, "received_at", None) else None,
+        "receiver_name": getattr(inst, "receiver_name", "") or "",
         "status": inst.status,
         "status_display": inst.get_status_display(),
         "paid_at": inst.paid_at.isoformat() if inst.paid_at else None,
         "notes": inst.notes,
+        "accounting_registered_at": (
+            inst.accounting_registered_at.isoformat()
+            if getattr(inst, "accounting_registered_at", None)
+            else None
+        ),
+        "registration_account_id": reg.id if reg else None,
+        "registration_account_label": reg_label,
+        "deposit_account_id": dep.id if dep else None,
+        "deposit_account_label": dep_label,
         "is_deleted": getattr(inst, "is_deleted", False),
     }
 
@@ -333,12 +367,17 @@ def attendance_to_dict(record):
     return _attendance_to_dict(record)
 
 
-def accounting_to_dict(entry, user=None):
+def accounting_to_dict(entry, user=None, *, ledger=None):
+    from auth.permissions import TRANSFER_FACTORY_ACCOUNTING_TO_OFFICE, has_permission
     from logic.accounting import entry_permissions, is_system_entry, resolve_entry_accounts
+    from logic.accounting_transfer import is_factory_entry_transferred
+    from logic.ledger import FACTORY_LEDGER, OFFICE_LEDGER
 
-    sale = entry.sale if entry.sale_id else None
-    is_system = is_system_entry(entry)
-    perms = entry_permissions(entry, user=user)
+    ledger = ledger or OFFICE_LEDGER
+    sale = entry.sale if getattr(entry, "sale_id", None) else None
+    factory_order = entry.factory_order if getattr(entry, "factory_order_id", None) else None
+    is_system = is_system_entry(entry, ledger=ledger)
+    perms = entry_permissions(entry, user=user, ledger=ledger)
     account = entry.account if getattr(entry, "account_id", None) else None
     general, subsidiary, detailed = resolve_entry_accounts(
         account,
@@ -348,6 +387,14 @@ def accounting_to_dict(entry, user=None):
     )
     subsidiary_ref = entry.subsidiary if getattr(entry, "subsidiary_id", None) else None
     detailed_ref = entry.detailed if getattr(entry, "detailed_id", None) else None
+    transferred_at = getattr(entry, "transferred_to_office_at", None)
+    office_doc_code = getattr(entry, "office_document_code", "") or ""
+    can_transfer = (
+        ledger.id == "factory"
+        and user
+        and has_permission(user, TRANSFER_FACTORY_ACCOUNTING_TO_OFFICE)
+        and not is_factory_entry_transferred(entry)
+    )
     return {
         "id": entry.id,
         "entry_type": entry.entry_type,
@@ -379,14 +426,20 @@ def accounting_to_dict(entry, user=None):
         "amount": int(entry.amount),
         "entry_date": entry.entry_date.isoformat(),
         "description": entry.description,
-        "sale_id": entry.sale_id,
-        "invoice_number": sale.invoice_number if sale else "",
+        "sale_id": getattr(entry, "sale_id", None),
+        "factory_order_id": getattr(entry, "factory_order_id", None),
+        "invoice_number": (
+            sale.invoice_number if sale else (factory_order.invoice_number if factory_order else "")
+        ),
         "customer_name": sale.customer.full_name if sale else "",
         "is_approved": entry.is_approved,
         "is_system": is_system,
         "can_edit": perms["can_edit"],
         "can_delete": perms["can_delete"],
         "edit_mode": perms["edit_mode"],
+        "transferred_to_office_at": transferred_at.isoformat() if transferred_at else None,
+        "office_document_code": office_doc_code,
+        "can_transfer": can_transfer,
         "created_at": entry.created_at.isoformat(),
     }
 

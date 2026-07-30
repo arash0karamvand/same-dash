@@ -13,8 +13,11 @@ from backend.models import (
     BirthdaySmsSettings,
     Customer,
     CustomerLevelHistory,
+    FactoryAccountingEntry,
+    FactoryDetailedAccount,
     FactoryOrder,
     FactoryOrderLineItem,
+    FactorySubsidiaryAccount,
     LoyaltyLevel,
     OfficeOrder,
     OfficeOrderInstallment,
@@ -67,6 +70,7 @@ def reset_business_data():
         counts["reminder_send_logs"] = _hard_delete(ReminderSendLog.objects.all())
         counts["wallet_transactions"] = _hard_delete(WalletTransaction.objects.all())
         counts["factory_order_line_items"] = _hard_delete(FactoryOrderLineItem.objects.all())
+        counts["factory_accounting_entries"] = _hard_delete(FactoryAccountingEntry.objects.all())
         counts["factory_orders"] = _hard_delete(FactoryOrder.all_objects.all())
         counts["office_order_installments"] = _hard_delete(OfficeOrderInstallment.all_objects.all())
         counts["office_order_line_items"] = _hard_delete(OfficeOrderLineItem.objects.all())
@@ -74,6 +78,8 @@ def reset_business_data():
         counts["sale_line_items"] = _hard_delete(SaleLineItem.objects.all())
         counts["sale_installments"] = _hard_delete(SaleInstallment.all_objects.all())
         counts["accounting_entries"] = _hard_delete(AccountingEntry.objects.all())
+        counts["factory_detailed_accounts"] = _hard_delete(FactoryDetailedAccount.objects.all())
+        counts["factory_subsidiary_accounts"] = _hard_delete(FactorySubsidiaryAccount.objects.all())
         counts["sales"] = _hard_delete(Sale.all_objects.all())
 
         counts["customer_level_history"] = _hard_delete(CustomerLevelHistory.objects.all())

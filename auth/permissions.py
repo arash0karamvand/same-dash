@@ -33,6 +33,12 @@ CREATE_ACCOUNTING = "create_accounting"
 EDIT_ACCOUNTING = "edit_accounting"
 DELETE_ACCOUNTING = "delete_accounting"
 APPROVE_ACCOUNTING = "approve_accounting"
+VIEW_FACTORY_ACCOUNTING = "view_factory_accounting"
+CREATE_FACTORY_ACCOUNTING = "create_factory_accounting"
+EDIT_FACTORY_ACCOUNTING = "edit_factory_accounting"
+DELETE_FACTORY_ACCOUNTING = "delete_factory_accounting"
+APPROVE_FACTORY_ACCOUNTING = "approve_factory_accounting"
+TRANSFER_FACTORY_ACCOUNTING_TO_OFFICE = "transfer_factory_accounting_to_office"
 VIEW_REPORTS = "view_reports"
 
 VIEW_LOYALTY = "view_loyalty"
@@ -97,6 +103,12 @@ PERMISSION_LABELS = {
     EDIT_ACCOUNTING: "ویرایش سند حسابداری",
     DELETE_ACCOUNTING: "حذف سند حسابداری",
     APPROVE_ACCOUNTING: "تایید حسابداری",
+    VIEW_FACTORY_ACCOUNTING: "مشاهده حسابداری کارخانه",
+    CREATE_FACTORY_ACCOUNTING: "ثبت سند حسابداری کارخانه",
+    EDIT_FACTORY_ACCOUNTING: "ویرایش سند حسابداری کارخانه",
+    DELETE_FACTORY_ACCOUNTING: "حذف سند حسابداری کارخانه",
+    APPROVE_FACTORY_ACCOUNTING: "تایید حسابداری کارخانه",
+    TRANSFER_FACTORY_ACCOUNTING_TO_OFFICE: "انتقال سند کارخانه به حسابداری اداری",
     VIEW_REPORTS: "گزارش‌ها",
     VIEW_LOYALTY: "مشاهده باشگاه",
     MANAGE_LOYALTY: "مدیریت باشگاه",
@@ -158,6 +170,12 @@ ALL_PERMISSIONS = {
     EDIT_ACCOUNTING,
     DELETE_ACCOUNTING,
     APPROVE_ACCOUNTING,
+    VIEW_FACTORY_ACCOUNTING,
+    CREATE_FACTORY_ACCOUNTING,
+    EDIT_FACTORY_ACCOUNTING,
+    DELETE_FACTORY_ACCOUNTING,
+    APPROVE_FACTORY_ACCOUNTING,
+    TRANSFER_FACTORY_ACCOUNTING_TO_OFFICE,
     VIEW_REPORTS,
     VIEW_LOYALTY,
     MANAGE_LOYALTY,
@@ -259,6 +277,12 @@ PERMISSION_GROUPS = [
             EDIT_ACCOUNTING,
             DELETE_ACCOUNTING,
             APPROVE_ACCOUNTING,
+            VIEW_FACTORY_ACCOUNTING,
+            CREATE_FACTORY_ACCOUNTING,
+            EDIT_FACTORY_ACCOUNTING,
+            DELETE_FACTORY_ACCOUNTING,
+            APPROVE_FACTORY_ACCOUNTING,
+            TRANSFER_FACTORY_ACCOUNTING_TO_OFFICE,
             VIEW_REPORTS,
             VIEW_INSTALLMENTS,
             MANAGE_INSTALLMENTS,
@@ -400,6 +424,11 @@ MENU_SECTIONS = [
             MANAGE_FACTORY_PRODUCTS,
             VIEW_MATERIALS,
             CREATE_MATERIALS,
+            VIEW_FACTORY_ACCOUNTING,
+            CREATE_FACTORY_ACCOUNTING,
+            EDIT_FACTORY_ACCOUNTING,
+            DELETE_FACTORY_ACCOUNTING,
+            APPROVE_FACTORY_ACCOUNTING,
         ],
     },
 ]

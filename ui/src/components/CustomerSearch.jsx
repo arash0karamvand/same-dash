@@ -1,11 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { customersApi } from '../api/client'
 import PersianDateInput from './PersianDateInput'
+import JcalPanel from './JcalPanel'
 import { Button, Field } from './ui'
 import { formatMoney } from '../utils/format'
 import { formatJalali } from '../utils/jalali'
 
 export default function CustomerSearch({ value, onSelect, onCreateNew }) {
+  const anchorRef = useRef(null)
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
   const [selected, setSelected] = useState(null)
@@ -85,24 +87,44 @@ export default function CustomerSearch({ value, onSelect, onCreateNew }) {
   }
 
   const active = value?.id ? value : selected
+  const [dropdownOpen, setDropdownOpen] = useState(false)
+
+  useEffect(() => {
+    if (results.length > 0 && !registerOpen) {
+      setDropdownOpen(true)
+    } else {
+      setDropdownOpen(false)
+    }
+  }, [results, registerOpen])
 
   return (
     <div className="customer-search">
       <Field label="مشتری">
-        <input
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value)
-            setSelected(null)
-            onSelect(null)
-            setRegisterOpen(false)
-          }}
-          placeholder="جستجوی نام یا موبایل…"
-          autoComplete="off"
-        />
+        <div className="customer-search-anchor" ref={anchorRef}>
+          <input
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value)
+              setSelected(null)
+              onSelect(null)
+              setRegisterOpen(false)
+            }}
+            onFocus={() => {
+              if (results.length > 0 && !registerOpen) setDropdownOpen(true)
+            }}
+            placeholder="جستجوی نام یا موبایل…"
+            autoComplete="off"
+          />
+        </div>
       </Field>
       {loading && <p className="muted">در حال جستجو…</p>}
-      {results.length > 0 && !registerOpen && (
+      <JcalPanel
+        open={dropdownOpen}
+        onClose={() => setDropdownOpen(false)}
+        anchorRef={anchorRef}
+        variant="menu"
+        ariaLabel="نتایج جستجوی مشتری"
+      >
         <ul className="search-dropdown">
           {results.map((c) => (
             <li key={c.id}>
@@ -118,7 +140,7 @@ export default function CustomerSearch({ value, onSelect, onCreateNew }) {
             </button>
           </li>
         </ul>
-      )}
+      </JcalPanel>
       {active?.id && (
         <div className="customer-selected-info">
           <p className="muted">

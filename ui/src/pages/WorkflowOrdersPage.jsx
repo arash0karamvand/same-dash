@@ -24,6 +24,7 @@ export default function WorkflowOrdersPage({
   workflowFilter,
   listApi = salesApi.list,
   extraParams = {},
+  filterQuery = '',
   filters = null,
   actions = [],
   showCustomer = true,
@@ -34,8 +35,10 @@ export default function WorkflowOrdersPage({
   showStatus = false,
   showWorkflowHolder = false,
   showMaterials = false,
+  showAccountingMode = false,
   onEditOrder = null,
   emptyTitle = 'سفارشی در این مرحله نیست',
+  embedInSection = false,
 }) {
   const { user } = useAuth()
   const { choices } = useConfig()
@@ -59,6 +62,10 @@ export default function WorkflowOrdersPage({
       Object.entries(extraParams).forEach(([key, value]) => {
         if (value != null && value !== '') params.set(key, String(value))
       })
+      if (filterQuery) {
+        const extra = new URLSearchParams(filterQuery)
+        extra.forEach((value, key) => params.set(key, value))
+      }
       const data = await listApi(params.toString())
       setOrders(data.results || [])
     } catch (e) {
@@ -67,7 +74,7 @@ export default function WorkflowOrdersPage({
     } finally {
       setLoading(false)
     }
-  }, [workflowFilter, listApi, JSON.stringify(extraParams)])
+  }, [workflowFilter, listApi, filterQuery, JSON.stringify(extraParams)])
 
   useEffect(() => {
     load()
@@ -172,28 +179,15 @@ export default function WorkflowOrdersPage({
     )
   }
 
-  return (
-    <div className="page workflow-orders-page">
-      <div className="page-head">
-        <div>
-          <h1>{title}</h1>
-          {subtitle && <p className="muted">{subtitle}</p>}
-        </div>
-        <Button type="button" variant="ghost" onClick={load}>بروزرسانی</Button>
-      </div>
-
-      {filters}
-
-      {error && <div className="alert alert-error">{error}</div>}
-
-      <Card>
-        {loading ? (
-          <p className="muted loading">در حال بارگذاری…</p>
-        ) : orders.length === 0 ? (
-          <EmptyState text={emptyTitle} />
-        ) : (
-          <>
-          <div className="table-wrap workflow-table-desktop">
+  const listContent = (
+    <>
+      {loading ? (
+        <p className="muted loading">در حال بارگذاری…</p>
+      ) : orders.length === 0 ? (
+        <EmptyState text={emptyTitle} />
+      ) : (
+        <>
+        <div className="table-wrap workflow-table-desktop">
             <table className="table">
               <thead>
                 <tr>
@@ -206,6 +200,7 @@ export default function WorkflowOrdersPage({
                   {showProductionDate && <th>تاریخ پایان ساخت</th>}
                   {showStatus && <th>وضعیت</th>}
                   {showAmounts && <th>مبلغ</th>}
+                  {showAccountingMode && <th>حسابداری</th>}
                   {showStage && <th>وضعیت کالا</th>}
                   {showWorkflowHolder && <th>دست</th>}
                   <th />
@@ -232,6 +227,16 @@ export default function WorkflowOrdersPage({
                     {showStatus && <td>{o.status_display || o.status || '—'}</td>}
                     {showAmounts && (
                       <td>{o.amounts_masked ? '—' : formatMoney(o.final_amount)}</td>
+                    )}
+                    {showAccountingMode && (
+                      <td>
+                        <Badge color={o.accounting_mode === 'automatic' ? '#10b981' : '#64748b'}>
+                          {o.accounting_mode_display || (o.accounting_mode === 'automatic' ? 'خودکار' : 'دستی')}
+                        </Badge>
+                        {o.accounting_mode === 'automatic' && o.payment_account_label && (
+                          <div className="muted small">{o.payment_account_label}</div>
+                        )}
+                      </td>
                     )}
                     {showStage && (
                     <td>
@@ -320,6 +325,37 @@ export default function WorkflowOrdersPage({
           </div>
           </>
         )}
+    </>
+  )
+
+  if (embedInSection) {
+    return (
+      <div className="workflow-orders-embedded">
+        <div className="office-section-list-toolbar">
+          <Button type="button" variant="ghost" onClick={load}>بروزرسانی لیست</Button>
+        </div>
+        {error && <div className="alert alert-error">{error}</div>}
+        {listContent}
+      </div>
+    )
+  }
+
+  return (
+    <div className="page workflow-orders-page">
+      <div className="page-head">
+        <div>
+          <h1>{title}</h1>
+          {subtitle && <p className="muted">{subtitle}</p>}
+        </div>
+        <Button type="button" variant="ghost" onClick={load}>بروزرسانی</Button>
+      </div>
+
+      {filters}
+
+      {error && <div className="alert alert-error">{error}</div>}
+
+      <Card>
+        {listContent}
       </Card>
     </div>
   )

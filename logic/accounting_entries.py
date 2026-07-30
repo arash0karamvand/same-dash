@@ -14,11 +14,12 @@ from logic.accounting import (
     assign_document_code,
     create_accounting_entry,
     entry_permissions,
-    is_office_accounting_user,
+    is_auto_approved_accounting_user,
     is_payment_account,
     resolve_entry_accounts,
 )
 from logic.accounting_accounts import accounts_grouped, resolve_account_for_entry
+from logic.ledger import OFFICE_LEDGER
 
 VALID_ENTRY_TYPES = {value for value, _ in AccountingEntry.ENTRY_TYPE_CHOICES}
 
@@ -56,7 +57,7 @@ def parse_money(value, field_label):
     return amount
 
 
-def apply_entry_filters(qs, params):
+def apply_entry_filters(qs, params, *, ledger=OFFICE_LEDGER):
     entry_type = (params.get("type") or "").strip()
     if entry_type:
         qs = qs.filter(entry_type=entry_type)
@@ -88,17 +89,23 @@ def apply_entry_filters(qs, params):
 
     search = (params.get("search") or "").strip()
     if search:
-        qs = qs.filter(
+        search_q = (
             Q(description__icontains=search)
             | Q(document_code__icontains=search)
-            | Q(sale__invoice_number__icontains=search)
-            | Q(sale__customer__full_name__icontains=search)
-            | Q(sale__customer__phone__icontains=search)
             | Q(account__name__icontains=search)
             | Q(general_account__icontains=search)
             | Q(subsidiary_account__icontains=search)
             | Q(detailed_account__icontains=search)
         )
+        if ledger.syncs_sales:
+            search_q |= (
+                Q(sale__invoice_number__icontains=search)
+                | Q(sale__customer__full_name__icontains=search)
+                | Q(sale__customer__phone__icontains=search)
+            )
+        else:
+            search_q |= Q(factory_order__invoice_number__icontains=search)
+        qs = qs.filter(search_q)
 
     amount_min = _parse_filter_amount(params.get("amount_min"))
     amount_max = _parse_filter_amount(params.get("amount_max"))
@@ -121,18 +128,41 @@ def apply_entry_filters(qs, params):
     if credit_max is not None:
         qs = qs.filter(credit__lte=credit_max)
 
+    document_code = (params.get("document_code") or "").strip()
+    if document_code:
+        qs = qs.filter(document_code=document_code)
+
+    document_number = (params.get("document_number") or "").strip()
+    if document_number.isdigit():
+        qs = qs.filter(document_number=int(document_number))
+
+    subsidiary_id = (params.get("subsidiary_id") or "").strip()
+    if subsidiary_id.isdigit():
+        qs = qs.filter(subsidiary_id=int(subsidiary_id))
+
+    detailed_id = (params.get("detailed_id") or "").strip()
+    if detailed_id.isdigit():
+        qs = qs.filter(detailed_id=int(detailed_id))
+
     return qs
 
 
-def entry_base_queryset():
-    return AccountingEntry.objects.select_related("sale", "sale__customer", "account").filter(
-        Q(sale__isnull=True) | Q(sale__is_deleted=False)
-    )
+def entry_base_queryset(*, ledger=OFFICE_LEDGER):
+    EntryModel = ledger.AccountingEntry
+    qs = EntryModel.objects.select_related("account")
+    if ledger.syncs_sales:
+        qs = qs.select_related("sale", "sale__customer").filter(
+            Q(sale__isnull=True) | Q(sale__is_deleted=False)
+        )
+    else:
+        qs = qs.select_related("factory_order")
+    return qs
 
 
-def list_entries(params):
+def list_entries(params, *, ledger=OFFICE_LEDGER):
     """فهرست اسناد با فیلتر، صفحه‌بندی و جمع مبالغ."""
-    qs = apply_entry_filters(entry_base_queryset(), params)
+    EntryModel = ledger.AccountingEntry
+    qs = apply_entry_filters(entry_base_queryset(ledger=ledger), params, ledger=ledger)
     agg = qs.aggregate(
         total=Count("id"),
         total_debit=Sum("debit"),
@@ -156,16 +186,19 @@ def list_entries(params):
         "filtered_credit": int(agg["total_credit"] or 0),
         "types": [
             {"value": value, "label": label}
-            for value, label in AccountingEntry.ENTRY_TYPE_CHOICES
+            for value, label in EntryModel.ENTRY_TYPE_CHOICES
         ],
-        "accounts": accounts_grouped(),
+        "accounts": accounts_grouped(ledger=ledger),
     }
 
 
-def get_entry(pk):
+def get_entry(pk, *, ledger=OFFICE_LEDGER):
+    EntryModel = ledger.AccountingEntry
     try:
-        return AccountingEntry.objects.select_related("sale", "sale__customer", "account").get(pk=pk)
-    except AccountingEntry.DoesNotExist as exc:
+        if ledger.syncs_sales:
+            return EntryModel.objects.select_related("sale", "sale__customer", "account").get(pk=pk)
+        return EntryModel.objects.select_related("factory_order", "account").get(pk=pk)
+    except EntryModel.DoesNotExist as exc:
         raise LookupError("Entry not found") from exc
 
 
@@ -214,7 +247,7 @@ def _create_payment_entry(*, sale, account, effective_amount, description, docum
     return payment_entry, amount_to_apply
 
 
-def create_entry_from_data(data, *, user):
+def create_entry_from_data(data, *, user, ledger=OFFICE_LEDGER):
     """ایجاد سند دستی یا ثبت پرداخت روی فاکتور.
 
     Returns:
@@ -227,6 +260,7 @@ def create_entry_from_data(data, *, user):
             account_id=data.get("account_id"),
             account_slug=(data.get("account_slug") or "").strip() or None,
             entry_type=entry_type,
+            ledger=ledger,
         )
     except Exception as exc:
         raise ValueError("حساب سند نامعتبر است.") from exc
@@ -253,17 +287,18 @@ def create_entry_from_data(data, *, user):
     if not description:
         raise ValueError("شرح سند الزامی است.")
 
+    EntryModel = ledger.AccountingEntry
     document_code = (data.get("document_code") or "").strip()
-    if document_code and AccountingEntry.objects.filter(document_code=document_code).exists():
+    if document_code and EntryModel.objects.filter(document_code=document_code).exists():
         raise ValueError("این کد سند قبلاً ثبت شده است.")
 
     general_account = (data.get("general_account") or "").strip()
     subsidiary_account = (data.get("subsidiary_account") or "").strip()
     detailed_account = (data.get("detailed_account") or "").strip()
 
-    sale = _resolve_sale(data.get("sale_id"))
+    sale = _resolve_sale(data.get("sale_id")) if ledger.syncs_sales else None
 
-    if sale and (entry_type == "payment" or is_payment_account(account)):
+    if ledger.syncs_sales and sale and (entry_type == "payment" or is_payment_account(account)):
         payment_entry, amount_to_apply = _create_payment_entry(
             sale=sale,
             account=account,
@@ -290,7 +325,7 @@ def create_entry_from_data(data, *, user):
         amount=effective_amount or money_total,
         description=description,
         sale=sale,
-        is_approved=bool(data.get("is_approved", False)) or is_office_accounting_user(user),
+        is_approved=bool(data.get("is_approved", False)) or is_auto_approved_accounting_user(user, ledger=ledger),
         document_code=document_code,
         opening_debit=opening_debit,
         opening_credit=opening_credit,
@@ -300,6 +335,7 @@ def create_entry_from_data(data, *, user):
         general_account=general_account,
         subsidiary_account=subsidiary_account,
         detailed_account=detailed_account,
+        ledger=ledger,
     )
     if entry_date_parsed and entry.entry_date != entry_date_parsed:
         entry.entry_date = entry_date_parsed
@@ -308,12 +344,14 @@ def create_entry_from_data(data, *, user):
     return entry, {"kind": "manual", "account": account}
 
 
-def update_entry_from_data(entry, data, *, user):
+def update_entry_from_data(entry, data, *, user, ledger=OFFICE_LEDGER):
     """ویرایش سند — حالت کامل یا جزئی بر اساس مجوز."""
-    if entry.is_approved and not is_office_accounting_user(user):
+    if getattr(entry, "transferred_to_office_at", None):
+        raise ValueError("سند منتقل‌شده به اداری قابل ویرایش نیست.")
+    if entry.is_approved and not is_auto_approved_accounting_user(user, ledger=ledger):
         raise ValueError("سند تاییدشده قابل ویرایش نیست؛ ابتدا تایید را لغو کنید.")
 
-    perms = entry_permissions(entry, user=user)
+    perms = entry_permissions(entry, user=user, ledger=ledger)
     if not perms["can_edit"]:
         raise ValueError("این سند قابل ویرایش نیست.")
     partial = perms["edit_mode"] == "partial"
@@ -346,7 +384,7 @@ def update_entry_from_data(entry, data, *, user):
 
     if "account_id" in data and not partial:
         try:
-            entry.account = resolve_account_for_entry(account_id=data.get("account_id"))
+            entry.account = resolve_account_for_entry(account_id=data.get("account_id"), ledger=ledger)
         except Exception as exc:
             raise ValueError("حساب سند نامعتبر است.") from exc
 
@@ -369,7 +407,7 @@ def update_entry_from_data(entry, data, *, user):
         document_code = (data.get("document_code") or "").strip()
         if (
             document_code
-            and AccountingEntry.objects.filter(document_code=document_code)
+            and ledger.AccountingEntry.objects.filter(document_code=document_code)
             .exclude(pk=entry.pk)
             .exists()
         ):
@@ -415,7 +453,7 @@ def update_entry_from_data(entry, data, *, user):
 
     entry.save()
     if not entry.document_code:
-        assign_document_code(entry)
+        assign_document_code(entry, ledger=ledger)
     return entry, {"kind": "full"}
 
 
@@ -425,9 +463,9 @@ def set_entry_approval(entry, is_approved):
     return entry
 
 
-def bulk_approve_entries(ids=None):
+def bulk_approve_entries(ids=None, *, ledger=OFFICE_LEDGER):
     """تایید گروهی — با شناسه‌ها یا همه اسناد در انتظار."""
-    qs = AccountingEntry.objects.filter(is_approved=False)
+    qs = ledger.AccountingEntry.objects.filter(is_approved=False)
     if ids:
         if not isinstance(ids, list):
             raise ValueError("فهرست شناسه‌ها نامعتبر است.")

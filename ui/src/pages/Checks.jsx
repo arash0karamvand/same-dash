@@ -1,4 +1,4 @@
-// مدیریت اقساط و چک — CRUD + گزارش ماهانه
+// مدیریت چک — CRUD + گزارش ماهانه + خروجی فرم اکسل
 
 import { useEffect, useState } from 'react'
 import { installmentsApi, salesApi } from '../api/client'
@@ -6,7 +6,8 @@ import PersianDateInput from '../components/PersianDateInput'
 import PersianMonthPicker from '../components/PersianMonthPicker'
 import MoneyInput from '../components/MoneyInput'
 import Select from '../components/Select'
-import RecordFilterPanel from '../components/RecordFilterPanel'
+import OfficeSectionCard from '../components/OfficeSectionCard'
+import { CHECK_NOTES_LABEL, CHECK_ROW_FIELDS, EMPTY_CHECK_ROW } from '../config/checkForm'
 import { OFFICE_INSTALLMENTS_FILTER } from '../config/recordFilterSections'
 import { Badge, Button, Card, EmptyState, Field, FilterBar, Modal } from '../components/ui'
 import { useConfirm } from '../context/ConfirmContext'
@@ -15,15 +16,59 @@ import { currentJalali, jalaliMonthToGregorian, PERSIAN_MONTHS, todayIso, toPers
 
 const EMPTY = {
   sale_id: '',
-  amount: '',
-  due_date: todayIso(),
   payment_method: 'check',
-  check_number: '',
-  bank_name: '',
-  notes: '',
+  ...EMPTY_CHECK_ROW,
+  received_at: todayIso(),
+  due_date: todayIso(),
 }
 
-const INSTALLMENT_SALE_FILTER_DEFAULTS = OFFICE_INSTALLMENTS_FILTER.initialFilters
+function CheckFormFields({ form, setForm, editingCustomer = '' }) {
+  const set = (key, val) => setForm((f) => ({ ...f, [key]: val }))
+
+  return (
+    <>
+      {editingCustomer && <p className="muted">نام مشتری: {editingCustomer}</p>}
+      {CHECK_ROW_FIELDS.map((field) => {
+        if (field.type === 'date') {
+          return (
+            <Field key={field.key} label={field.label}>
+              <PersianDateInput
+                value={form[field.key] || todayIso()}
+                onChange={(v) => set(field.key, v)}
+                required={field.key === 'due_date'}
+              />
+            </Field>
+          )
+        }
+        if (field.type === 'money') {
+          return (
+            <Field key={field.key} label={field.label}>
+              <MoneyInput
+                min="1"
+                value={form.amount}
+                onChange={(e) => set('amount', e.target.value)}
+                required
+              />
+            </Field>
+          )
+        }
+        return (
+          <Field key={field.key} label={field.label}>
+            <input
+              className={field.ltr ? 'ltr' : undefined}
+              value={form[field.key] || ''}
+              onChange={(e) => set(field.key, e.target.value)}
+              required={field.key === 'check_number'}
+            />
+          </Field>
+        )
+      })}
+      <Field label={CHECK_NOTES_LABEL}>
+        <input value={form.notes || ''} onChange={(e) => set('notes', e.target.value)} placeholder="توضیح اختیاری…" />
+      </Field>
+    </>
+  )
+}
 
 export default function Checks() {
   const confirm = useConfirm()
@@ -76,18 +121,20 @@ export default function Checks() {
 
   const openEdit = (item) => {
     if (item.status === 'paid') {
-      setError('قسط پرداخت‌شده قابل ویرایش نیست.')
+      setError('چک پرداخت‌شده قابل ویرایش نیست.')
       return
     }
     setEditing(item)
     setForm({
       sale_id: String(item.sale_id),
+      payment_method: 'check',
       amount: String(item.amount),
       due_date: item.due_date?.slice(0, 10) || todayIso(),
-      payment_method: item.payment_method || 'check',
       check_number: item.check_number || '',
       bank_name: item.bank_name || '',
       notes: item.notes || '',
+      received_at: item.received_at?.slice(0, 10) || todayIso(),
+      receiver_name: item.receiver_name || '',
     })
     setModalOpen(true)
   }
@@ -95,7 +142,17 @@ export default function Checks() {
   const save = async (e) => {
     e.preventDefault()
     try {
-      const payload = { ...form, amount: Number(form.amount) }
+      const payload = {
+        sale_id: form.sale_id,
+        payment_method: 'check',
+        amount: Number(form.amount),
+        due_date: form.due_date,
+        check_number: form.check_number,
+        bank_name: form.bank_name,
+        received_at: form.received_at || null,
+        receiver_name: form.receiver_name || '',
+        notes: form.notes || '',
+      }
       if (editing) {
         await installmentsApi.update(editing.id, payload)
       } else {
@@ -119,10 +176,23 @@ export default function Checks() {
     }
   }
 
+  const exportExcel = async () => {
+    try {
+      const params = new URLSearchParams({
+        date_from: range.dateFrom,
+        date_to: range.dateTo,
+        payment_method: 'check',
+      })
+      await installmentsApi.exportExcel(params.toString())
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   const remove = async (id) => {
     if (!await confirm({
-      title: 'حذف قسط/چک',
-      message: 'حذف این قسط/چک؟',
+      title: 'حذف چک',
+      message: 'این چک حذف شود؟',
       confirmText: 'بله، حذف شود',
       variant: 'danger',
     })) return
@@ -144,16 +214,15 @@ export default function Checks() {
           <Card title="مانده"><p className="stat-value">{formatMoney(report.pending_amount)}</p></Card>
         </div>
       )}
-      <Card title={OFFICE_INSTALLMENTS_FILTER.title} className="section-record-filter">
-        <RecordFilterPanel
-          scope={OFFICE_INSTALLMENTS_FILTER.scope}
-          lockModel={OFFICE_INSTALLMENTS_FILTER.lockModel}
-          compact
-          liveSearch
-          initialFilters={INSTALLMENT_SALE_FILTER_DEFAULTS}
-        />
-      </Card>
-      <Card title="چک و اقساط" actions={<Button onClick={openCreate}>+ افزودن</Button>}>
+      <OfficeSectionCard
+        section={OFFICE_INSTALLMENTS_FILTER}
+        actions={
+          <>
+            <Button variant="ghost" onClick={exportExcel}>دانلود اکسل فرم چک</Button>
+            <Button onClick={openCreate}>+ افزودن چک</Button>
+          </>
+        }
+      >
         {error && <div className="alert-error">{error}</div>}
         <FilterBar>
           <Field label="ماه گزارش">
@@ -165,28 +234,40 @@ export default function Checks() {
           </Field>
         </FilterBar>
         {loading ? <div className="loading">در حال بارگذاری…</div> : items.length === 0 ? (
-          <EmptyState text="قسط/چکی در این ماه نیست." />
+          <EmptyState text="چکی در این ماه نیست." />
         ) : (
           <>
             <div className="table-wrap checks-table-desktop">
               <table className="table">
                 <thead>
-                  <tr><th>مشتری</th><th>مبلغ</th><th>سررسید</th><th>چک</th><th>بانک</th><th>وضعیت</th><th>عملیات</th></tr>
+                  <tr>
+                    <th>مشتری</th>
+                    <th>تحویل به شعبه</th>
+                    <th>بانک</th>
+                    <th>سررسید</th>
+                    <th>شماره چک</th>
+                    <th>مبلغ</th>
+                    <th>تحویل‌گیرنده</th>
+                    <th>وضعیت</th>
+                    <th>عملیات</th>
+                  </tr>
                 </thead>
                 <tbody>
                   {items.map((i) => (
                     <tr key={i.id}>
                       <td>{i.customer_name}</td>
-                      <td>{formatMoney(i.amount)}</td>
+                      <td>{i.received_at ? formatDate(i.received_at) : '—'}</td>
+                      <td>{i.bank_name || '—'}</td>
                       <td>{formatDate(i.due_date)}</td>
                       <td className="ltr">{i.check_number || '—'}</td>
-                      <td>{i.bank_name || '—'}</td>
+                      <td>{formatMoney(i.amount)}</td>
+                      <td>{i.receiver_name || '—'}</td>
                       <td><Badge color={i.status === 'paid' ? '#10b981' : '#f59e0b'}>{i.status_display}</Badge></td>
                       <td className="row-actions">
                         {i.status !== 'paid' && (
                           <>
                             <button type="button" className="link" onClick={() => openEdit(i)}>ویرایش</button>
-                            <button type="button" className="link" onClick={() => pay(i.id)}>پرداخت</button>
+                            <button type="button" className="link" onClick={() => pay(i.id)}>وصول</button>
                           </>
                         )}
                         <button type="button" className="link danger" onClick={() => remove(i.id)}>حذف</button>
@@ -204,16 +285,18 @@ export default function Checks() {
                     <Badge color={i.status === 'paid' ? '#10b981' : '#f59e0b'}>{i.status_display}</Badge>
                   </div>
                   <div className="m-card-grid">
-                    <div><span className="muted">مبلغ</span><strong>{formatMoney(i.amount)}</strong></div>
-                    <div><span className="muted">سررسید</span>{formatDate(i.due_date)}</div>
-                    <div><span className="muted">چک</span><span className="ltr">{i.check_number || '—'}</span></div>
+                    <div><span className="muted">تحویل به شعبه</span>{i.received_at ? formatDate(i.received_at) : '—'}</div>
                     <div><span className="muted">بانک</span>{i.bank_name || '—'}</div>
+                    <div><span className="muted">سررسید</span>{formatDate(i.due_date)}</div>
+                    <div><span className="muted">شماره چک</span><span className="ltr">{i.check_number || '—'}</span></div>
+                    <div><span className="muted">مبلغ</span><strong>{formatMoney(i.amount)}</strong></div>
+                    <div><span className="muted">تحویل‌گیرنده</span>{i.receiver_name || '—'}</div>
                   </div>
                   <div className="m-card-actions">
                     {i.status !== 'paid' && (
                       <>
                         <button type="button" className="link" onClick={() => openEdit(i)}>ویرایش</button>
-                        <button type="button" className="link" onClick={() => pay(i.id)}>پرداخت</button>
+                        <button type="button" className="link" onClick={() => pay(i.id)}>وصول</button>
                       </>
                     )}
                     <button type="button" className="link danger" onClick={() => remove(i.id)}>حذف</button>
@@ -223,13 +306,11 @@ export default function Checks() {
             </div>
           </>
         )}
-      </Card>
-      <Modal title={editing ? 'ویرایش قسط/چک' : 'افزودن قسط/چک'} open={modalOpen} onClose={() => { setModalOpen(false); setEditing(null) }}>
+      </OfficeSectionCard>
+      <Modal title={editing ? 'ویرایش چک' : 'ثبت چک'} open={modalOpen} onClose={() => { setModalOpen(false); setEditing(null) }}>
         <form onSubmit={save} className="form">
-          {editing ? (
-            <p className="muted">مشتری: {editing.customer_name}</p>
-          ) : (
-            <Field label="فروش">
+          {!editing && (
+            <Field label="فروش (نام مشتری از فاکتور)">
               <Select
                 value={form.sale_id}
                 onChange={(v) => setForm({ ...form, sale_id: v })}
@@ -239,26 +320,10 @@ export default function Checks() {
               />
             </Field>
           )}
-          <Field label="مبلغ"><MoneyInput min="1" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required /></Field>
-          <Field label="تاریخ سررسید"><PersianDateInput value={form.due_date} onChange={(v) => setForm({ ...form, due_date: v })} required /></Field>
-          <Field label="روش">
-            <Select
-              value={form.payment_method}
-              onChange={(v) => setForm({ ...form, payment_method: v })}
-              options={[
-                { value: 'cash', label: 'نقدی' },
-                { value: 'card', label: 'کارت‌خوان' },
-                { value: 'check', label: 'چک' },
-              ]}
-            />
-          </Field>
-          <Field label="شماره چک"><input className="ltr" value={form.check_number} onChange={(e) => setForm({ ...form, check_number: e.target.value })} /></Field>
-          <Field label="بانک"><input value={form.bank_name} onChange={(e) => setForm({ ...form, bank_name: e.target.value })} /></Field>
-          <Field label="یادداشت"><input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} /></Field>
-          <Button type="submit">{editing ? 'ذخیره' : 'افزودن'}</Button>
+          <CheckFormFields form={form} setForm={setForm} editingCustomer={editing?.customer_name} />
+          <Button type="submit">{editing ? 'ذخیره' : 'ثبت چک'}</Button>
         </form>
       </Modal>
     </div>
   )
 }
-
