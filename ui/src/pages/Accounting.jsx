@@ -454,6 +454,19 @@ function DetailLedgerTable({ ledger, loading, compact = false, onEditEntry, onDe
               <div><span className="muted">{TERMS.credit}</span><strong>{renderAmount(line.credit)}</strong></div>
               <div><span className="muted">{TERMS.balance}</span><strong>{formatRial(line.balance)}</strong></div>
             </div>
+            {(onEditEntry || onDeleteEntry) && !line.is_opening && line.id && (
+              <div className="accounting-doc-list-actions ledger-entry-actions">
+                {line.can_edit && onEditEntry && (
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => onEditEntry(line)} title="ویرایش">✎ ویرایش</button>
+                )}
+                {line.can_delete && onDeleteEntry && (
+                  <button type="button" className="btn btn-ghost btn-sm danger" onClick={() => onDeleteEntry(line)} title="حذف">× حذف</button>
+                )}
+                {canApprove && line.is_approved === false && (
+                  <span className="muted small accounting-doc-list-pending" title="تایید نشده">○ در انتظار تایید</span>
+                )}
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -568,7 +581,7 @@ export default function Accounting({
   const [docListLoading, setDocListLoading] = useState(false)
   const [docListSearch, setDocListSearch] = useState('')
   const [docListApproved, setDocListApproved] = useState('')
-  const DOC_LIST_LIMIT = 50
+  const DOC_LIST_LIMIT = 30
 
   const [entryEdit, setEntryEdit] = useState(null)
   const [entryEditSaving, setEntryEditSaving] = useState(false)
@@ -2251,7 +2264,7 @@ export default function Accounting({
             <EmptyState text="سندی یافت نشد." />
           ) : (
             <>
-              <div className="table-wrap accounting-ledger-wrap accounting-table-desktop">
+              <div className="table-wrap accounting-ledger-wrap accounting-doc-list-table-desktop">
                 <table className="table accounting-ledger-table">
                   <thead>
                     <tr>
@@ -2307,6 +2320,55 @@ export default function Accounting({
                     ))}
                   </tbody>
                 </table>
+              </div>
+              <div className="accounting-doc-list-cards-mobile">
+                {docListRows.map((doc) => (
+                  <div key={doc.document_code} className="m-card accounting-doc-list-card">
+                    <div className="m-card-head accounting-entry-card-head">
+                      <div>
+                        <strong>{doc.document_code}</strong>
+                        <p className="accounting-entry-meta muted">
+                          {TERMS.documentNumber}: {doc.document_number ? formatNumber(doc.document_number) : '—'}
+                          {' · '}
+                          {doc.entry_date ? formatDate(doc.entry_date) : '—'}
+                        </p>
+                      </div>
+                      <span className={`accounting-doc-list-status${doc.is_approved ? '' : ' muted'}`}>
+                        {doc.is_approved ? '✓ تایید' : '○ در انتظار'}
+                      </span>
+                    </div>
+                    <p className="accounting-entry-desc">{doc.description}</p>
+                    {(doc.is_transferred || doc.has_system_entries || !doc.balanced) && (
+                      <p className="accounting-entry-meta muted">
+                        {doc.is_transferred && (
+                          <span className="accounting-transfer-badge" title={doc.office_document_code || ''}>
+                            منتقل‌شده
+                          </span>
+                        )}
+                        {doc.has_system_entries && <span> (سیستمی)</span>}
+                        {!doc.balanced && <span className="doc-unbalanced"> · {TERMS.unbalanced}</span>}
+                      </p>
+                    )}
+                    <div className="m-card-grid">
+                      <div><span className="muted">{TERMS.debit}</span><strong>{formatRial(doc.total_debit)}</strong></div>
+                      <div><span className="muted">{TERMS.credit}</span><strong>{formatRial(doc.total_credit)}</strong></div>
+                      <div><span className="muted">ردیف</span><strong>{formatNumber(doc.line_count)}</strong></div>
+                    </div>
+                    <div className="accounting-doc-list-actions ledger-entry-actions">
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => openEditDocument(doc.document_code)} title="مشاهده/ویرایش">✎ ویرایش</button>
+                      {canDelete && !doc.is_transferred && !doc.has_system_entries && (
+                        <button type="button" className="btn btn-ghost btn-sm danger" onClick={() => deleteDocumentByCode(doc.document_code)} title="حذف">× حذف</button>
+                      )}
+                      {canApprove && !doc.is_transferred && (
+                        doc.is_approved ? (
+                          <button type="button" className="btn btn-ghost btn-sm" onClick={() => toggleDocumentApproval(doc, false)} title="لغو تایید">↩ لغو تایید</button>
+                        ) : (
+                          <button type="button" className="btn btn-ghost btn-sm" onClick={() => toggleDocumentApproval(doc, true)} title="تایید">✓ تایید</button>
+                        )
+                      )}
+                    </div>
+                  </div>
+                ))}
               </div>
               <div className="accounting-pagination">
                 <Button type="button" variant="ghost" disabled={docListOffset <= 0} onClick={() => loadDocumentList(Math.max(0, docListOffset - DOC_LIST_LIMIT))}>
@@ -2882,28 +2944,42 @@ export default function Accounting({
                 <p className="alert-success">همه ردیف‌ها قابل انتقال هستند.</p>
               )}
               {transferPreview.lines?.length > 0 && (
-                <div className="table-wrap">
-                  <table className="data-table">
-                    <thead>
-                      <tr>
-                        <th>حساب</th>
-                        <th>{TERMS.debit}</th>
-                        <th>{TERMS.credit}</th>
-                        <th>وضعیت</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {transferPreview.lines.map((line) => (
-                        <tr key={line.entry_id}>
-                          <td>{line.account_label}</td>
-                          <td>{renderAmount(line.debit)}</td>
-                          <td>{renderAmount(line.credit)}</td>
-                          <td>{line.mappable ? '✓ مشترک' : line.error}</td>
+                <>
+                  <div className="table-wrap accounting-transfer-table-desktop">
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>حساب</th>
+                          <th>{TERMS.debit}</th>
+                          <th>{TERMS.credit}</th>
+                          <th>وضعیت</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody>
+                        {transferPreview.lines.map((line) => (
+                          <tr key={line.entry_id}>
+                            <td>{line.account_label}</td>
+                            <td>{renderAmount(line.debit)}</td>
+                            <td>{renderAmount(line.credit)}</td>
+                            <td>{line.mappable ? '✓ مشترک' : line.error}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="accounting-transfer-cards-mobile">
+                    {transferPreview.lines.map((line) => (
+                      <div key={line.entry_id} className="m-card accounting-transfer-line-card">
+                        <p className="accounting-entry-desc"><strong>{line.account_label}</strong></p>
+                        <div className="m-card-grid">
+                          <div><span className="muted">{TERMS.debit}</span><strong>{renderAmount(line.debit)}</strong></div>
+                          <div><span className="muted">{TERMS.credit}</span><strong>{renderAmount(line.credit)}</strong></div>
+                          <div><span className="muted">وضعیت</span><strong>{line.mappable ? '✓ مشترک' : line.error}</strong></div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
               )}
             </div>
           )}

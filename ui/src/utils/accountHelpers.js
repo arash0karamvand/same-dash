@@ -138,7 +138,7 @@ export function clampHeight(value, min = 200, max = 720) {
 
 export const DEFAULT_DRILL_WIDTHS = { general: 280, subsidiary: 280, detailed: 280, ledger: 480 }
 
-export const DEFAULT_DRILL_HEIGHTS = { general: 420, subsidiary: 420, detailed: 420, ledger: 480 }
+export const DEFAULT_DRILL_HEIGHTS = { general: 520, subsidiary: 520, detailed: 520, ledger: 560 }
 
 export const DEFAULT_DRILL_ROW_HEIGHT = DEFAULT_DRILL_HEIGHTS.general
 

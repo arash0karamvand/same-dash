@@ -402,6 +402,11 @@
   -webkit-overflow-scrolling: touch;
 }
 
+.card-body:has(.table-wrap) {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .grid-2 {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -2247,7 +2252,8 @@ input[type='number']::-webkit-inner-spin-button {
   .sales-table-desktop,
   .checks-table-desktop,
   .dashboard-table-desktop,
-  .accounting-table-desktop {
+  .accounting-table-desktop,
+  .accounting-doc-list-table-desktop {
     display: none !important;
   }
 
@@ -2255,6 +2261,9 @@ input[type='number']::-webkit-inner-spin-button {
   .checks-cards-mobile,
   .dashboard-cards-mobile,
   .accounting-cards-mobile,
+  .accounting-doc-cards-mobile,
+  .accounting-doc-list-cards-mobile,
+  .accounting-transfer-cards-mobile,
   .customers-cards-mobile,
   .wallet-cards-mobile,
   .sms-cards-mobile {
@@ -2287,19 +2296,26 @@ input[type='number']::-webkit-inner-spin-button {
 
   /* Accounting mobile */
   .accounting-page .accounting-toolbar:not(:empty) {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+    display: flex;
+    flex-wrap: wrap;
     gap: 8px;
   }
 
-  .accounting-page .accounting-toolbar > .btn-primary,
-  .accounting-page .accounting-toolbar > .btn:only-child {
-    grid-column: 1 / -1;
+  .accounting-page .accounting-toolbar > .btn-primary {
+    flex: 1 1 100%;
   }
 
   .accounting-page .accounting-toolbar .btn {
-    width: 100%;
+    flex: 1 1 auto;
+    min-width: min(100%, 140px);
     justify-content: center;
+  }
+
+  .accounting-page .chart-quick-add {
+    min-width: 44px;
+    min-height: 44px;
+    width: 44px;
+    height: 44px;
   }
 
   .accounting-page .accounting-stats {
@@ -2894,13 +2910,15 @@ input[type='number']::-webkit-inner-spin-button {
 }
 
 /* دسکتاپ: کارت‌های موبایل/تبلت مخفی */
-@media (min-width: 1441px) {
+@media (min-width: 1450px) {
   .sales-cards-mobile,
   .checks-cards-mobile,
   .dashboard-cards-mobile,
   .accounting-cards-mobile,
   .accounting-doc-cards-mobile,
+  .accounting-doc-list-cards-mobile,
   .accounting-drill-cards-mobile,
+  .accounting-transfer-cards-mobile,
   .customers-cards-mobile,
   .wallet-cards-mobile,
   .sms-cards-mobile,
@@ -3231,13 +3249,15 @@ input[type='number']::-webkit-inner-spin-button {
 }
 
 /* تبلت / دسکتاپ کوچک — کارت به‌جای جدول */
-@media (max-width: 1440px) {
+@media (max-width: 1449px) {
   .sales-page .sales-table-desktop,
   .checks-table-desktop,
   .dashboard-table-desktop,
   .accounting-table-desktop,
+  .accounting-doc-list-table-desktop,
   .accounting-doc-table-desktop,
   .accounting-drill-table-desktop,
+  .accounting-transfer-table-desktop,
   .customers-table-desktop,
   .wallet-table-desktop,
   .sms-table-desktop,
@@ -3250,7 +3270,9 @@ input[type='number']::-webkit-inner-spin-button {
   .dashboard-cards-mobile,
   .accounting-cards-mobile,
   .accounting-doc-cards-mobile,
+  .accounting-doc-list-cards-mobile,
   .accounting-drill-cards-mobile,
+  .accounting-transfer-cards-mobile,
   .customers-cards-mobile,
   .wallet-cards-mobile,
   .sms-cards-mobile,
@@ -3333,6 +3355,11 @@ input[type='number']::-webkit-inner-spin-button {
   flex-wrap: wrap;
   gap: 8px;
   align-items: center;
+}
+
+.accounting-toolbar .btn {
+  flex: 0 1 auto;
+  min-width: min(100%, 140px);
 }
 
 .accounting-stats {
@@ -3753,7 +3780,7 @@ input[type='number']::-webkit-inner-spin-button {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--primary) 2%, var(--surface));
   flex-shrink: 0;
@@ -3780,7 +3807,7 @@ input[type='number']::-webkit-inner-spin-button {
 
 .ld-card__title {
   margin: 0;
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 600;
   line-height: 1.35;
   overflow: hidden;
@@ -3790,7 +3817,7 @@ input[type='number']::-webkit-inner-spin-button {
 
 .ld-card__subtitle {
   margin: 3px 0 0;
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.4;
   color: var(--muted);
   overflow: hidden;
@@ -3805,8 +3832,8 @@ input[type='number']::-webkit-inner-spin-button {
 }
 
 .ld-card__btn {
-  width: 26px;
-  height: 26px;
+  width: 34px;
+  height: 34px;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--surface);
@@ -3833,7 +3860,7 @@ input[type='number']::-webkit-inner-spin-button {
 }
 
 .ld-card--resizable .ld-card__body {
-  min-height: 120px;
+  min-height: 200px;
 }
 
 .ld-card__loading,
@@ -3872,7 +3899,7 @@ input[type='number']::-webkit-inner-spin-button {
   gap: 8px;
   align-items: center;
   width: 100%;
-  padding: 8px 10px;
+  padding: 12px 14px;
   border: none;
   border-radius: 8px;
   background: transparent;
@@ -3894,21 +3921,21 @@ input[type='number']::-webkit-inner-spin-button {
 
 .ld-list__code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   color: color-mix(in srgb, var(--primary) 75%, var(--text));
   white-space: nowrap;
 }
 
 .ld-list__name {
-  font-size: 12px;
+  font-size: 13px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .ld-list__balance {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   white-space: nowrap;
 }
@@ -4164,6 +4191,7 @@ body.is-resizing[data-resize-dir='row'] {
     display: flex;
     flex-direction: column;
     width: 100%;
+    gap: 16px;
   }
 
   .ld-stage__divider,
@@ -4173,6 +4201,10 @@ body.is-resizing[data-resize-dir='row'] {
 
   .ld-card {
     width: 100%;
+  }
+
+  .accounting-page .ld-card--resizable .ld-card__body {
+    min-height: 160px;
   }
 }
 
@@ -4450,8 +4482,50 @@ body.is-resizing[data-resize-dir='row'] {
 /* Accounting responsive extras */
 .accounting-cards-mobile,
 .accounting-doc-cards-mobile,
-.accounting-drill-cards-mobile {
+.accounting-doc-list-cards-mobile,
+.accounting-drill-cards-mobile,
+.accounting-transfer-cards-mobile {
   display: none;
+}
+
+.accounting-doc-list-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.accounting-doc-list-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.accounting-doc-list-actions .btn {
+  flex: 1 1 auto;
+  min-width: min(100%, 120px);
+  justify-content: center;
+}
+
+.accounting-doc-list-pending {
+  align-self: center;
+}
+
+.accounting-transfer-line-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* لیست اسناد — همیشه جدول نمایش داده شود (بدون dead zone زیر 1450px) */
+.accounting-page .accounting-doc-list-table-desktop {
+  display: block !important;
+}
+
+.accounting-page .accounting-doc-list-cards-mobile {
+  display: none !important;
 }
 
 .accounting-amount-sections {
@@ -4517,7 +4591,7 @@ body.is-resizing[data-resize-dir='row'] {
   min-height: 44px;
 }
 
-@media (max-width: 1440px) {
+@media (max-width: 1449px) {
   .accounting-doc-header,
   .accounting-doc-header-hint {
     display: none;
@@ -4609,6 +4683,32 @@ body.is-resizing[data-resize-dir='row'] {
 
   .accounting-page .ld-layout--maximized .ld-card--maximized .accounting-ledger-wrap {
     max-height: min(60vh, 520px);
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1024px) {
+  .accounting-page .page-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1025px) {
+  .accounting-page .ld-list {
+    min-height: 280px;
+  }
+
+  .accounting-page .ld-card__title {
+    font-size: 16px;
+  }
+}
+
+@media (min-width: 1450px) {
+  .accounting-page .ld-workspace__content {
+    padding: 16px 20px;
+  }
+
+  .accounting-page .ld-list {
+    min-height: 360px;
   }
 }
 
