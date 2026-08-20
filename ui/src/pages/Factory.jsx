@@ -50,6 +50,7 @@ export default function Factory() {
         {
           key: 'receive',
           label: 'دریافت سفارش',
+          variant: 'success',
           permission: 'manage_factory_orders',
           when: (o) => o.workflow_stage === 'accounting_approved',
           run: (id) => factoryApi.receive(id),
@@ -57,6 +58,7 @@ export default function Factory() {
         {
           key: 'complete',
           label: 'پایان ساخت',
+          variant: 'success',
           permission: 'manage_factory_orders',
           when: (o) => o.workflow_stage === 'in_production',
           run: (id) => factoryApi.complete(id),

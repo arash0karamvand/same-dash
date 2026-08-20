@@ -139,8 +139,8 @@ export default function Attendance() {
                   <td>{r.seller_name}</td>
                   <td>{r.work_branch_label}</td>
                   <td>{formatDate(r.date)}</td>
-                  <td><Badge color={r.status === 'present' ? '#10b981' : '#ef4444'}>{r.status_display}</Badge></td>
-                  <td><Badge color={r.approval_status === 'approved' ? '#10b981' : '#f59e0b'}>{r.approval_status_display}</Badge></td>
+                  <td><Badge color={r.status === 'present' ? 'var(--success)' : 'var(--danger)'}>{r.status_display}</Badge></td>
+                  <td><Badge color={r.approval_status === 'approved' ? 'var(--success)' : 'var(--warning)'}>{r.approval_status_display}</Badge></td>
                   <td className="row-actions">
                     <button type="button" className="link danger" onClick={() => remove(r.id)}>حذف</button>
                   </td>

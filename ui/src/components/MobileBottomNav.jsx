@@ -1,6 +1,8 @@
 // نوار پایین موبایل — چهار پورتال
 
 import { canSeePortal } from '../utils/permissions'
+import Icon from './icons/Icon'
+import { iconForPortal } from '../config/iconMap'
 
 export default function MobileBottomNav({ user, portals, currentPortal, onNavigate, onOpenMenu }) {
   const items = (portals || []).filter((p) => canSeePortal(user, p)).slice(0, 4)
@@ -15,12 +17,16 @@ export default function MobileBottomNav({ user, portals, currentPortal, onNaviga
           aria-current={currentPortal === p.id ? 'page' : undefined}
           onClick={() => onNavigate(p.id)}
         >
-          <span className="mobile-nav-icon" aria-hidden>{p.icon}</span>
+          <span className="mobile-nav-icon" aria-hidden>
+            <Icon name={iconForPortal(p)} size={20} />
+          </span>
           <span className="mobile-nav-label">{p.label}</span>
         </button>
       ))}
       <button type="button" className="mobile-nav-item" onClick={onOpenMenu}>
-        <span className="mobile-nav-icon" aria-hidden>☰</span>
+        <span className="mobile-nav-icon" aria-hidden>
+          <Icon name="menu" size={20} />
+        </span>
         <span className="mobile-nav-label">منو</span>
       </button>
     </nav>

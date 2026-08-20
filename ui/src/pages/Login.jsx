@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { Button, Field } from '../components/ui'
+import BrandLogo from '../components/BrandLogo'
+import ThemeToggle from '../components/ThemeToggle'
 
 export default function Login() {
   const { login, refresh } = useAuth()
@@ -28,9 +30,10 @@ export default function Login() {
 
   return (
     <div className="auth-screen">
-      <div className="auth-card">
+      <ThemeToggle />
+      <div className="auth-card liquid-glass liquid-glass--strong liquid-glass--panel liquid-glass--jelly">
         <div className="auth-brand">
-          <span className="brand-logo">◆</span>
+          <BrandLogo size={88} />
           <h1>سامانه مدیریت مشتریان</h1>
           <p>مدیریت مشتریان، فروش، باشگاه و پیامک</p>
         </div>

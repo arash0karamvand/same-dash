@@ -1,6 +1,8 @@
 // زیرمنوی پورتال فعال — از همان درخت منوی Config (نه فقط portals.js ثابت)
 
 import { canSeeNavItem } from '../utils/permissions'
+import Icon from './icons/Icon'
+import { iconForNavItem } from '../config/iconMap'
 
 function findPortal(portals, portalId) {
   return (portals || []).find((p) => p.id === portalId)
@@ -22,7 +24,9 @@ export default function PortalNav({ user, portals, portalId, currentPage, onNavi
           className={`portal-subnav-item ${currentPage === item.key ? 'active' : ''}`}
           onClick={() => onNavigate(portalId, item.key)}
         >
-          <span className="portal-subnav-icon" aria-hidden>{item.icon}</span>
+          <span className="portal-subnav-icon" aria-hidden>
+            <Icon name={iconForNavItem(item)} size={16} />
+          </span>
           <span>{item.label}</span>
         </button>
       ))}

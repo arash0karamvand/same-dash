@@ -328,6 +328,7 @@ export default function Office() {
           {
             key: 'approve',
             label: 'تایید و ارسال به کارخانه',
+            variant: 'success',
             permission: 'approve_sale_accounting',
             when: (o) => o.status === 'pending_accounting',
             run: (_id, order) => openApprove(order),
@@ -588,7 +589,7 @@ export default function Office() {
               <Button type="button" variant="ghost" onClick={() => setApproveOrder(null)} disabled={approveLoading}>
                 انصراف
               </Button>
-              <Button type="submit" disabled={approveLoading}>
+              <Button type="submit" variant="success" disabled={approveLoading}>
                 {approveLoading ? 'در حال تایید…' : 'تایید و ارسال به کارخانه'}
               </Button>
             </div>

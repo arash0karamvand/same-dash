@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import { dashboardApi, attendanceApi } from '../api/client'
-import { Badge, Button, Card, EmptyState, StatCard } from '../components/ui'
+import { Badge, Button, Card, EmptyState, LinkAction, StatCard } from '../components/ui'
 import AttendanceWidget from '../components/AttendanceWidget'
 import { useAuth } from '../context/AuthContext'
+import { approvalColor } from '../config/statusColors'
 import { formatDate, formatMoney, formatNumber } from '../utils/format'
 import { hasPermission, isSystemAdmin } from '../utils/permissions'
 import { formatJalali, jalaliToIso } from '../utils/jalali'
@@ -12,12 +13,6 @@ import { formatJalali, jalaliToIso } from '../utils/jalali'
 function formatJalaliParts(jy, jm, jd) {
   if (!jy) return '—'
   return formatJalali(jalaliToIso(jy, jm, jd))
-}
-
-function approvalColor(status) {
-  if (status === 'approved') return '#10b981'
-  if (status === 'rejected') return '#ef4444'
-  return '#f59e0b'
 }
 
 export default function Dashboard() {
@@ -79,8 +74,8 @@ export default function Dashboard() {
                         <td className="row-actions">
                           {r.approval_status === 'pending' ? (
                             <>
-                              <button type="button" className="link" onClick={() => approve(r.id, 'approved')}>تایید</button>
-                              <button type="button" className="link danger" onClick={() => approve(r.id, 'rejected')}>رد</button>
+                              <LinkAction variant="success" onClick={() => approve(r.id, 'approved')}>تایید</LinkAction>
+                              <LinkAction variant="danger" onClick={() => approve(r.id, 'rejected')}>رد</LinkAction>
                             </>
                           ) : (
                             <span className="muted">—</span>
@@ -106,8 +101,8 @@ export default function Dashboard() {
                     </div>
                     {r.approval_status === 'pending' && (
                       <div className="m-card-actions">
-                        <button type="button" className="link" onClick={() => approve(r.id, 'approved')}>تایید</button>
-                        <button type="button" className="link danger" onClick={() => approve(r.id, 'rejected')}>رد</button>
+                        <LinkAction variant="success" onClick={() => approve(r.id, 'approved')}>تایید</LinkAction>
+                        <LinkAction variant="danger" onClick={() => approve(r.id, 'rejected')}>رد</LinkAction>
                       </div>
                     )}
                   </div>
@@ -119,23 +114,23 @@ export default function Dashboard() {
       )}
 
       <div className="stat-grid">
-        <StatCard label="تعداد مشتریان" value={formatNumber(stats.customers_count)} accent="#6366f1" />
+        <StatCard label="تعداد مشتریان" value={formatNumber(stats.customers_count)} accent="var(--accent)" />
         <StatCard
           label="فروش امروز"
-          value={formatNumber(stats.sales_today?.count ?? 0)}
+          value={formatMoney(stats.sales_today?.total ?? 0)}
           hint={
             stats.sales_today
-              ? formatJalaliParts(
+              ? `${formatNumber(stats.sales_today.count ?? 0)} فقره — ${formatJalaliParts(
                   stats.sales_today.jalali_year,
                   stats.sales_today.jalali_month,
                   stats.sales_today.jalali_day,
-                )
+                )}`
               : undefined
           }
-          accent="#10b981"
+          accent="var(--success)"
         />
-        <StatCard label="مجموع فروش" value={formatMoney(stats.total_sales_amount)} accent="#f59e0b" />
-        <StatCard label="پیامک‌های ارسالی" value={formatNumber(stats.sms_sent)} accent="#ec4899" />
+        <StatCard label="مجموع فروش" value={formatMoney(stats.total_sales_amount)} accent="var(--warning)" />
+        <StatCard label="پیامک‌های ارسالی" value={formatNumber(stats.sms_sent)} accent="var(--info)" />
       </div>
 
       <div className="grid-2">
@@ -229,8 +224,8 @@ export default function Dashboard() {
                       <td>{r.work_branch_label}</td>
                       <td>{formatDate(r.date)}</td>
                       <td className="row-actions">
-                        <button type="button" className="link" onClick={() => approve(r.id, 'approved')}>تایید</button>
-                        <button type="button" className="link danger" onClick={() => approve(r.id, 'rejected')}>رد</button>
+                        <LinkAction variant="success" onClick={() => approve(r.id, 'approved')}>تایید</LinkAction>
+                        <LinkAction variant="danger" onClick={() => approve(r.id, 'rejected')}>رد</LinkAction>
                       </td>
                     </tr>
                   ))}
@@ -246,8 +241,8 @@ export default function Dashboard() {
                   </div>
                   <div className="muted small">{formatDate(r.date)}</div>
                   <div className="m-card-actions">
-                    <button type="button" className="link" onClick={() => approve(r.id, 'approved')}>تایید</button>
-                    <button type="button" className="link danger" onClick={() => approve(r.id, 'rejected')}>رد</button>
+                    <LinkAction variant="success" onClick={() => approve(r.id, 'approved')}>تایید</LinkAction>
+                    <LinkAction variant="danger" onClick={() => approve(r.id, 'rejected')}>رد</LinkAction>
                   </div>
                 </div>
               ))}

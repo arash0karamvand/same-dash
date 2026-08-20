@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { configApi } from '../api/client'
 import { buildPortalsFromModuleTree } from '../config/portalCatalog'
+import { DEFAULT_LOGO_URL, getLogoUrl, setLogoUrl } from '../utils/branding'
 import { useAuth } from './AuthContext'
 
 const ConfigContext = createContext(null)
@@ -13,12 +14,20 @@ const EMPTY_CONFIG = {
   nav_items: [],
   permission_catalog: { permissions: [], permission_groups: [], module_tree: [] },
   page_guides: {},
+  branding: { logo_url: DEFAULT_LOGO_URL, logo_is_custom: false },
 }
 
 export function ConfigProvider({ children }) {
   const { user } = useAuth()
   const [config, setConfig] = useState(EMPTY_CONFIG)
   const [loading, setLoading] = useState(true)
+  // مقدار اولیه از کش می‌آید تا صفحه ورود هم لوگوی سفارشی را نشان دهد.
+  const [logoUrl, setLogo] = useState(getLogoUrl)
+
+  const applyBranding = useCallback((branding) => {
+    const url = branding?.logo_url || DEFAULT_LOGO_URL
+    setLogo(setLogoUrl(url))
+  }, [])
 
   const refresh = useCallback(async () => {
     if (!user || user.role === 'pending') {
@@ -30,12 +39,13 @@ export function ConfigProvider({ children }) {
     try {
       const data = await configApi.get()
       setConfig(data)
+      applyBranding(data.branding)
     } catch {
       setConfig(EMPTY_CONFIG)
     } finally {
       setLoading(false)
     }
-  }, [user])
+  }, [user, applyBranding])
 
   useEffect(() => { refresh() }, [refresh])
 
@@ -83,6 +93,9 @@ export function ConfigProvider({ children }) {
     permissionCatalog: config.permission_catalog || EMPTY_CONFIG.permission_catalog,
     moduleTree,
     portals,
+    branding: config.branding || EMPTY_CONFIG.branding,
+    logoUrl,
+    applyBranding,
   }
 
   return <ConfigContext.Provider value={value}>{children}</ConfigContext.Provider>

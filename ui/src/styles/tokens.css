@@ -1,0 +1,226 @@
+/* Theme tokens — jelly capsule (monochromatic black/gray) */
+
+/* ---------------------------------------------------------------- Dark — near-black base with gray capsules */
+:root,
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --bg: #07070A;
+  --bg-mesh-1: rgba(255, 255, 255, 0.035);
+  --bg-mesh-2: rgba(160, 160, 170, 0.03);
+  --bg-mesh-3: rgba(255, 255, 255, 0.02);
+  --bg-mesh-4: rgba(113, 113, 122, 0.025);
+
+  /* Depth ladder — each step visibly lighter so nested capsules never blend */
+  --layer-0: #101014;
+  --layer-1: #17171C;
+  --layer-2: #202027;
+  --layer-3: #2A2A32;
+  --layer-4: #34343D;
+
+  --surface: var(--layer-1);
+  --surface-2: var(--layer-0);
+  --surface-elevated: var(--layer-3);
+  --card-bg: var(--layer-1);
+  --card: var(--layer-1);
+
+  --border: rgba(255, 255, 255, 0.09);
+  --border-subtle: rgba(255, 255, 255, 0.055);
+
+  --text: #F4F4F5;
+  --text-secondary: #C9C9D1;
+  --muted: #85858F;
+
+  --accent: #A1A1AA;
+  --accent-dark: #71717A;
+  --accent-soft: rgba(255, 255, 255, 0.07);
+  --accent-glow: rgba(255, 255, 255, 0.12);
+
+  --primary: #3F3F46;
+  --primary-dark: #27272A;
+
+  --success: #B4B4BC;
+  --success-soft: rgba(255, 255, 255, 0.06);
+  --warning: #8E8E99;
+  --warning-soft: rgba(161, 161, 170, 0.09);
+  --danger: #6B6B75;
+  --danger-soft: rgba(107, 107, 117, 0.16);
+  --info: #D4D4D8;
+  --info-soft: rgba(212, 212, 216, 0.07);
+
+  --sidebar-bg: #0D0D11;
+  --sidebar-text: #E4E4E7;
+  --sidebar-muted: #85858F;
+  --sidebar-border: rgba(255, 255, 255, 0.07);
+  --sidebar-active-bar: var(--accent);
+
+  /* Jelly capsule material — visible at rest, not only on hover */
+  --jelly-gloss-top: rgba(255, 255, 255, 0.14);
+  --jelly-gloss-mid: rgba(255, 255, 255, 0.04);
+  --jelly-shade-bottom: rgba(0, 0, 0, 0.42);
+  --jelly-rim: rgba(255, 255, 255, 0.1);
+  --jelly-rim-strong: rgba(255, 255, 255, 0.2);
+  --jelly-drop: 0 10px 30px rgba(0, 0, 0, 0.5);
+  --jelly-drop-soft: 0 4px 14px rgba(0, 0, 0, 0.4);
+  --jelly-bg-hover: var(--layer-2);
+  --jelly-bg-active: var(--layer-0);
+
+  /* Glass aliases kept for existing selectors */
+  --glass-blur: 18px;
+  --glass-saturate: 115%;
+  --glass-bg: var(--layer-1);
+  --glass-bg-strong: var(--layer-2);
+  --glass-border: var(--jelly-rim);
+  --glass-highlight: inset 0 1px 0 var(--jelly-gloss-top);
+  --glass-shadow:
+    inset 0 1px 0 var(--jelly-gloss-top),
+    var(--jelly-drop-soft);
+  --glass-depth:
+    inset 0 1px 0 var(--jelly-gloss-top),
+    var(--jelly-drop);
+  --glass-hover-glow: var(--jelly-drop);
+  --jelly-border-hover: var(--jelly-rim-strong);
+  --jelly-outer-glow: var(--jelly-drop);
+  --jelly-inset-top: var(--jelly-gloss-top);
+  --jelly-inset-bottom: var(--jelly-shade-bottom);
+  --jelly-ring: var(--jelly-rim-strong);
+
+  --shadow-ambient: var(--jelly-drop-soft);
+  --shadow-inset: inset 0 1px 0 var(--jelly-gloss-top);
+  --shadow: var(--shadow-ambient);
+
+  --grain-opacity: 0.03;
+  --grain-blend: soft-light;
+}
+
+/* ---------------------------------------------------------------- Light — white/gray frost capsules */
+[data-theme='light'] {
+  color-scheme: light;
+
+  --bg: #E8E8EC;
+  --bg-mesh-1: rgba(0, 0, 0, 0.025);
+  --bg-mesh-2: rgba(113, 113, 122, 0.035);
+  --bg-mesh-3: rgba(255, 255, 255, 0.5);
+  --bg-mesh-4: rgba(161, 161, 170, 0.03);
+
+  --layer-0: #DEDEE3;
+  --layer-1: #F7F7F9;
+  --layer-2: #FDFDFE;
+  --layer-3: #FFFFFF;
+  --layer-4: #C9C9D1;
+
+  --surface: var(--layer-1);
+  --surface-2: var(--layer-0);
+  --surface-elevated: var(--layer-3);
+  --card-bg: var(--layer-1);
+  --card: var(--layer-1);
+
+  --border: rgba(0, 0, 0, 0.1);
+  --border-subtle: rgba(0, 0, 0, 0.06);
+
+  --text: #18181B;
+  --text-secondary: #3F3F46;
+  --muted: #6B6B75;
+
+  --accent: #52525B;
+  --accent-dark: #3F3F46;
+  --accent-soft: rgba(0, 0, 0, 0.045);
+  --accent-glow: rgba(0, 0, 0, 0.08);
+
+  --primary: #3F3F46;
+  --primary-dark: #27272A;
+
+  --success: #52525B;
+  --success-soft: rgba(0, 0, 0, 0.045);
+  --warning: #6B6B75;
+  --warning-soft: rgba(113, 113, 122, 0.09);
+  --danger: #3F3F46;
+  --danger-soft: rgba(63, 63, 70, 0.09);
+  --info: #6B6B75;
+  --info-soft: rgba(113, 113, 122, 0.07);
+
+  --sidebar-bg: #FAFAFB;
+  --sidebar-text: #18181B;
+  --sidebar-muted: #6B6B75;
+  --sidebar-border: rgba(0, 0, 0, 0.07);
+  --sidebar-active-bar: var(--accent);
+
+  --jelly-gloss-top: rgba(255, 255, 255, 0.95);
+  --jelly-gloss-mid: rgba(255, 255, 255, 0.4);
+  --jelly-shade-bottom: rgba(0, 0, 0, 0.07);
+  --jelly-rim: rgba(0, 0, 0, 0.09);
+  --jelly-rim-strong: rgba(0, 0, 0, 0.16);
+  --jelly-drop: 0 8px 24px rgba(0, 0, 0, 0.1);
+  --jelly-drop-soft: 0 3px 10px rgba(0, 0, 0, 0.07);
+  --jelly-bg-hover: var(--layer-2);
+  --jelly-bg-active: var(--layer-0);
+
+  --glass-blur: 16px;
+  --glass-saturate: 110%;
+  --glass-bg: var(--layer-1);
+  --glass-bg-strong: var(--layer-2);
+  --glass-border: var(--jelly-rim);
+  --glass-highlight: inset 0 1px 0 var(--jelly-gloss-top);
+  --glass-shadow:
+    inset 0 1px 0 var(--jelly-gloss-top),
+    var(--jelly-drop-soft);
+  --glass-depth:
+    inset 0 1px 0 var(--jelly-gloss-top),
+    var(--jelly-drop);
+  --glass-hover-glow: var(--jelly-drop);
+  --jelly-border-hover: var(--jelly-rim-strong);
+  --jelly-outer-glow: var(--jelly-drop);
+  --jelly-inset-top: var(--jelly-gloss-top);
+  --jelly-inset-bottom: var(--jelly-shade-bottom);
+  --jelly-ring: var(--jelly-rim-strong);
+
+  --shadow-ambient: var(--jelly-drop-soft);
+  --shadow-inset: inset 0 1px 0 var(--jelly-gloss-top);
+  --shadow: var(--shadow-ambient);
+
+  --grain-opacity: 0.02;
+  --grain-blend: multiply;
+}
+
+/* ---------------------------------------------------------------- Reduced transparency */
+[data-reduced-transparency='true'] {
+  --glass-blur: 0px;
+}
+
+/* Shared tokens */
+:root {
+  --text-muted: var(--muted);
+  --surface-muted: var(--layer-0);
+
+  --radius-capsule: 999px;
+  --radius-pill: 26px;
+  --radius-lg: 30px;
+  --radius-md: 20px;
+  --radius-sm: 14px;
+  --radius: var(--radius-md);
+
+  --font-display: 'Estedad', 'Vazirmatn', sans-serif;
+  --font-body: 'Vazirmatn', 'Segoe UI', Tahoma, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'Vazirmatn', ui-monospace, monospace;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.9375rem;
+  --text-lg: 1.0625rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.75rem;
+  --text-3xl: 2rem;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.65;
+  --leading-relaxed: 1.75;
+
+  --tracking-tight: -0.02em;
+  --tracking-normal: 0.01em;
+  --tracking-wide: 0.06em;
+
+  --content-max: 1280px;
+  --sidebar-width: 248px;
+  --content-pad-start: 48px;
+  --content-pad-end: 28px;
+}

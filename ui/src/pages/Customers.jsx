@@ -447,7 +447,7 @@ export default function Customers({ portal }) {
                   {walletData.transactions.map((tx) => (
                     <div key={tx.id} className="wallet-tx-card">
                       <div className="wallet-tx-card-head">
-                        <Badge color={tx.amount >= 0 ? '#10b981' : '#ef4444'}>
+                        <Badge color={tx.amount >= 0 ? 'var(--success)' : 'var(--danger)'}>
                           {tx.transaction_type_display}
                         </Badge>
                         <span className={tx.amount >= 0 ? 'wallet-plus' : 'wallet-minus'}>
@@ -493,7 +493,7 @@ export default function Customers({ portal }) {
                       </div>
                       <div className="purchase-history-sale-totals">
                         <span>{formatMoney(s.final_amount)}</span>
-                        <Badge color={s.payment_status === 'paid' ? '#10b981' : '#f59e0b'}>
+                        <Badge color={s.payment_status === 'paid' ? 'var(--success)' : 'var(--warning)'}>
                           {s.payment_status_display}
                         </Badge>
                       </div>

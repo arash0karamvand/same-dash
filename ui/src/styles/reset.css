@@ -1,0 +1,120 @@
+/* Base reset + animated mesh background + grain */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+body {
+  direction: rtl;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  letter-spacing: var(--tracking-normal);
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: var(--accent-glow);
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+@keyframes mesh-drift {
+  0%, 100% {
+    transform: translate(0, 0) scale(1);
+  }
+  33% {
+    transform: translate(2%, -1.5%) scale(1.02);
+  }
+  66% {
+    transform: translate(-1.5%, 2%) scale(0.98);
+  }
+}
+
+/* Ambient mesh gradient */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(ellipse 80% 60% at 85% 8%, var(--bg-mesh-1) 0%, transparent 60%),
+    radial-gradient(ellipse 70% 55% at 8% 88%, var(--bg-mesh-2) 0%, transparent 58%),
+    radial-gradient(ellipse 60% 45% at 50% 50%, var(--bg-mesh-3) 0%, transparent 55%),
+    radial-gradient(ellipse 50% 40% at 28% 18%, var(--bg-mesh-4) 0%, transparent 58%);
+  animation: mesh-drift 40s ease-in-out infinite;
+}
+
+[data-reduced-motion='true'] body::before {
+  animation: none;
+}
+
+#root {
+  position: relative;
+  z-index: 1;
+}
+
+/* Subtle film grain */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: var(--grain-opacity);
+  mix-blend-mode: var(--grain-blend);
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 180px 180px;
+}
+
+button,
+[role='button'],
+a {
+  touch-action: manipulation;
+}
+
+body.nav-open {
+  overflow: hidden;
+  position: fixed;
+  width: 100%;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--accent-dark);
+}
+
+code {
+  background: var(--layer-0);
+  border: 1px solid var(--jelly-rim);
+  border-radius: var(--radius-capsule);
+  padding: 1px 8px;
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  direction: ltr;
+  display: inline-block;
+}
+
+.fullscreen-loading,
+.loading {
+  padding: 40px;
+  text-align: center;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}

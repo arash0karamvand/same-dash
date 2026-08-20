@@ -13,7 +13,7 @@ import { PAGE_GUIDE_DEFAULTS } from '../config/pageGuideDefaults'
 import { useRegisterPageGuide } from '../context/PageGuideContext'
 
 const COLOR_PRESETS = [
-  { name: 'قرمز', hex: '#ef4444' },
+  { name: 'قرمز', hex: 'var(--danger)' },
   { name: 'نارنجی', hex: '#f97316' },
   { name: 'زرد', hex: '#eab308' },
   { name: 'سبز', hex: '#22c55e' },
@@ -25,7 +25,7 @@ const COLOR_PRESETS = [
   { name: 'آبی آسمانی', hex: '#0284c7' },
 ]
 
-const EMPTY_CATEGORY = { name: '', description: '', color: '#6366f1', icon: '📦', sort_order: 0, is_active: true }
+const EMPTY_CATEGORY = { name: '', description: '', color: 'var(--accent)', icon: 'package', sort_order: 0, is_active: true }
 const EMPTY_VARIANT = { color_name: '', color_hex: '#cccccc', sku: '', stock: '', is_active: true }
 const EMPTY_PRODUCT_MATERIAL = { id: null, material_id: '', quantity: '1' }
 const EMPTY_PRODUCT = {
@@ -197,7 +197,7 @@ export default function Products() {
     setCategoryForm({
       name: c.name,
       description: c.description || '',
-      color: c.color || '#6366f1',
+      color: c.color || 'var(--accent)',
       icon: c.icon || '📦',
       sort_order: c.sort_order || 0,
       is_active: c.is_active !== false,

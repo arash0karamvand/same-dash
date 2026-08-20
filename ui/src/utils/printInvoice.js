@@ -1,3 +1,4 @@
+import { getLogoUrl } from './branding'
 import { formatDate, formatMoney, formatNumber } from './format'
 import { todayIso } from './jalali'
 
@@ -85,6 +86,9 @@ export function buildInvoiceHtml(sale) {
   const soldLabel = sale.sold_at ? formatDate(sale.sold_at) : todayLabel
   const deliveryLabel = sale.delivery_date ? formatDate(sale.delivery_date) : '—'
   const totalQty = displayLineItems(sale).reduce((sum, item) => sum + Number(item.quantity || 0), 0)
+  const isDark =
+    typeof document === 'undefined' ||
+    (document.documentElement.getAttribute('data-theme') || 'dark') === 'dark'
 
   return `<!DOCTYPE html>
 <html lang="fa" dir="rtl">
@@ -102,7 +106,7 @@ export function buildInvoiceHtml(sale) {
     body {
       font-family: Tahoma, 'Segoe UI', Arial, sans-serif;
       padding: 20px 24px 32px;
-      color: #0f172a;
+      color: #1C1917;
       line-height: 1.65;
       font-size: 14px;
     }
@@ -111,13 +115,13 @@ export function buildInvoiceHtml(sale) {
       justify-content: space-between;
       align-items: flex-start;
       gap: 16px;
-      border-bottom: 2px solid #6366f1;
+      border-bottom: 2px solid #B85C38;
       padding-bottom: 14px;
       margin-bottom: 18px;
     }
-    .brand { font-size: 24px; font-weight: 700; color: #6366f1; margin-bottom: 4px; }
+    .brand { font-size: 24px; font-weight: 700; color: #B85C38; margin-bottom: 4px; }
     .brand-logo-img { max-height: 70px; max-width: 220px; object-fit: contain; margin-bottom: 6px; display: block; }
-    .meta { text-align: left; font-size: 13px; color: #475569; line-height: 1.8; }
+    .meta { text-align: left; font-size: 13px; color: #6B6560; line-height: 1.8; }
     .grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -125,10 +129,10 @@ export function buildInvoiceHtml(sale) {
       margin-bottom: 18px;
     }
     .box {
-      border: 1px solid #e2e8f0;
+      border: 1px solid #D4CEC4;
       border-radius: 10px;
       padding: 12px 14px;
-      background: #f8fafc;
+      background: #F7F4EF;
     }
     .box h4 { margin: 0 0 8px; font-size: 12px; color: #64748b; font-weight: 600; }
     .info-row { margin-bottom: 4px; }
@@ -153,7 +157,7 @@ export function buildInvoiceHtml(sale) {
       max-width: 380px;
       margin-right: 0;
       margin-left: auto;
-      border: 1px solid #e2e8f0;
+      border: 1px solid #D4CEC4;
       border-radius: 10px;
       overflow: hidden;
     }
@@ -168,14 +172,14 @@ export function buildInvoiceHtml(sale) {
     .totals .final {
       font-weight: 700;
       font-size: 15px;
-      background: #f8fafc;
+      background: #F7F4EF;
     }
     .muted { color: #64748b; }
     h3 { font-size: 15px; margin: 18px 0 8px; }
     .footer {
       margin-top: 28px;
       padding-top: 12px;
-      border-top: 1px solid #e2e8f0;
+      border-top: 1px solid #D4CEC4;
       font-size: 12px;
       color: #64748b;
       text-align: center;
@@ -183,11 +187,25 @@ export function buildInvoiceHtml(sale) {
     .notes {
       margin-top: 16px;
       padding: 12px 14px;
-      background: #f8fafc;
+      background: #F7F4EF;
       border-radius: 8px;
-      border: 1px solid #e2e8f0;
+      border: 1px solid #D4CEC4;
     }
+    ${isDark ? `@media screen {
+      html, body { background: #101014; }
+      body { color: #F4F4F5; }
+      .header { border-bottom-color: rgba(255, 255, 255, 0.14); }
+      .brand { color: #F4F4F5; }
+      .meta, .muted, .footer, .box h4, .info-row .label { color: #85858F; }
+      .box, .notes, .totals .final { background: #17171C; border-color: rgba(255, 255, 255, 0.1); }
+      .totals { border-color: rgba(255, 255, 255, 0.1); }
+      .totals div { border-bottom-color: rgba(255, 255, 255, 0.07); }
+      th, td { border-color: rgba(255, 255, 255, 0.1); }
+      th { background: #202027; }
+      .footer { border-top-color: rgba(255, 255, 255, 0.1); }
+    }` : ''}
     @media print {
+      html, body { background: #fff; color: #1C1917; }
       body { padding: 8mm; }
       .no-print { display: none !important; }
     }
@@ -201,7 +219,7 @@ export function buildInvoiceHtml(sale) {
 <body>
   <div class="header">
     <div>
-      <img class="brand-logo-img" src="/company_logo.png" alt="سام اکسون" onerror="this.style.display='none';this.nextElementSibling.style.display='block'" />
+      <img class="brand-logo-img" src="${escapeHtml(getLogoUrl())}" alt="سام اکسون" onerror="this.style.display='none';this.nextElementSibling.style.display='block'" />
       <div class="brand" style="display:none">سام اکسون</div>
       <div class="muted">فاکتور فروش — شماره: <strong>${escapeHtml(invoiceNo)}</strong></div>
     </div>

@@ -1,0 +1,118 @@
+/* Accounting module — jelly capsule panels */
+
+.acct-tabs,
+.accounting-tabs {
+  border-bottom-color: var(--border-subtle);
+}
+
+.acct-tab,
+.accounting-tab,
+.ld-drill-tabs button {
+  border-radius: var(--radius-capsule);
+}
+
+.acct-tab.active,
+.accounting-tab.active,
+.ld-drill-tabs button.active {
+  color: var(--text);
+  border-bottom-color: var(--jelly-rim-strong);
+  background: var(--layer-2);
+}
+
+.ld-panel,
+.ld-side-panel,
+.ld-panel-wrap,
+.ld-workspace__bar,
+.ld-stage,
+.ld-rail,
+.trial-balance-filter,
+.acct-filter-panel,
+.accounting-section-filter {
+  background: var(--layer-1) !important;
+  border: 1px solid var(--jelly-rim) !important;
+  border-radius: var(--radius-pill) !important;
+  box-shadow:
+    inset 0 1px 0 var(--jelly-gloss-top),
+    inset 0 -14px 26px -14px var(--jelly-shade-bottom),
+    var(--jelly-drop-soft);
+}
+
+.ld-panel-head {
+  border-bottom-color: var(--border-subtle);
+  font-family: var(--font-display);
+}
+
+.ld-row,
+.ld-account-row {
+  border-radius: var(--radius-capsule);
+}
+
+.ld-row:hover,
+.ld-account-row:hover {
+  background: var(--layer-2) !important;
+}
+
+.ld-row.selected,
+.ld-account-row.selected {
+  background: var(--layer-3) !important;
+  border-color: var(--jelly-rim-strong) !important;
+}
+
+.acct-doc-status--posted,
+.acct-doc-status--draft {
+  color: var(--text-secondary);
+}
+
+.acct-amount-debit {
+  color: var(--text);
+}
+
+.acct-amount-credit {
+  color: var(--text-secondary);
+}
+
+.ld-card {
+  background: var(--layer-2) !important;
+  border: 1px solid var(--jelly-rim) !important;
+  border-radius: var(--radius-pill) !important;
+  overflow: hidden;
+  box-shadow:
+    inset 0 1px 0 var(--jelly-gloss-top),
+    inset 0 -14px 26px -14px var(--jelly-shade-bottom),
+    var(--jelly-drop-soft);
+  transition: background 0.3s ease, box-shadow 0.3s ease, border-color 0.25s;
+}
+
+.ld-card:hover {
+  background: var(--layer-3) !important;
+  border-color: var(--jelly-rim-strong) !important;
+  box-shadow:
+    inset 0 1px 0 var(--jelly-gloss-top),
+    inset 0 -16px 30px -16px var(--jelly-shade-bottom),
+    var(--jelly-drop) !important;
+}
+
+.ld-card--focusable .ld-card__head:hover {
+  background: var(--layer-3) !important;
+}
+
+.ld-card--selected {
+  border-color: var(--jelly-rim-strong) !important;
+  box-shadow:
+    inset 0 1px 0 var(--jelly-gloss-top),
+    0 0 0 1px var(--jelly-rim-strong) !important;
+}
+
+.ld-card--selected .ld-card__head {
+  background: var(--layer-3) !important;
+}
+
+.ld-card__head {
+  background: var(--layer-1) !important;
+  border-bottom-color: var(--border-subtle);
+}
+
+.ld-card--general { border-top: 3px solid var(--layer-4) !important; }
+.ld-card--subsidiary { border-top: 3px solid var(--layer-3) !important; }
+.ld-card--detailed { border-top: 3px solid var(--layer-2) !important; }
+.ld-card--ledger { border-top: 3px solid var(--layer-0) !important; }

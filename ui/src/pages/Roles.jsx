@@ -5,9 +5,8 @@ import { authApi } from '../api/client'
 import { useConfirm } from '../context/ConfirmContext'
 import { Badge, Button, Card, EmptyState, Field, Modal } from '../components/ui'
 import Select from '../components/Select'
+import PortalModuleMatrix from '../components/PortalModuleMatrix'
 import {
-  moduleSelectionState,
-  portalSelectionState,
   sectionHasMenuAccess,
   toggleModulePermissions,
   togglePortalPermissions,
@@ -29,7 +28,7 @@ const EMPTY_ROLE = {
   slug: '',
   description: '',
   needs_branch: false,
-  color: '#6366f1',
+  color: 'var(--accent)',
   permissions: [],
   parent_slug: '',
   sort_order: 50,
@@ -94,85 +93,6 @@ function RoleTreeCard({ role, depth, onEdit, onRemove, parentLabel }) {
   )
 }
 
-function PortalModuleMatrix({
-  portals,
-  permissions,
-  isAdminRole,
-  onTogglePortal,
-  onToggleModule,
-}) {
-  const [expanded, setExpanded] = useState(() => new Set(['office']))
-
-  const toggleExpand = (portalId) => {
-    setExpanded((prev) => {
-      const next = new Set(prev)
-      if (next.has(portalId)) next.delete(portalId)
-      else next.add(portalId)
-      return next
-    })
-  }
-
-  if (!portals?.length) {
-    return <p className="muted small">ماژولی تعریف نشده.</p>
-  }
-
-  return (
-    <div className="portal-module-matrix">
-      {portals.map((portal) => {
-        const portalState = portalSelectionState(permissions, portal)
-        const isOpen = expanded.has(portal.id)
-        return (
-          <div key={portal.id} className="portal-module-block">
-            <div className="portal-module-head">
-              <label className="portal-module-portal-label">
-                <input
-                  type="checkbox"
-                  checked={isAdminRole || portalState === 'all'}
-                  ref={(el) => {
-                    if (el) el.indeterminate = !isAdminRole && portalState === 'partial'
-                  }}
-                  disabled={isAdminRole}
-                  onChange={() => onTogglePortal(portal, portalState !== 'all')}
-                />
-                <span>{portal.icon} {portal.label}</span>
-              </label>
-              <button
-                type="button"
-                className="link small portal-module-expand"
-                onClick={() => toggleExpand(portal.id)}
-                aria-expanded={isOpen}
-              >
-                {isOpen ? 'بستن زیربخش‌ها' : 'نمایش زیربخش‌ها'}
-              </button>
-            </div>
-            {isOpen && (
-              <div className="portal-module-children menu-section-grid">
-                {(portal.modules || []).map((mod) => {
-                  const modState = moduleSelectionState(permissions, mod)
-                  return (
-                    <label key={mod.id} className="menu-section-item">
-                      <input
-                        type="checkbox"
-                        checked={isAdminRole || modState === 'all'}
-                        ref={(el) => {
-                          if (el) el.indeterminate = !isAdminRole && modState === 'partial'
-                        }}
-                        disabled={isAdminRole}
-                        onChange={() => onToggleModule(mod, modState !== 'all')}
-                      />
-                      <span>{mod.icon} {mod.label}</span>
-                    </label>
-                  )
-                })}
-              </div>
-            )}
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
 export default function Roles() {
   const confirm = useConfirm()
   const [matrix, setMatrix] = useState({ permissions: [], roles: [] })
@@ -215,7 +135,7 @@ export default function Roles() {
       slug: role.slug,
       description: role.description || '',
       needs_branch: role.needs_branch,
-      color: role.color || '#6366f1',
+      color: role.color || 'var(--accent)',
       permissions: [...(role.permissions || [])],
       parent_slug: role.parent_slug || '',
       sort_order: role.sort_order ?? 50,

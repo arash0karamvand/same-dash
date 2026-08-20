@@ -13,7 +13,7 @@ const EMPTY_FORM = {
   min_purchase: 0,
   max_purchase: '',
   points: 0,
-  color: '#6366f1',
+  color: 'var(--accent)',
   description: '',
 }
 

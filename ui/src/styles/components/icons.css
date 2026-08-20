@@ -1,0 +1,12 @@
+.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+.icon--missing {
+  background: var(--surface-2);
+  border-radius: 4px;
+}

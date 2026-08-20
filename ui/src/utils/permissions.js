@@ -76,7 +76,6 @@ export function getVisiblePortalChildren(user, portal) {
 
 export function canSeePortal(user, portal) {
   if (!portal) return false
-  if (portal.executiveOnly) return isExecutiveUser(user)
   if (isExecutiveUser(user)) return true
   return getVisiblePortalChildren(user, portal).length > 0
 }
@@ -87,7 +86,12 @@ export function getVisiblePortals(user, portals) {
 
 export function canAccessRoute(user, portal, page, portals) {
   if (!portal) {
-    return isExecutiveUser(user) && (page === 'dashboard' || !page)
+    const first = getFirstAccessibleRoute(user, portals)
+    if (!first) return false
+    if (!page || page === 'dashboard') {
+      return canAccessRoute(user, first.portal, first.page, portals)
+    }
+    return false
   }
   const p = findPortal(portals, portal)
   if (!p || !canSeePortal(user, p)) return false
@@ -104,7 +108,18 @@ export function getFirstAccessibleRoute(user, portals) {
       return { portal: portal.id, page: children[0].key }
     }
   }
-  return { portal: 'managers', page: 'dashboard' }
+  return null
+}
+
+export function getFirstAccessiblePageForPortal(user, portal) {
+  if (!portal) return null
+  const children = getVisiblePortalChildren(user, portal)
+  if (!children.length) return null
+  const defaultPage = portal.defaultPage
+  if (defaultPage && children.some((c) => c.key === defaultPage)) {
+    return defaultPage
+  }
+  return children[0].key
 }
 
 /** سازگاری با کد قدیمی */
@@ -122,19 +137,27 @@ export function canAccessPage(user, pageKey, portals) {
 
 export function getFirstAccessiblePage(user, portals) {
   const route = getFirstAccessibleRoute(user, portals)
-  return route.page
+  return route?.page ?? null
 }
 
 export function sectionHasMenuAccess(userOrPerms, section) {
   if (!section) return false
   const user = userOrPerms?.permissions ? userOrPerms : { permissions: userOrPerms?.permissions || userOrPerms }
-  if (section.executive_only || section.executiveOnly) return isExecutiveUser(user)
+  if (section.modules?.length) {
+    const perms = user.permissions || []
+    return section.modules.some((mod) => moduleHasAccess(perms, mod))
+  }
   if (section.system_admin || section.systemAdmin) return isSystemAdmin(user)
   const codes = section.menu_permission_codes || section.menu_permissions?.map((p) => p.code) || []
   if (user.permissions) {
-    return codes.some((c) => user.permissions.includes(c)) || (user.grants_full_access && codes.length > 0)
+    const hasCodes = codes.some((c) => user.permissions.includes(c))
+      || (user.grants_full_access && codes.length > 0)
+    if (hasCodes) return true
+  } else if (hasAnyPermission(user, codes)) {
+    return true
   }
-  return hasAnyPermission(user, codes)
+  if (section.executive_only || section.executiveOnly) return isExecutiveUser(user)
+  return false
 }
 
 export function collectModulePermissionCodes(module) {
@@ -215,4 +238,49 @@ export function togglePortalPermissions(currentPermissions, portal, enable) {
   }
   const remove = new Set(codes)
   return currentPermissions.filter((code) => !remove.has(code))
+}
+
+export function combinePermissionLists(...lists) {
+  return [...new Set(lists.flat().filter(Boolean))]
+}
+
+export function moduleAccessFromRole(basePermissions, module) {
+  return moduleSelectionState(basePermissions, module)
+}
+
+export function moduleAccessEffective(basePermissions, extraPermissions, module) {
+  return moduleSelectionState(
+    combinePermissionLists(basePermissions, extraPermissions),
+    module,
+  )
+}
+
+export function portalAccessFromRole(basePermissions, portal) {
+  return portalSelectionState(basePermissions, portal)
+}
+
+export function portalAccessEffective(basePermissions, extraPermissions, portal) {
+  return portalSelectionState(
+    combinePermissionLists(basePermissions, extraPermissions),
+    portal,
+  )
+}
+
+/** فقط extra را تغییر می‌دهد — مجوزهای نقش دست‌نخورده می‌مانند. */
+export function toggleExtraOnlyPermissions(basePermissions, extraPermissions, section, enable) {
+  const codes = collectModulePermissionCodes(section)
+  if (enable) {
+    return combinePermissionLists(extraPermissions, codes)
+  }
+  const remove = new Set(codes)
+  return extraPermissions.filter((code) => !remove.has(code))
+}
+
+export function toggleExtraOnlyPortalPermissions(basePermissions, extraPermissions, portal, enable) {
+  const codes = collectPortalPermissionCodes(portal)
+  if (enable) {
+    return combinePermissionLists(extraPermissions, codes)
+  }
+  const remove = new Set(codes)
+  return extraPermissions.filter((code) => !remove.has(code))
 }

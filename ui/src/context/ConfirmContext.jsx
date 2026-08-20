@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { Button } from '../components/ui'
+import Icon from '../components/icons/Icon'
 
 const ConfirmContext = createContext(null)
 
@@ -41,7 +42,7 @@ function ConfirmDialog({ state, onConfirm, onCancel }) {
       onClick={onCancel}
     >
       <div
-        className={`confirm-dialog confirm-dialog-${variant}`}
+        className={`confirm-dialog liquid-glass liquid-glass--strong liquid-glass--panel confirm-dialog-${variant}`}
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
@@ -49,7 +50,10 @@ function ConfirmDialog({ state, onConfirm, onCancel }) {
         onClick={(e) => e.stopPropagation()}
       >
         <div className={`confirm-icon confirm-icon-${variant}`} aria-hidden="true">
-          {variant === 'danger' ? '!' : variant === 'warning' ? '!' : '?'}
+          <Icon
+            name={variant === 'danger' ? 'warning' : variant === 'warning' ? 'warning' : 'info'}
+            size={24}
+          />
         </div>
         <h3 id="confirm-dialog-title" className="confirm-title">{title}</h3>
         <p id="confirm-dialog-message" className="confirm-message">{message}</p>
@@ -60,7 +64,7 @@ function ConfirmDialog({ state, onConfirm, onCancel }) {
           <Button
             ref={confirmRef}
             type="button"
-            variant={variant === 'danger' ? 'danger' : 'primary'}
+            variant={variant === 'danger' ? 'danger' : variant === 'warning' ? 'primary' : 'success'}
             onClick={onConfirm}
           >
             {confirmText}

@@ -262,12 +262,12 @@ export default function Checks() {
                       <td className="ltr">{i.check_number || '—'}</td>
                       <td>{formatMoney(i.amount)}</td>
                       <td>{i.receiver_name || '—'}</td>
-                      <td><Badge color={i.status === 'paid' ? '#10b981' : '#f59e0b'}>{i.status_display}</Badge></td>
+                      <td><Badge color={i.status === 'paid' ? 'var(--success)' : 'var(--warning)'}>{i.status_display}</Badge></td>
                       <td className="row-actions">
                         {i.status !== 'paid' && (
                           <>
                             <button type="button" className="link" onClick={() => openEdit(i)}>ویرایش</button>
-                            <button type="button" className="link" onClick={() => pay(i.id)}>وصول</button>
+                            <button type="button" className="link link-success" onClick={() => pay(i.id)}>وصول</button>
                           </>
                         )}
                         <button type="button" className="link danger" onClick={() => remove(i.id)}>حذف</button>
@@ -282,7 +282,7 @@ export default function Checks() {
                 <div key={i.id} className="m-card">
                   <div className="m-card-head">
                     <strong>{i.customer_name}</strong>
-                    <Badge color={i.status === 'paid' ? '#10b981' : '#f59e0b'}>{i.status_display}</Badge>
+                    <Badge color={i.status === 'paid' ? 'var(--success)' : 'var(--warning)'}>{i.status_display}</Badge>
                   </div>
                   <div className="m-card-grid">
                     <div><span className="muted">تحویل به شعبه</span>{i.received_at ? formatDate(i.received_at) : '—'}</div>
@@ -296,7 +296,7 @@ export default function Checks() {
                     {i.status !== 'paid' && (
                       <>
                         <button type="button" className="link" onClick={() => openEdit(i)}>ویرایش</button>
-                        <button type="button" className="link" onClick={() => pay(i.id)}>وصول</button>
+                        <button type="button" className="link link-success" onClick={() => pay(i.id)}>وصول</button>
                       </>
                     )}
                     <button type="button" className="link danger" onClick={() => remove(i.id)}>حذف</button>

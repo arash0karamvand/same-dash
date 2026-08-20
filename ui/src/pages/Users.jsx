@@ -4,15 +4,17 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { authApi } from '../api/client'
 import Select from '../components/Select'
 import { Badge, Button, Card, EmptyState, Field, FilterBar, Modal, StatCard } from '../components/ui'
+import PortalModuleMatrix from '../components/PortalModuleMatrix'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmContext'
 import { formatDate } from '../utils/format'
+import { toggleExtraOnlyPermissions, toggleExtraOnlyPortalPermissions } from '../utils/permissions'
 
 const ROLE_COLORS = {
   admin: '#7c3aed',
   sales_manager: '#2563eb',
   accountant: '#059669',
-  operator: '#6366f1',
+  operator: 'var(--accent)',
   pending: '#d97706',
 }
 
@@ -26,7 +28,7 @@ const EMPTY_CREATE = {
 }
 
 function roleColor(role) {
-  return ROLE_COLORS[role] || '#64748b'
+  return ROLE_COLORS[role] || 'var(--muted)'
 }
 
 function needsBranch(role, roleMeta) {
@@ -50,6 +52,7 @@ export default function Users() {
   const [users, setUsers] = useState([])
   const [stats, setStats] = useState({ total: 0, active: 0, pending: 0 })
   const [roles, setRoles] = useState([])
+  const [portalModules, setPortalModules] = useState([])
   const [branches, setBranches] = useState([])
   const [orgRanks, setOrgRanks] = useState([])
   const [loading, setLoading] = useState(true)
@@ -82,6 +85,7 @@ export default function Users() {
   const loadMeta = useCallback(async () => {
     const [data, ranks] = await Promise.all([authApi.roles(), authApi.orgRanks()])
     setRoles(data.results || [])
+    setPortalModules(data.assignable_portal_modules || [])
     setBranches(data.branches || [])
     setOrgRanks(ranks.results || [])
   }, [])
@@ -123,6 +127,7 @@ export default function Users() {
       job_title: u.job_title || '',
       manager_id: u.manager_id || '',
       org_rank_id: u.org_rank_id || '',
+      extra_permissions: [...(u.extra_permissions || [])],
     })
     setNewPassword('')
   }
@@ -168,6 +173,9 @@ export default function Users() {
       payload.job_title = editForm.job_title
       payload.manager_id = editForm.manager_id || null
       payload.org_rank_id = editForm.org_rank_id || null
+      if (!editUser.grants_full_access && !editUser.is_superuser) {
+        payload.extra_permissions = editForm.extra_permissions
+      }
       await authApi.updateUser(editUser.id, payload)
       if (newPassword.trim().length >= 8) {
         await authApi.resetPassword(editUser.id, newPassword.trim())
@@ -224,13 +232,56 @@ export default function Users() {
   )
 
   const isSelf = editUser?.id === currentUser?.id
+  const canEditExtraPermissions = editUser && !isSelf && !editUser.grants_full_access && !editUser.is_superuser
+
+  const editRolePermissions = useMemo(() => {
+    if (!editForm?.role) return []
+    const meta = roles.find((r) => r.value === editForm.role)
+    return meta?.permissions || []
+  }, [editForm?.role, roles])
+
+  const editRoleLabel = useMemo(() => {
+    if (!editForm?.role) return ''
+    const meta = roles.find((r) => r.value === editForm.role)
+    return meta?.label || editUser?.role_label || editForm.role
+  }, [editForm?.role, editUser?.role_label, roles])
+
+  const toggleExtraPortal = (portal, enable) => {
+    setEditForm((f) => {
+      const rolePerms = roles.find((r) => r.value === f.role)?.permissions || []
+      return {
+        ...f,
+        extra_permissions: toggleExtraOnlyPortalPermissions(
+          rolePerms,
+          f.extra_permissions,
+          portal,
+          enable,
+        ),
+      }
+    })
+  }
+
+  const toggleExtraModule = (mod, enable) => {
+    setEditForm((f) => {
+      const rolePerms = roles.find((r) => r.value === f.role)?.permissions || []
+      return {
+        ...f,
+        extra_permissions: toggleExtraOnlyPermissions(
+          rolePerms,
+          f.extra_permissions,
+          mod,
+          enable,
+        ),
+      }
+    })
+  }
 
   return (
     <div className="page users-page">
       <div className="stat-grid users-stats">
-        <StatCard label="کل کاربران" value={stats.total} accent="#6366f1" />
-        <StatCard label="فعال" value={stats.active} accent="#10b981" />
-        <StatCard label="در انتظار نقش" value={stats.pending} accent="#f59e0b" />
+        <StatCard label="کل کاربران" value={stats.total} accent="var(--accent)" />
+        <StatCard label="فعال" value={stats.active} accent="var(--success)" />
+        <StatCard label="در انتظار نقش" value={stats.pending} accent="var(--warning)" />
       </div>
 
       <Card
@@ -543,6 +594,26 @@ export default function Users() {
                     <span>حساب فعال است</span>
                   </label>
                 </Field>
+
+                {canEditExtraPermissions && portalModules.length > 0 && (
+                  <div className="menu-section-matrix user-access-matrix">
+                    <div className="user-access-matrix-head">
+                      <h4>دسترسی ماژولار</h4>
+                      <Badge color={roleColor(editForm.role)}>{editRoleLabel}</Badge>
+                    </div>
+                    <p className="muted small" style={{ marginBottom: 12 }}>
+                      ماژول‌های تیک‌خورده از نقش «{editRoleLabel}» می‌آیند و قابل حذف نیستند.
+                      {' '}بقیه را می‌توانید فقط برای این کاربر اضافه کنید.
+                    </p>
+                    <PortalModuleMatrix
+                      portals={portalModules}
+                      permissions={editForm.extra_permissions}
+                      basePermissions={editRolePermissions}
+                      onTogglePortal={toggleExtraPortal}
+                      onToggleModule={toggleExtraModule}
+                    />
+                  </div>
+                )}
               </>
             )}
 

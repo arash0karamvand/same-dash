@@ -2310,9 +2310,9 @@ export default function Accounting({
                           )}
                           {canApprove && !doc.is_transferred && (
                             doc.is_approved ? (
-                              <button type="button" className="link" onClick={() => toggleDocumentApproval(doc, false)} title="لغو تایید">↩</button>
+                              <button type="button" className="link link-warning" onClick={() => toggleDocumentApproval(doc, false)} title="لغو تایید">↩</button>
                             ) : (
-                              <button type="button" className="link" onClick={() => toggleDocumentApproval(doc, true)} title="تایید">✓</button>
+                              <button type="button" className="link link-success" onClick={() => toggleDocumentApproval(doc, true)} title="تایید">✓</button>
                             )
                           )}
                         </td>
@@ -2361,9 +2361,9 @@ export default function Accounting({
                       )}
                       {canApprove && !doc.is_transferred && (
                         doc.is_approved ? (
-                          <button type="button" className="btn btn-ghost btn-sm" onClick={() => toggleDocumentApproval(doc, false)} title="لغو تایید">↩ لغو تایید</button>
+                          <button type="button" className="btn btn-warning btn-sm" onClick={() => toggleDocumentApproval(doc, false)} title="لغو تایید">↩ لغو تایید</button>
                         ) : (
-                          <button type="button" className="btn btn-ghost btn-sm" onClick={() => toggleDocumentApproval(doc, true)} title="تایید">✓ تایید</button>
+                          <button type="button" className="btn btn-success btn-sm" onClick={() => toggleDocumentApproval(doc, true)} title="تایید">✓ تایید</button>
                         )
                       )}
                     </div>

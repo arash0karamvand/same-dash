@@ -55,9 +55,9 @@ export default function OrgChart() {
   return (
     <div className="page org-chart-page">
       <div className="stat-grid">
-        <StatCard label="پرسنل فعال" value={data.stats.total_staff} accent="#6366f1" />
-        <StatCard label="شعب" value={data.stats.branches} accent="#10b981" />
-        <StatCard label="مدیران" value={data.stats.managers} accent="#f59e0b" />
+        <StatCard label="پرسنل فعال" value={data.stats.total_staff} accent="var(--accent)" />
+        <StatCard label="شعب" value={data.stats.branches} accent="var(--success)" />
+        <StatCard label="مدیران" value={data.stats.managers} accent="var(--warning)" />
       </div>
 
       <Card

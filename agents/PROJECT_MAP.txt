@@ -1,0 +1,162 @@
+================================================================================
+same-Dashboard — نقشه پروژه برای ایجنت‌ها
+================================================================================
+
+خلاصه: پنل مدیریت فروشگاه/کارخانه (چند شعبه). بک‌اند Django 6 + MySQL،
+فرانت React (Vite). API زیر /api/؛ در توسعه UI روی :5173 و proxy به :8000.
+
+قانون لایه‌ها:
+  ui/          → فقط UI و فراخوانی API
+  api/views/   → HTTP، اعتبارسنجی ورودی، پاسخ JSON
+  logic/       → منطق کسب‌وکار (بدون Request/Response)
+  backend/     → مدل‌ها، migration، settings
+  auth/        → نقش، مجوز، دکوراتور endpoint
+
+پاسخ API: { "ok": true, "data": ... } یا { "ok": false, "error": "..." }
+احراز هویت: session + cookie؛ fetch با credentials: 'include' (ui/src/api/client.js)
+
+--------------------------------------------------------------------------------
+۱) ریشه مخزن
+--------------------------------------------------------------------------------
+manage.py          نقطه ورود Django؛ DJANGO_SETTINGS_MODULE=backend.settings
+requirements.txt   وابستگی Python
+.env.example       نمونه env (کپی به .env) — DB، SECRET_KEY، DEBUG
+.env.xampp         تنظیمات نمونه برای MySQL محلی XAMPP (commit نشود)
+
+--------------------------------------------------------------------------------
+۲) backend/ — هسته Django
+--------------------------------------------------------------------------------
+settings.py        apps، middleware، DB از env، whitenoise
+urls.py            /admin/ و include(api.urls) تحت /api/
+models.py          تمام مدل ORM (Customer، Sale، AccountingEntry، …)
+migrations/        اسکیمای DB — هر تغییر مدل migration جدید
+admin.py           پنل ادمین Django
+db_backends/       بک‌اند MySQL سازگار (compat_mysql)
+management/        دستورات: setup_mysql، reset_business_data، send_birthday_sms، …
+soft_delete.py     SoftDeleteModel برای رکوردهای حذف نرم
+
+کار ایجنت: تغییر schema → models + makemigrations؛ تنظیم env در .env نه hard-code
+
+--------------------------------------------------------------------------------
+۳) api/ — لایه REST
+--------------------------------------------------------------------------------
+urls.py            فهرست کامل endpointها (auth، sales، accounting، …)
+views/*.py         یک فایل ≈ یک حوزه (sales.py، accounting.py، …)
+helpers.py         توابع مشترک view
+filters.py         فیلتر/query برای لیست‌ها
+
+نقشه views مهم:
+  auth.py              login/logout/me، کاربران، reset داده
+  config.py            /api/config/ — منو، شعب، lookup (کش در UI)
+  dashboard.py         خلاصه داشبورد
+  sales.py             فروش + گزارش + workflow روی sale
+  office_orders.py     صف سفارش اداری (جدول جدا)
+  factory_orders.py    صف کارخانه / باربری
+  customers.py         مشتری + سطح باشگاه
+  products.py          محصول و دسته
+  materials.py         مواد اولیه و تأیید
+  accounting.py        اسناد، دفتر، تراز، import اکسل
+  installments.py      اقساط و چک
+  attendance.py        حضور و غیاب
+  sms*.py              پیامک، تولد، باشگاه، یادآور
+  role_definitions.py  نقش‌های پویا، ماتریس مجوز، org-ranks
+  org_chart.py         چارت سازمانی
+
+کار ایجنت: endpoint جدید → view + ثبت در urls.py؛ منطق سنگین را در logic/ بگذار
+
+--------------------------------------------------------------------------------
+۴) logic/ — منطق دامنه
+--------------------------------------------------------------------------------
+فایل‌ها بر اساس موضوع (نه HTTP). مثال:
+  sales.py، sales_reports.py، sale_workflow.py، order_queues.py
+  office_orders.py، factory_orders.py              صف اداری/کارخانه
+  customers.py، levels.py، membership.py، wallet.py، staff.py
+  accounting*.py، accounting_entries.py            حسابداری، سند، گزارش، اکسل
+  products.py، materials.py، material_accounting.py
+  attendance.py، employee_ranking.py، analytics.py
+  dashboard.py، org_chart.py                       خلاصه داشبورد و چارت
+  sms.py، birthday_sms.py، sms_club.py، reminder_sms.py
+  role_definitions.py، menu_config.py، branches.py، lookups.py
+  audit.py                                         ثبت و فهرست لاگ
+  record_filter.py                                 فیلتر عمومی رکورد (مدیران)
+  module_catalog.py                                کاتالوگ ماژول پورتال/زیربخش (نقش + منو)
+  jalali.py                                        تاریخ شمسی سمت سرور
+  reset_data.py، config_seed.py، seed_defaults.py
+
+الگوی MVC (مرجع): api/views/wallet.py → logic/wallet.py
+  View فقط HTTP/مجوز/parse/JSON؛ منطق دامنه و ORM سنگین در logic/
+
+کار ایجنت: باگ بیزنس یا قوانین محاسبه → اینجا؛ از تکرار در views خودداری کن
+
+--------------------------------------------------------------------------------
+۵) auth/ — نقش و دسترسی
+--------------------------------------------------------------------------------
+permissions.py     کدهای مجوز و چک دسترسی
+roles.py، org_roles.py، branch_supervisors.py، executives.py
+decorators.py      @require_permission و مشابه برای views
+signals.py         رویدادهای مرتبط کاربر/پروfile
+
+کار ایجنت: مسیر/منوی جدید → مجوز در role_definitions + ui/utils/permissions.js
+
+--------------------------------------------------------------------------------
+۶) ui/ — فرانت React 19 + Vite
+--------------------------------------------------------------------------------
+src/App.jsx              رouting داخلی (hash/query)، map صفحه → component
+src/pages/*.jsx          هر صفحه یک ماژول (Dashboard، Shop، Accounting، …)
+src/components/          Layout، ناوبری، ویجت‌ها، فرم‌های مشترک
+src/context/             AuthContext، ConfigContext (منو/شعب از API)
+src/api/client.js        تمام URLهای API
+src/utils/               permissions.js، routing.js، jalali.js، format.js
+
+پورتال‌ها (منطق محصول): مدیران / فروشگاه / اداری / حسابداری — دسترسی با نقش
+vite.config.js           proxy /api → http://127.0.0.1:8000
+
+اجرای dev:
+  cd ui && npm run dev
+  cd .. && py manage.py runserver 127.0.0.1:8000
+
+کار ایجنت: UI → page + در صورت نیاز متد در client.js؛ مجوز را sync با بک‌اند
+
+--------------------------------------------------------------------------------
+۷) testing/ — تست pytest/Django
+--------------------------------------------------------------------------------
+test_*.py            API، logic، مدل، فروش، SMS، …
+role_helpers.py      ساخت نقش/کاربر در تست
+
+کار ایجنت: بعد از تغییر logic یا API، تست مرتبط را اجرا/به‌روز کن
+
+--------------------------------------------------------------------------------
+۸) docker/ + docker-compose.yml
+--------------------------------------------------------------------------------
+ایمیج production-like: nginx، gunicorn، MySQL. پورت پیش‌فرض 8080.
+راهنما: docker/README.md
+
+--------------------------------------------------------------------------------
+۹) hosting/
+--------------------------------------------------------------------------------
+DEPLOY.md، gunicorn_config.py، push-github.ps1 — استقرار خارج Docker
+
+--------------------------------------------------------------------------------
+۱۰) backup/
+--------------------------------------------------------------------------------
+backup_db.py، README — dump/load داده برای مهاجرت یا بازیابی
+
+--------------------------------------------------------------------------------
+۱۱) version/
+--------------------------------------------------------------------------------
+CHANGELOG.md، COMMIT_CONVENTION.md — تاریخچه و قرارداد commit
+
+--------------------------------------------------------------------------------
+جریان داده نمونه (فروش)
+--------------------------------------------------------------------------------
+Shop/Office UI → api/views/sales.py → logic/sale_workflow.py → backend/models Sale
+تأیید شعبه/حسابداری/کارخانه/باربری: endpointهای جدا در api/urls (sales + factory)
+
+--------------------------------------------------------------------------------
+فایل‌های حساس — commit نکن
+--------------------------------------------------------------------------------
+.env، .env.xampp، excel_dump.txt (در صورت داده واقعی)
+
+================================================================================
+آخرین به‌روزرسانی نقشه: 2026-07-27
+================================================================================

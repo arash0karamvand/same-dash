@@ -3,6 +3,7 @@
 from api.helpers import api_view, fail, parse_json, success
 from auth.permissions import is_system_admin
 from backend.models import Branch, LookupOption, MenuSection
+from logic.branding import get_branding, reset_logo, set_logo
 from logic.branches import (
     branch_to_dict,
     create_branch,
@@ -49,6 +50,7 @@ def app_config(request):
         "nav_items": get_menu_sections(),
         "permission_catalog": permission_catalog(),
         "page_guides": get_page_guides_map(),
+        "branding": get_branding(),
     })
 
 
@@ -182,6 +184,33 @@ def menu_section_detail(request, pk):
 
     update_menu_section(sec, parse_json(request))
     return success(menu_section_to_dict(sec))
+
+
+@api_view("GET", "PUT", "DELETE")
+def branding_logo(request):
+    """لوگوی سایت — خواندن برای همه، تغییر فقط توسط مدیر سیستم."""
+    if request.method == "GET":
+        if not request.user.is_authenticated:
+            return fail("Unauthorized", status=401)
+        return success(get_branding())
+
+    denied = _require_admin(request.user)
+    if denied:
+        return denied
+
+    if request.method == "DELETE":
+        return success(reset_logo())
+
+    data = parse_json(request)
+    try:
+        branding = set_logo(
+            data.get("data_url"),
+            file_name=data.get("file_name") or "",
+            updated_by=getattr(request.user, "username", ""),
+        )
+    except ValueError as exc:
+        return fail(str(exc), status=400)
+    return success(branding)
 
 
 @api_view("PUT")

@@ -55,8 +55,8 @@ const ACCOUNTING_MODES = [
 ]
 
 const ORDER_STATUS_COLORS = {
-  pending: '#f59e0b',
-  confirmed: '#10b981',
+  pending: 'var(--warning)',
+  confirmed: 'var(--success)',
   cancelled: '#94a3b8',
 }
 
@@ -196,7 +196,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
   const paymentMethods = choices('payment_method').length ? choices('payment_method') : PAYMENT_METHODS
   const orderKinds = choices('order_kind').length ? choices('order_kind') : ORDER_KINDS
   const orderStatusColors = Object.fromEntries(
-    (choices('order_status').length ? choices('order_status') : []).map((o) => [o.value, o.meta?.color || '#6366f1'])
+    (choices('order_status').length ? choices('order_status') : []).map((o) => [o.value, o.meta?.color || 'var(--accent)'])
   )
   const resolvedOrderStatusColors = Object.keys(orderStatusColors).length ? orderStatusColors : ORDER_STATUS_COLORS
 
@@ -216,7 +216,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
   const shopOfficeQueue = isShop && branchQueueView
   const accountingQueueOnly = canApproveAccounting && !viewAllSales && !viewOwnSales
   const workflowColors = Object.fromEntries(
-    (choices('workflow_stage').length ? choices('workflow_stage') : []).map((o) => [o.value, o.meta?.color || '#6366f1'])
+    (choices('workflow_stage').length ? choices('workflow_stage') : []).map((o) => [o.value, o.meta?.color || 'var(--accent)'])
   )
   const [personalCollapsed, setPersonalCollapsed] = useState(summaryOnly ? false : true)
 
@@ -884,24 +884,24 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
       )}
 
       {shopOfficeQueue && !viewAllSales && (
-      <div className="stat-grid shop-office-stats">
+      <div className="stat-grid shop-office-stats sales-stats-grid">
         <StatCard
           label={`فروش ${monthLabel}`}
           value={formatMoney(monthly?.total_final || 0)}
           hint={`${toPersianDigits(monthly?.count || 0)} فقره — ${branchStatsTitle}`}
-          accent="#6366f1"
+          accent="var(--accent)"
         />
         <StatCard
           label={`فروش سال ${yearLabel}`}
           value={formatMoney(yearly?.total_final || 0)}
           hint={`${toPersianDigits(yearly?.count || 0)} فقره — سال جاری`}
-          accent="#8b5cf6"
+          accent="var(--info)"
         />
         <StatCard
           label="منتظر ارسال"
           value={toPersianDigits(pendingSendCount)}
           hint="سفارش در صف شعبه"
-          accent={pendingSendCount > 0 ? '#f59e0b' : '#10b981'}
+          accent={pendingSendCount > 0 ? 'var(--warning)' : 'var(--success)'}
         />
       </div>
       )}
@@ -1036,7 +1036,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
                   <td>{s.customer_name}</td>
 
                   <td>
-                    <Badge color={resolvedOrderStatusColors[s.order_status] || '#6366f1'}>
+                    <Badge color={resolvedOrderStatusColors[s.order_status] || 'var(--accent)'}>
                       {s.order_kind_display}
                       {!hideWorkflowStage && s.order_status === 'pending' ? ' — در انتظار' : ''}
                     </Badge>
@@ -1045,7 +1045,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
                   {!hideWorkflowStage && (
                   <td>
                     {s.workflow_stage && s.workflow_stage !== 'completed' && (
-                      <Badge color={workflowColors[s.workflow_stage] || '#6366f1'}>
+                      <Badge color={workflowColors[s.workflow_stage] || 'var(--accent)'}>
                         {s.workflow_stage_display}
                       </Badge>
                     )}
@@ -1078,16 +1078,16 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
 
                       {canApproveBranch && pendingSend && (
                         shopOfficeQueue ? (
-                          <Button type="button" className="btn-sm shop-office-send-btn" onClick={() => approveBranch(s)}>
+                          <Button type="button" variant="success" className="btn-sm shop-office-send-btn" onClick={() => approveBranch(s)}>
                             ارسال به اداری
                           </Button>
                         ) : (
-                          <button type="button" className="link" onClick={() => approveBranch(s)}>{isShop ? 'ارسال به اداری' : 'تایید شعبه'}</button>
+                          <button type="button" className="link link-success" onClick={() => approveBranch(s)}>{isShop ? 'ارسال به اداری' : 'تایید شعبه'}</button>
                         )
                       )}
 
                       {canApproveAccounting && s.workflow_stage === 'branch_approved' && (
-                        <button type="button" className="link" onClick={() => approveAccounting(s)}>تایید حسابداری</button>
+                        <button type="button" className="link link-success" onClick={() => approveAccounting(s)}>تایید حسابداری</button>
                       )}
 
                       {canEditSale(s) && (
@@ -1095,12 +1095,12 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
                       <button type="button" className="link" onClick={() => openEdit(s)}>ویرایش</button>
 
                       {s.balance_due > 0 && s.order_status !== 'cancelled' && !s.amounts_masked && (
-                        <button type="button" className="link" onClick={() => { setPayModal(s); setPayAmount(String(s.balance_due)) }}>پرداخت</button>
+                        <button type="button" className="link link-success" onClick={() => { setPayModal(s); setPayAmount(String(s.balance_due)) }}>پرداخت</button>
                       )}
 
                       {s.order_kind === 'pre_invoice' && s.order_status === 'pending' && (
                         <>
-                          <button type="button" className="link" onClick={() => confirmOrder(s)}>تایید</button>
+                          <button type="button" className="link link-success" onClick={() => confirmOrder(s)}>تایید</button>
                           <button type="button" className="link danger" onClick={() => cancelOrder(s)}>لغو</button>
                         </>
                       )}
@@ -1142,7 +1142,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
                           <span className="shop-office-card-branch">{s.branch_label || s.branch || '—'}</span>
                         )}
                       </div>
-                      <Badge color={resolvedOrderStatusColors[s.order_status] || '#6366f1'}>
+                      <Badge color={resolvedOrderStatusColors[s.order_status] || 'var(--accent)'}>
                         {s.order_kind_display}
                       </Badge>
                     </div>
@@ -1170,6 +1170,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
                     {canApproveBranch && pendingSend && (
                       <Button
                         type="button"
+                        variant="success"
                         className="shop-office-send-btn"
                         onClick={() => approveBranch(s)}
                       >
@@ -1187,11 +1188,11 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
                         <>
                           <button type="button" className="link" onClick={() => openEdit(s)}>ویرایش</button>
                           {s.balance_due > 0 && s.order_status !== 'cancelled' && !s.amounts_masked && (
-                            <button type="button" className="link" onClick={() => { setPayModal(s); setPayAmount(String(s.balance_due)) }}>پرداخت</button>
+                            <button type="button" className="link link-success" onClick={() => { setPayModal(s); setPayAmount(String(s.balance_due)) }}>پرداخت</button>
                           )}
                           {s.order_kind === 'pre_invoice' && s.order_status === 'pending' && (
                             <>
-                              <button type="button" className="link" onClick={() => confirmOrder(s)}>تایید</button>
+                              <button type="button" className="link link-success" onClick={() => confirmOrder(s)}>تایید</button>
                               <button type="button" className="link danger" onClick={() => cancelOrder(s)}>لغو</button>
                             </>
                           )}
@@ -1217,7 +1218,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
                       <div className="muted small">{s.branch_label || s.branch || '—'}</div>
                     )}
                   </div>
-                  <Badge color={resolvedOrderStatusColors[s.order_status] || '#6366f1'}>
+                  <Badge color={resolvedOrderStatusColors[s.order_status] || 'var(--accent)'}>
                     {s.order_kind_display}
                     {!hideWorkflowStage && s.order_status === 'pending' ? ' — در انتظار' : ''}
                   </Badge>
@@ -1232,6 +1233,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
                   <div className={`m-card-primary-action${shopBranchSupervisor ? ' m-card-primary-action-prominent' : ''}`}>
                     <Button
                       type="button"
+                      variant="success"
                       className="m-card-send-office"
                       onClick={() => approveBranch(s)}
                     >
@@ -1247,17 +1249,17 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
                     {excelLoadingId === s.id ? '…' : 'اکسل'}
                   </button>
                   {canApproveAccounting && s.workflow_stage === 'branch_approved' && (
-                    <button type="button" className="link" onClick={() => approveAccounting(s)}>تایید حسابداری</button>
+                    <button type="button" className="link link-success" onClick={() => approveAccounting(s)}>تایید حسابداری</button>
                   )}
                   {canEditSale(s) && (
                     <>
                       <button type="button" className="link" onClick={() => openEdit(s)}>ویرایش</button>
                       {s.balance_due > 0 && s.order_status !== 'cancelled' && !s.amounts_masked && (
-                        <button type="button" className="link" onClick={() => { setPayModal(s); setPayAmount(String(s.balance_due)) }}>پرداخت</button>
+                        <button type="button" className="link link-success" onClick={() => { setPayModal(s); setPayAmount(String(s.balance_due)) }}>پرداخت</button>
                       )}
                       {s.order_kind === 'pre_invoice' && s.order_status === 'pending' && (
                         <>
-                          <button type="button" className="link" onClick={() => confirmOrder(s)}>تایید</button>
+                          <button type="button" className="link link-success" onClick={() => confirmOrder(s)}>تایید</button>
                           <button type="button" className="link danger" onClick={() => cancelOrder(s)}>لغو</button>
                         </>
                       )}

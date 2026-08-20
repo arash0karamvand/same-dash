@@ -16,10 +16,10 @@ import { PAGE_GUIDE_DEFAULTS } from '../config/pageGuideDefaults'
 import { useRegisterPageGuide } from '../context/PageGuideContext'
 
 const STATUS_COLORS = {
-  sent: '#10b981',
-  pending: '#f59e0b',
-  failed: '#ef4444',
-  mock_sent: '#6366f1',
+  sent: 'var(--success)',
+  pending: 'var(--warning)',
+  failed: 'var(--danger)',
+  mock_sent: 'var(--accent)',
   pending_provider_config: '#94a3b8',
   birthday: '#ec4899',
   order_placed: '#3b82f6',

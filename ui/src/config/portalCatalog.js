@@ -18,7 +18,7 @@ function navItemFromModule(mod) {
 
 export function buildPortalsFromModuleTree(moduleTree) {
   if (!moduleTree?.length) return STATIC_PORTALS
-  const built = moduleTree.map((portal) => ({
+  return moduleTree.map((portal) => ({
     id: portal.id,
     label: portal.label,
     icon: portal.icon,
@@ -26,14 +26,6 @@ export function buildPortalsFromModuleTree(moduleTree) {
     defaultPage: portal.default_page || portal.page_key,
     children: (portal.modules || []).map(navItemFromModule),
   }))
-  return built.map((portal) => {
-    const staticPortal = STATIC_PORTALS.find((p) => p.id === portal.id)
-    if (!staticPortal?.children?.length) return portal
-    const keys = new Set((portal.children || []).map((c) => c.key))
-    const extras = staticPortal.children.filter((c) => !keys.has(c.key))
-    if (!extras.length) return portal
-    return { ...portal, children: [...portal.children, ...extras] }
-  })
 }
 
 export { STATIC_PORTALS as PORTALS }

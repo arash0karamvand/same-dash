@@ -17,11 +17,13 @@ from auth.permissions import (
     VIEW_CUSTOMERS,
     VIEW_DASHBOARD,
     VIEW_SALES,
+    get_user_extra_permissions,
     has_permission,
     is_system_admin,
     sanitize_role_permissions,
+    sanitize_user_extra_permissions,
 )
-from backend.models import RoleDefinition
+from backend.models import RoleDefinition, UserAccessProfile
 from logic.role_definitions import seed_builtin_roles
 from testing.role_helpers import ACCOUNTANT_PERMISSIONS, ensure_test_role
 
@@ -135,3 +137,20 @@ class RolePermissionTest(TestCase):
         self.assertTrue(has_permission(user, VIEW_ACCOUNTING))
         self.assertFalse(has_permission(user, CREATE_SALE))
         self.assertFalse(has_permission(user, VIEW_CUSTOMERS))
+
+    def test_user_extra_permissions_add_to_role(self):
+        ensure_test_role(
+            roles.OPERATOR,
+            ["view_dashboard", "self_check_in"],
+            label="فروشنده",
+        )
+        user = User.objects.create_user(username="op2", password="secret123")
+        roles.assign_role(user, roles.OPERATOR)
+        self.assertFalse(has_permission(user, VIEW_CUSTOMERS))
+        UserAccessProfile.objects.create(
+            user=user,
+            extra_permissions=sanitize_user_extra_permissions([VIEW_CUSTOMERS, MANAGE_ROLES]),
+        )
+        self.assertTrue(has_permission(user, VIEW_CUSTOMERS))
+        self.assertFalse(has_permission(user, MANAGE_ROLES))
+        self.assertEqual(get_user_extra_permissions(user), {VIEW_CUSTOMERS})

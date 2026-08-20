@@ -7,6 +7,9 @@ from backend.models import LookupOption
 CACHE_KEY = "lookup_options_v1"
 CACHE_TTL = 60
 
+# دسته‌هایی که گزینه فرم نیستند و نباید در کش گزینه‌ها بیایند (مقدارشان حجیم است).
+NON_CHOICE_CATEGORIES = ("branding",)
+
 
 def _invalidate_cache():
     cache.delete(CACHE_KEY)
@@ -19,7 +22,12 @@ def get_all_lookups(force_refresh=False):
             return cached
 
     grouped = {}
-    for opt in LookupOption.objects.filter(is_active=True).order_by("category", "sort_order", "label"):
+    options = (
+        LookupOption.objects.filter(is_active=True)
+        .exclude(category__in=NON_CHOICE_CATEGORIES)
+        .order_by("category", "sort_order", "label")
+    )
+    for opt in options:
         grouped.setdefault(opt.category, []).append(lookup_to_dict(opt))
 
     cache.set(CACHE_KEY, grouped, CACHE_TTL)
@@ -73,6 +81,8 @@ def list_lookups(category=""):
     qs = LookupOption.objects.order_by("category", "sort_order", "label")
     if category:
         qs = qs.filter(category=category)
+    else:
+        qs = qs.exclude(category__in=NON_CHOICE_CATEGORIES)
     return list(qs)
 
 

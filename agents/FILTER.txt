@@ -1,0 +1,32 @@
+================================================================================
+فیلتر رکوردها (پورتال مدیران → فیلتر)
+================================================================================
+
+مسیر UI:  /managers/filter
+API:
+  GET /api/record-filter/catalog/   — مدل‌ها و گزینه‌های «نوع»
+  GET /api/record-filter/?...       — جستجو + تعداد رکورد
+
+پارامترهای query (هم‌زمان AND):
+  model          sale | customer | office_order | accounting_entry | audit_log
+  date_from      YYYY-MM-DD
+  date_to        YYYY-MM-DD
+  type_field     نام فیلد نوع (مثلاً order_kind)
+  type           مقدار نوع
+  name           جستجو در نام/شرح
+  amount_min     حداقل مبلغ (ریال)
+  amount_max     حداکثر مبلغ
+  amount_field   برای customer: total_purchases | wallet_balance
+
+پاسخ:
+  total — تعداد کل رکوردهای منطبق
+  results — حداکثر ۵۰۰ ردیف نمایشی
+
+مجوز: view_dashboard یا view_audit_logs (مدیر ارشد همیشه)
+
+کد:
+  logic/record_filter.py
+  api/views/record_filter.py
+  ui/src/pages/RecordFilter.jsx
+
+================================================================================

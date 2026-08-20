@@ -13,13 +13,16 @@ from auth.permissions import (
     MANAGE_USERS,
     RESET_BUSINESS_DATA,
     SELF_CHECK_IN,
+    get_effective_user_permissions,
+    get_user_extra_permissions,
     has_full_access,
     has_permission,
     is_system_admin,
+    sanitize_user_extra_permissions,
 )
 from logic.role_definitions import get_role_permissions
 from logic.sellers import ensure_seller_for_user
-from backend.models import OrgRank, Seller, StaffProfile
+from backend.models import OrgRank, Seller, StaffProfile, UserAccessProfile
 from logic.audit import log_action
 
 User = get_user_model()
@@ -57,10 +60,16 @@ def user_to_dict(user):
 
     if has_full_access(user):
         permissions = sorted(ALL_PERMISSIONS)
+        role_permissions = sorted(ALL_PERMISSIONS)
+        extra_permissions = []
     elif role == roles.PENDING:
-        permissions = []
+        extra_permissions = sorted(get_user_extra_permissions(user))
+        role_permissions = []
+        permissions = extra_permissions
     else:
-        permissions = sorted(get_role_permissions(role))
+        role_permissions = sorted(get_role_permissions(role))
+        extra_permissions = sorted(get_user_extra_permissions(user))
+        permissions = sorted(set(role_permissions) | set(extra_permissions))
 
     return {
         "id": user.id,
@@ -70,6 +79,8 @@ def user_to_dict(user):
         "role": role,
         "role_label": role_label,
         "permissions": permissions,
+        "role_permissions": role_permissions,
+        "extra_permissions": extra_permissions,
         "grants_full_access": has_full_access(user),
         "branch": branch,
         "branch_label": BRANCH_LABELS.get(branch, "—"),
@@ -95,6 +106,21 @@ def ensure_staff_profile(user, branch=None):
         profile.branch = branch
         profile.save(update_fields=["branch"])
     return profile
+
+
+def ensure_user_access_profile(user):
+    profile, _ = UserAccessProfile.objects.get_or_create(user=user)
+    return profile
+
+
+def set_user_extra_permissions(user, permissions):
+    if has_full_access(user):
+        return []
+    profile = ensure_user_access_profile(user)
+    cleaned = sanitize_user_extra_permissions(permissions)
+    profile.extra_permissions = cleaned
+    profile.save(update_fields=["extra_permissions"])
+    return cleaned
 
 
 def apply_user_access(user, role, branch=None):
@@ -271,6 +297,8 @@ def role_list(request):
             }
         )
     from logic.branches import get_active_branches
+    from auth.permissions import permission_groups_for_matrix
+    from logic.module_catalog import portal_modules_for_matrix
 
     refresh_branches()
     return success(
@@ -280,6 +308,8 @@ def role_list(request):
                 {"value": b["code"], "label": b["label"], "color": b.get("color")}
                 for b in get_active_branches()
             ],
+            "assignable_portal_modules": portal_modules_for_matrix(assignable_only=True),
+            "assignable_permission_groups": permission_groups_for_matrix(assignable_only=True),
         }
     )
 
@@ -346,6 +376,9 @@ def user_detail(request, pk):
                     return fail("کاربر نمی‌تواند مدیر خودش باشد.", status=400)
                 profile.manager = User.objects.filter(pk=mgr_id, is_active=True).first() if mgr_id else None
             profile.save()
+
+    if "extra_permissions" in data and not is_self and not has_full_access(target):
+        set_user_extra_permissions(target, data.get("extra_permissions"))
 
     target.refresh_from_db()
     log_action(

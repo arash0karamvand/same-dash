@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { ConfigProvider, useConfig } from './context/ConfigContext'
 import { ConfirmProvider } from './context/ConfirmContext'
+import { ThemeProvider } from './context/ThemeContext'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import { canAccessRoute, getFirstAccessibleRoute } from './utils/permissions'
@@ -33,7 +34,10 @@ import EmployeeRanking from './pages/EmployeeRanking'
 import OrgChart from './pages/OrgChart'
 import RecordFilter from './pages/RecordFilter'
 import Settings from './pages/Settings'
-import './App.css'
+import Icon from './components/icons/Icon'
+import { Button } from './components/ui'
+import BrandLogo from './components/BrandLogo'
+import ThemeToggle from './components/ThemeToggle'
 
 const PAGES = {
   dashboard: Dashboard,
@@ -64,19 +68,45 @@ const PAGES = {
   managers: Managers,
 }
 
+function NoAccessScreen() {
+  const { user, logout } = useAuth()
+  return (
+    <div className="auth-screen">
+      <ThemeToggle />
+      <div className="auth-card auth-card--centered liquid-glass liquid-glass--strong liquid-glass--panel">
+        <BrandLogo size={72} className="brand-logo--auth" />
+        <div className="auth-status-icon auth-status-icon--denied">
+          <Icon name="prohibit" size={28} />
+        </div>
+        <h1 className="auth-status-title">دسترسی ندارید</h1>
+        <p className="muted auth-status-message">
+          {user?.full_name} عزیز، هیچ بخشی از پنل برای نقش شما فعال نیست.
+        </p>
+        <Button variant="ghost" onClick={logout}>
+          خروج
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 function PendingScreen() {
   const { user, logout } = useAuth()
   return (
     <div className="auth-screen">
-      <div className="auth-card" style={{ textAlign: 'center' }}>
-        <span className="brand-logo" style={{ fontSize: 40 }}>⏳</span>
-        <h1 style={{ fontSize: 20, marginTop: 12 }}>در انتظار تایید مدیر</h1>
-        <p className="muted">
+      <ThemeToggle />
+      <div className="auth-card auth-card--centered liquid-glass liquid-glass--strong liquid-glass--panel">
+        <BrandLogo size={72} className="brand-logo--auth" />
+        <div className="auth-status-icon auth-status-icon--warning">
+          <Icon name="hourglass" size={28} />
+        </div>
+        <h1 className="auth-status-title">در انتظار تایید مدیر</h1>
+        <p className="muted auth-status-message">
           {user?.full_name} عزیز، حساب شما ساخته شده اما هنوز نقشی به آن اختصاص داده نشده است.
         </p>
-        <button className="btn btn-ghost" style={{ marginTop: 16 }} onClick={logout}>
+        <Button variant="ghost" onClick={logout}>
           خروج
-        </button>
+        </Button>
       </div>
     </div>
   )
@@ -115,6 +145,10 @@ function Shell() {
     let { portal, page } = parsed
     if (!portal) {
       const first = getFirstAccessibleRoute(user, portals)
+      if (!first) {
+        setRoute({ portal: null, page: null })
+        return
+      }
       portal = first.portal
       page = first.page
     } else {
@@ -122,6 +156,10 @@ function Shell() {
     }
     if (!canAccessRoute(user, portal, page, portals)) {
       const first = getFirstAccessibleRoute(user, portals)
+      if (!first) {
+        setRoute({ portal: null, page: null })
+        return
+      }
       setRouteWithUrl(first.portal, first.page)
       return
     }
@@ -134,6 +172,10 @@ function Shell() {
     if (!user || user.role === 'pending') return
     if (!canAccessRoute(user, route.portal, route.page, portals)) {
       const first = getFirstAccessibleRoute(user, portals)
+      if (!first) {
+        setRoute({ portal: null, page: null })
+        return
+      }
       setRouteWithUrl(first.portal, first.page)
     }
   }, [route.portal, route.page, user, portals])
@@ -144,6 +186,7 @@ function Shell() {
 
   if (!user) return <Login />
   if (user.role === 'pending') return <PendingScreen />
+  if (!getFirstAccessibleRoute(user, portals)) return <NoAccessScreen />
 
   const PageComponent = PAGES[route.page] || Dashboard
   const allowed = canAccessRoute(user, route.portal, route.page, portals)
@@ -167,12 +210,14 @@ function Shell() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <ConfigProvider>
-        <ConfirmProvider>
-          <Shell />
-        </ConfirmProvider>
-      </ConfigProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <ConfigProvider>
+          <ConfirmProvider>
+            <Shell />
+          </ConfirmProvider>
+        </ConfigProvider>
+      </AuthProvider>
+    </ThemeProvider>
   )
 }

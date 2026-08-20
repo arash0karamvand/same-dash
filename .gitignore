@@ -4,6 +4,11 @@ __pycache__/
 db.sqlite3
 db.sqlite3-journal
 .env
+.env.*
+secret.py
+*.dump.json
+*_dump.json
+*_dump.txt
 staticfiles/
 
 # خروجی‌های بکاپ (نباید در ریپازیتوری باشند)

@@ -224,6 +224,25 @@ class StaffProfile(models.Model):
         return f"{self.user.get_full_name() or self.user.username} — {self.get_branch_display()}"
 
 
+class UserAccessProfile(models.Model):
+    """مجوزهای اضافی کاربر — علاوه بر نقش."""
+
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        verbose_name="کاربر",
+        on_delete=models.CASCADE,
+        related_name="access_profile",
+    )
+    extra_permissions = models.JSONField("مجوزهای اضافی", default=list, blank=True)
+
+    class Meta:
+        verbose_name = "پروفایل دسترسی کاربر"
+        verbose_name_plural = "پروفایل‌های دسترسی کاربر"
+
+    def __str__(self):
+        return f"دسترسی {self.user.get_full_name() or self.user.username}"
+
+
 class Sale(SoftDeleteModel):
     PAYMENT_METHOD_CHOICES = [
         ("cash", "نقدی"),

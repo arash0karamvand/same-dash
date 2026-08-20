@@ -53,6 +53,9 @@ export const configApi = {
   updateMenuSection: (id, data) => put(`/api/config/menu-sections/${id}/`, data),
   deleteMenuSection: (id) => del(`/api/config/menu-sections/${id}/`),
   savePageGuide: (code, text) => put(`/api/config/page-guides/${encodeURIComponent(code)}/`, { text }),
+  branding: () => get('/api/config/branding/logo/'),
+  saveLogo: (dataUrl, fileName) => put('/api/config/branding/logo/', { data_url: dataUrl, file_name: fileName }),
+  resetLogo: () => del('/api/config/branding/logo/'),
 }
 
 export const authApi = {

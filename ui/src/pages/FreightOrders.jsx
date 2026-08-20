@@ -43,6 +43,7 @@ export default function FreightOrders() {
         {
           key: 'receive',
           label: 'شروع ارسال',
+          variant: 'success',
           permission: 'manage_freight_orders',
           when: (o) => o.workflow_stage === 'production_done',
           run: (id) => factoryApi.freightReceive(id),
@@ -50,6 +51,7 @@ export default function FreightOrders() {
         {
           key: 'complete',
           label: 'تحویل شد',
+          variant: 'success',
           permission: 'manage_freight_orders',
           when: (o) => o.workflow_stage === 'in_freight',
           run: (id) => factoryApi.freightComplete(id),

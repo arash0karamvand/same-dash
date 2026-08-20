@@ -26,7 +26,7 @@ import { useRegisterPageGuide } from '../context/PageGuideContext'
 
 const COLOR_PRESETS = [
 
-  { name: 'قرمز', hex: '#ef4444' },
+  { name: 'قرمز', hex: 'var(--danger)' },
 
   { name: 'نارنجی', hex: '#f97316' },
 
@@ -52,11 +52,11 @@ const COLOR_PRESETS = [
 
 const APPROVAL_COLORS = {
 
-  pending: '#f59e0b',
+  pending: 'var(--warning)',
 
-  approved: '#10b981',
+  approved: 'var(--success)',
 
-  rejected: '#ef4444',
+  rejected: 'var(--danger)',
 
 }
 
@@ -581,7 +581,7 @@ export default function Materials() {
 
                           <>
 
-                            <button type="button" className="link" onClick={() => approveMaterial(m)}>تایید</button>
+                            <button type="button" className="link link-success" onClick={() => approveMaterial(m)}>تایید</button>
 
                             <button type="button" className="link danger" onClick={() => rejectMaterial(m)}>رد</button>
 

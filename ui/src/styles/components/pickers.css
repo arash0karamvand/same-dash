@@ -1,0 +1,103 @@
+/* Date picker + custom select — jelly capsules */
+
+.jcal-trigger,
+.select-trigger {
+  border: 1px solid var(--jelly-rim);
+  border-radius: var(--radius-capsule);
+  background: var(--layer-0);
+  color: var(--text);
+  font-family: var(--font-body);
+  font-size: var(--text-sm);
+  box-shadow:
+    inset 0 2px 5px var(--jelly-shade-bottom),
+    inset 0 -1px 0 var(--jelly-gloss-mid);
+  transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+}
+
+.jcal-trigger:hover,
+.select-trigger:hover:not(:disabled) {
+  border-color: var(--jelly-rim-strong);
+  background: var(--layer-1);
+}
+
+.jcal-trigger:focus-visible,
+.select-trigger:focus-visible {
+  outline: none;
+  border-color: var(--jelly-rim-strong);
+  box-shadow:
+    inset 0 2px 5px var(--jelly-shade-bottom),
+    0 0 0 3px var(--accent-glow);
+}
+
+.jcal-trigger.placeholder,
+.select-trigger.placeholder {
+  color: var(--muted);
+}
+
+.jcal-panel,
+.select-panel,
+.select-dropdown {
+  background: var(--layer-3);
+  border: 1px solid var(--jelly-rim);
+  border-radius: var(--radius-pill);
+  box-shadow:
+    inset 0 1px 0 var(--jelly-gloss-top),
+    var(--jelly-drop);
+  overflow: hidden;
+}
+
+.jcal-panel-head {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.jcal-panel-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.jcal-today-btn,
+.jcal-done {
+  color: var(--text);
+  font-weight: 600;
+  border-radius: var(--radius-capsule);
+}
+
+.jcal-column-highlight {
+  background: var(--layer-1);
+  border-color: var(--jelly-rim-strong);
+  border-radius: var(--radius-capsule);
+}
+
+.jcal-cell,
+.select-option {
+  border-radius: var(--radius-capsule);
+}
+
+.jcal-cell.selected {
+  background: var(--layer-4);
+  color: var(--text);
+  box-shadow: inset 0 1px 0 var(--jelly-gloss-top);
+}
+
+.jcal-cell:hover:not(.selected) {
+  background: var(--layer-1);
+}
+
+.select-option.selected {
+  background: var(--layer-4);
+  color: var(--text);
+}
+
+.select-option:hover {
+  background: var(--layer-1);
+}
+
+.select-check {
+  color: var(--text);
+}
+
+.jcal-trigger-chevron {
+  color: var(--muted);
+  font-size: 10px;
+}

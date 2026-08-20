@@ -82,10 +82,10 @@ export default function EmployeeRanking() {
   }, [])
 
   const rankColor = (rank) => {
-    if (rank === 1) return '#f59e0b'
+    if (rank === 1) return 'var(--warning)'
     if (rank === 2) return '#94a3b8'
     if (rank === 3) return '#b45309'
-    return '#6366f1'
+    return 'var(--accent)'
   }
 
   const toggleRow = (userId) => {

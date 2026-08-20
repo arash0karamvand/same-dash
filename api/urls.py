@@ -59,6 +59,7 @@ urlpatterns = [
     path("config/menu-sections/", config.menu_section_list, name="config-menu-sections"),
     path("config/menu-sections/<int:pk>/", config.menu_section_detail, name="config-menu-section-detail"),
     path("config/page-guides/<slug:code>/", config.page_guide_detail, name="config-page-guide-detail"),
+    path("config/branding/logo/", config.branding_logo, name="config-branding-logo"),
     path("org-chart/", org_chart.org_chart, name="org-chart"),
 
     # --- Dashboard ---

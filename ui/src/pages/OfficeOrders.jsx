@@ -10,13 +10,13 @@ import { formatDate, formatMoney } from '../utils/format'
 import { toPersianDigits } from '../utils/jalali'
 
 const WORKFLOW_COLORS = {
-  pending_branch: '#f59e0b',
-  branch_approved: '#6366f1',
+  pending_branch: 'var(--warning)',
+  branch_approved: 'var(--accent)',
   accounting_approved: '#8b5cf6',
   in_production: '#0ea5e9',
   production_done: '#14b8a6',
   in_freight: '#f97316',
-  completed: '#10b981',
+  completed: 'var(--success)',
 }
 
 function WorkflowProgress({ percent, stage, stageLabel, detail, stageColor }) {
@@ -90,7 +90,7 @@ export default function OfficeOrders() {
 
   const stageColor = (stage) => {
     const fromDb = stageChoices.find((o) => o.value === stage)?.meta?.color
-    return fromDb || WORKFLOW_COLORS[stage] || '#6366f1'
+    return fromDb || WORKFLOW_COLORS[stage] || 'var(--accent)'
   }
 
   const load = useCallback(async () => {

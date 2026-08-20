@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { configApi } from '../api/client'
 import { useConfig } from '../context/ConfigContext'
 import { Badge, Button, Card, EmptyState, Field, Modal } from '../components/ui'
+import LogoSettings from '../components/LogoSettings'
 import { isSystemAdmin } from '../utils/permissions'
 
 const LOOKUP_CATEGORIES = [
@@ -15,7 +16,7 @@ const LOOKUP_CATEGORIES = [
   { id: 'staff_kind', label: 'نوع پرسنل' },
 ]
 
-const EMPTY_BRANCH = { code: '', label: '', color: '#6366f1', sort_order: 0 }
+const EMPTY_BRANCH = { code: '', label: '', color: 'var(--accent)', sort_order: 0 }
 const EMPTY_LOOKUP = { category: 'payment_method', code: '', label: '', sort_order: 0 }
 
 export default function Settings() {
@@ -152,7 +153,10 @@ export default function Settings() {
           <button type="button" className={`branch-tab ${tab === 'branches' ? 'active' : ''}`} onClick={() => setTab('branches')}>شعب</button>
           <button type="button" className={`branch-tab ${tab === 'lookups' ? 'active' : ''}`} onClick={() => setTab('lookups')}>گزینه‌ها</button>
           <button type="button" className={`branch-tab ${tab === 'menu' ? 'active' : ''}`} onClick={() => setTab('menu')}>منوی پنل</button>
+          <button type="button" className={`branch-tab ${tab === 'branding' ? 'active' : ''}`} onClick={() => setTab('branding')}>برندینگ</button>
         </div>
+
+        {tab === 'branding' && <LogoSettings onError={setError} onInfo={setInfo} />}
 
         {loading ? <p className="muted">در حال بارگذاری…</p> : (
           <>

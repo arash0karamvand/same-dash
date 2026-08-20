@@ -22,7 +22,6 @@ PORTAL_MODULE_SPECS = [
         "label": "مدیران",
         "icon": "👔",
         "page_key": "managers",
-        "executive_only": True,
         "default_page": "dashboard",
         "modules": [
             _mod(
@@ -32,6 +31,7 @@ PORTAL_MODULE_SPECS = [
                 "dashboard",
                 [P.VIEW_DASHBOARD],
                 [P.VIEW_DASHBOARD],
+                executive_only=True,
             ),
             _mod(
                 "managers_orders",
@@ -257,6 +257,20 @@ PORTAL_MODULE_SPECS = [
                     P.VIEW_REPORTS,
                     P.VIEW_FACTORY_ACCOUNTING,
                     P.TRANSFER_FACTORY_ACCOUNTING_TO_OFFICE,
+                ],
+            ),
+            _mod(
+                "office_factory_accounting",
+                "حسابداری کارخانه",
+                "🏭",
+                "factory-accounting",
+                [P.VIEW_FACTORY_ACCOUNTING],
+                [
+                    P.VIEW_FACTORY_ACCOUNTING,
+                    P.CREATE_FACTORY_ACCOUNTING,
+                    P.EDIT_FACTORY_ACCOUNTING,
+                    P.DELETE_FACTORY_ACCOUNTING,
+                    P.APPROVE_FACTORY_ACCOUNTING,
                 ],
             ),
             _mod(

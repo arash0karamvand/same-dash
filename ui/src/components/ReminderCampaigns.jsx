@@ -152,7 +152,7 @@ export default function ReminderCampaigns() {
                   </div>
                   <div className="reminder-actions">
                     <button type="button" className="link" onClick={() => openEdit(c)}>ویرایش</button>
-                    <button type="button" className="link" onClick={() => sendNow(c.id)}>ارسال الان</button>
+                    <button type="button" className="link link-success" onClick={() => sendNow(c.id)}>ارسال الان</button>
                     <button type="button" className="link danger" onClick={() => remove(c.id)}>حذف</button>
                   </div>
                 </div>

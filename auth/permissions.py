@@ -332,7 +332,6 @@ MENU_SECTIONS = [
         "label": "مدیران",
         "icon": "👔",
         "page_key": "managers",
-        "executive_only": True,
         "menu_permissions": [VIEW_DASHBOARD],
         "section_permissions": [
             VIEW_DASHBOARD,
@@ -453,35 +452,10 @@ def _accounting_active_office_sale(sale):
 
 
 def menu_sections_for_matrix(assignable_only=False):
-    """بخش‌های منو برای صفحه نقش‌ها — از MySQL."""
-    pool = ASSIGNABLE_PERMISSIONS if assignable_only else ALL_PERMISSIONS
-    try:
-        return _menu_sections_for_matrix(assignable_only=assignable_only, pool=pool)
-    except Exception:
-        sections = []
-        for sec in MENU_SECTIONS:
-            if assignable_only and sec.get("system_admin"):
-                continue
-            menu_codes = [c for c in sec["menu_permissions"] if c in pool]
-            section_codes = sorted(set(sec["section_permissions"]) & pool)
-            if not menu_codes and not section_codes:
-                continue
-            sections.append({
-                "id": sec["id"],
-                "label": sec["label"],
-                "icon": sec["icon"],
-                "page_key": sec["page_key"],
-                "system_admin": bool(sec.get("system_admin")),
-                "menu_permission_codes": menu_codes,
-                "section_permission_codes": section_codes,
-                "menu_permissions": [
-                    {"code": code, "label": PERMISSION_LABELS.get(code, code)} for code in menu_codes
-                ],
-                "section_permissions": [
-                    {"code": code, "label": PERMISSION_LABELS.get(code, code)} for code in section_codes
-                ],
-            })
-        return sections
+    """بخش‌های منو برای صفحه نقش‌ها — هم‌تراز با کاتالوگ ماژول."""
+    from logic.module_catalog import portal_modules_for_matrix
+
+    return portal_modules_for_matrix(assignable_only=assignable_only)
 
 
 def permission_groups_for_matrix(assignable_only=False):
@@ -546,14 +520,41 @@ def sanitize_role_permissions(slug, permissions):
     return sorted(perms - ADMIN_ONLY_PERMISSIONS)
 
 
+def get_user_extra_permissions(user):
+    """مجوزهای اضافی تخصیص‌یافته مستقیم به کاربر."""
+    from backend.models import UserAccessProfile
+
+    try:
+        profile = user.access_profile
+    except UserAccessProfile.DoesNotExist:
+        return set()
+    return set(profile.extra_permissions or []) & ALL_PERMISSIONS
+
+
+def sanitize_user_extra_permissions(permissions):
+    """فقط مجوزهای قابل تخصیص — بدون مجوزهای مخصوص مدیر سیستم."""
+    return sorted(set(permissions or []) & ASSIGNABLE_PERMISSIONS)
+
+
+def get_effective_user_permissions(user):
+    """مجوزهای مؤثر = نقش + اضافه‌های کاربر."""
+    from logic.role_definitions import get_role_permissions
+
+    if has_full_access(user):
+        return ALL_PERMISSIONS
+    role = get_user_role(user)
+    if role == PENDING:
+        base = set()
+    else:
+        base = set(get_role_permissions(role))
+    return base | get_user_extra_permissions(user)
+
+
 def has_permission(user, permission):
     """بررسی مجوز کاربر برای یک عملیات."""
     if has_full_access(user):
         return True
-    role = get_user_role(user)
-    from logic.role_definitions import get_role_permissions
-
-    return permission in get_role_permissions(role)
+    return permission in get_effective_user_permissions(user)
 
 
 def can_edit_sale(user, sale):
