@@ -12,9 +12,9 @@ const STAT_ACCENT_DEFAULT = 'var(--accent)'
 const LIQUID = 'liquid-glass liquid-glass--panel liquid-glass--jelly'
 
 // کارت آماری داشبورد
-export function StatCard({ label, value, hint, accent = STAT_ACCENT_DEFAULT }) {
+export function StatCard({ label, value, hint, accent = STAT_ACCENT_DEFAULT, className = '' }) {
   return (
-    <div className={`stat-card ${LIQUID}`}>
+    <div className={`stat-card ${LIQUID}${className ? ` ${className}` : ''}`}>
       <div className="stat-bar" style={{ background: accent }} />
       <div className="stat-body">
         <span className="stat-label">{label}</span>

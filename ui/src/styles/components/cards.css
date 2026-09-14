@@ -121,6 +121,7 @@
 .stat-value {
   font-size: var(--text-2xl);
   color: var(--text);
+  white-space: nowrap;
 }
 
 .stat-hint {

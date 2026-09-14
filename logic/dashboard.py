@@ -6,7 +6,13 @@ from django.utils import timezone
 from auth.permissions import MANAGE_ATTENDANCE, has_permission, is_system_admin
 from backend.models import Customer, LoyaltyLevel, Sale, SMSLog, StaffAttendance
 from logic.attendance import attendance_to_dict
-from logic.sales_day import filter_sales_for_jalali_day, today_jalali
+from logic.sales_day import (
+    filter_sales_for_jalali_day,
+    filter_sales_for_jalali_month,
+    filter_sales_for_jalali_range,
+    jalali_week_bounds,
+    today_jalali,
+)
 
 
 def build_dashboard_summary(user):
@@ -23,14 +29,21 @@ def build_dashboard_summary(user):
     ]
 
     recent_sales = Sale.objects.select_related("customer", "seller").order_by("-sold_at")[:5]
-    now = timezone.now()
-    sales_this_month = Sale.objects.filter(
-        sold_at__year=now.year, sold_at__month=now.month
-    ).aggregate(total=Sum("final_amount"), count=Count("id"))
+    all_sales = Sale.objects.all()
 
     jy, jm, jd = today_jalali()
-    sales_today_qs = filter_sales_for_jalali_day(Sale.objects.all(), jy, jm, jd)
-    sales_today = sales_today_qs.aggregate(total=Sum("final_amount"), count=Count("id"))
+    sales_today = filter_sales_for_jalali_day(all_sales, jy, jm, jd).aggregate(
+        total=Sum("final_amount"), count=Count("id")
+    )
+
+    week_start, week_end = jalali_week_bounds()
+    sales_this_week = filter_sales_for_jalali_range(
+        all_sales, *week_start, *week_end
+    ).aggregate(total=Sum("final_amount"), count=Count("id"))
+
+    sales_this_month = filter_sales_for_jalali_month(all_sales, jy, jm).aggregate(
+        total=Sum("final_amount"), count=Count("id")
+    )
 
     today = timezone.localdate()
 
@@ -44,11 +57,23 @@ def build_dashboard_summary(user):
             "jalali_month": jm,
             "jalali_day": jd,
         },
+        "sales_this_week": {
+            "count": sales_this_week["count"] or 0,
+            "total": int(sales_this_week["total"] or 0),
+            "start_jalali_year": week_start[0],
+            "start_jalali_month": week_start[1],
+            "start_jalali_day": week_start[2],
+            "end_jalali_year": week_end[0],
+            "end_jalali_month": week_end[1],
+            "end_jalali_day": week_end[2],
+        },
         "total_sales_amount": int(total_sales_amount),
         "sms_sent": SMSLog.objects.filter(status="sent").count(),
         "sales_this_month": {
             "count": sales_this_month["count"] or 0,
             "total": int(sales_this_month["total"] or 0),
+            "jalali_year": jy,
+            "jalali_month": jm,
         },
         "level_distribution": level_distribution,
         "recent_sales": [

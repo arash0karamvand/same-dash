@@ -6,7 +6,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from logic.jalali import date_to_jalali
-from logic.sales_day import filter_sales_for_jalali_day, sale_jalali_date
+from logic.sales_day import filter_sales_for_jalali_day, jalali_week_bounds, sale_jalali_date
 
 
 class SalesDayTest(TestCase):
@@ -54,3 +54,11 @@ class SalesDayTest(TestCase):
         qs = Sale.objects.select_related("customer").all()
         filtered = filter_sales_for_jalali_day(qs, jy, jm, jd)
         self.assertEqual(list(filtered.values_list("id", flat=True)), [on_day.id])
+
+    def test_jalali_week_bounds_saturday_to_friday(self):
+        saturday = datetime(2026, 9, 12).date()
+        self.assertEqual(saturday.weekday(), 5)
+        tuesday = datetime(2026, 9, 15).date()
+        start, end = jalali_week_bounds(tuesday)
+        self.assertEqual(start, date_to_jalali(saturday))
+        self.assertEqual(end, date_to_jalali(datetime(2026, 9, 18).date()))

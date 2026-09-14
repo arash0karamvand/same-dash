@@ -2,13 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import { dashboardApi, attendanceApi } from '../api/client'
-import { Badge, Button, Card, EmptyState, LinkAction, StatCard } from '../components/ui'
+import { Badge, Card, EmptyState, LinkAction, StatCard } from '../components/ui'
 import AttendanceWidget from '../components/AttendanceWidget'
 import { useAuth } from '../context/AuthContext'
 import { approvalColor } from '../config/statusColors'
 import { formatDate, formatMoney, formatNumber } from '../utils/format'
 import { hasPermission, isSystemAdmin } from '../utils/permissions'
-import { formatJalali, jalaliToIso } from '../utils/jalali'
+import { formatJalali, jalaliToIso, PERSIAN_MONTHS, toPersianDigits } from '../utils/jalali'
 
 function formatJalaliParts(jy, jm, jd) {
   if (!jy) return '—'
@@ -113,9 +113,9 @@ export default function Dashboard() {
         </Card>
       )}
 
-      <div className="stat-grid">
-        <StatCard label="تعداد مشتریان" value={formatNumber(stats.customers_count)} accent="var(--accent)" />
+      <div className="stat-grid dashboard-sales-stats">
         <StatCard
+          className="stat-card--amount"
           label="فروش امروز"
           value={formatMoney(stats.sales_today?.total ?? 0)}
           hint={
@@ -129,7 +129,45 @@ export default function Dashboard() {
           }
           accent="var(--success)"
         />
-        <StatCard label="مجموع فروش" value={formatMoney(stats.total_sales_amount)} accent="var(--warning)" />
+        <StatCard
+          className="stat-card--amount"
+          label="فروش این هفته"
+          value={formatMoney(stats.sales_this_week?.total ?? 0)}
+          hint={
+            stats.sales_this_week
+              ? `${formatNumber(stats.sales_this_week.count ?? 0)} فقره — ${formatJalaliParts(
+                  stats.sales_this_week.start_jalali_year,
+                  stats.sales_this_week.start_jalali_month,
+                  stats.sales_this_week.start_jalali_day,
+                )} تا ${formatJalaliParts(
+                  stats.sales_this_week.end_jalali_year,
+                  stats.sales_this_week.end_jalali_month,
+                  stats.sales_this_week.end_jalali_day,
+                )}`
+              : undefined
+          }
+          accent="var(--info)"
+        />
+        <StatCard
+          className="stat-card--amount"
+          label="فروش این ماه"
+          value={formatMoney(stats.sales_this_month?.total ?? 0)}
+          hint={
+            stats.sales_this_month
+              ? `${formatNumber(stats.sales_this_month.count ?? 0)} فقره${
+                  stats.sales_this_month.jalali_month
+                    ? ` — ${PERSIAN_MONTHS[stats.sales_this_month.jalali_month - 1]} ${toPersianDigits(stats.sales_this_month.jalali_year)}`
+                    : ''
+                }`
+              : undefined
+          }
+          accent="var(--warning)"
+        />
+      </div>
+
+      <div className="stat-grid dashboard-meta-stats">
+        <StatCard label="تعداد مشتریان" value={formatNumber(stats.customers_count)} accent="var(--accent)" />
+        <StatCard className="stat-card--amount" label="مجموع فروش" value={formatMoney(stats.total_sales_amount)} accent="var(--warning)" />
         <StatCard label="پیامک‌های ارسالی" value={formatNumber(stats.sms_sent)} accent="var(--info)" />
       </div>
 
@@ -195,19 +233,6 @@ export default function Dashboard() {
           )}
         </Card>
       </div>
-
-      <Card title="فروش این ماه">
-        <div className="inline-stats">
-          <div>
-            <span className="muted">تعداد</span>
-            <strong>{formatNumber(stats.sales_this_month.count)}</strong>
-          </div>
-          <div>
-            <span className="muted">مجموع مبلغ</span>
-            <strong>{formatMoney(stats.sales_this_month.total)}</strong>
-          </div>
-        </div>
-      </Card>
 
       {stats.pending_attendance?.length > 0 && (
         <Card title="حضور در انتظار تایید">

@@ -169,6 +169,12 @@ input[type='radio'] {
   flex-direction: column;
   gap: 7px;
   width: 100%;
+  min-width: 18ch;
+}
+
+.money-input-wrap input {
+  min-width: 18ch;
+  font-variant-numeric: tabular-nums;
 }
 
 .money-input-hint {

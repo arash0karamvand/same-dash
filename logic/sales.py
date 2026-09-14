@@ -431,6 +431,9 @@ def record_sale(
                 unit_price=price,
                 line_total=price * qty,
             )
+        from logic.products import deduct_variant_stock_for_sale
+
+        deduct_variant_stock_for_sale(sale, recorded_by=recorded_by)
 
     if order_kind == Sale.ORDER_KIND_PRE_INVOICE:
         if not defer_accounting:
@@ -485,6 +488,10 @@ def delete_sale(sale, user=None):
 
     if wallet_used > 0:
         _refund_wallet_discount(customer, wallet_used, sale, user=user)
+
+    from logic.products import restore_variant_stock_for_sale
+
+    restore_variant_stock_for_sale(sale, recorded_by=user)
 
     _reverse_purchase_from_customer(customer, paid_amount)
     _refresh_customer_last_purchase(customer, exclude_sale_id=sale.pk)
@@ -643,6 +650,9 @@ def cancel_order(sale, recorded_by=None):
 
     sale.order_status = Sale.ORDER_STATUS_CANCELLED
     sale.save(update_fields=["order_status"])
+    from logic.products import restore_variant_stock_for_sale
+
+    restore_variant_stock_for_sale(sale, recorded_by=recorded_by)
     update_customer_level(customer, reason=f"لغو سفارش #{sale.pk}", user=recorded_by, send_level_up_sms=False)
     return sale
 
@@ -650,7 +660,11 @@ def cancel_order(sale, recorded_by=None):
 def _replace_sale_line_items(sale, line_items):
     """جایگزینی اقلام فاکتور — مبلغ جدید از جمع ردیف‌ها."""
     from backend.models import SaleLineItem
-    from logic.products import resolve_line_item_from_catalog
+    from logic.products import (
+        deduct_variant_stock_for_sale,
+        resolve_line_item_from_catalog,
+        restore_variant_stock_for_sale,
+    )
 
     resolved_items = []
     amount = Decimal(0)
@@ -661,6 +675,7 @@ def _replace_sale_line_items(sale, line_items):
         resolved_items.append(resolved)
         amount += Decimal(resolved["unit_price"]) * resolved["quantity"]
 
+    restore_variant_stock_for_sale(sale, recorded_by=sale.recorded_by)
     sale.line_items.all().delete()
     for resolved in resolved_items:
         qty = resolved["quantity"]
@@ -678,6 +693,7 @@ def _replace_sale_line_items(sale, line_items):
             unit_price=price,
             line_total=price * qty,
         )
+    deduct_variant_stock_for_sale(sale, recorded_by=sale.recorded_by)
     return amount
 
 

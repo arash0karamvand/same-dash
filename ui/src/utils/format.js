@@ -12,6 +12,22 @@ function joinParts(parts) {
   return parts.filter(Boolean).join(' و ')
 }
 
+/** فقط ارقام انگلیسی از مقدار مبلغ (ارقام فارسی و جداکننده حذف می‌شوند) */
+export function digitsOnly(value) {
+  if (value === '' || value === null || value === undefined) return ''
+  return String(value)
+    .replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
+    .replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)))
+    .replace(/[^\d]/g, '')
+}
+
+/** جداکننده هزارگان با کاما برای ورودی مبلغ — مثلاً 000,000,000 */
+export function formatGroupedDigits(value) {
+  const raw = digitsOnly(value)
+  if (!raw) return ''
+  return raw.replace(/\B(?=(\d{3})+(?!\d))/g, ',')
+}
+
 /** تبدیل رشته مبلغ (ارقام فارسی/انگلیسی، کاما) به عدد */
 export function parseAmount(value) {
   if (value === '' || value === null || value === undefined) return NaN

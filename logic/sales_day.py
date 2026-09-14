@@ -1,5 +1,7 @@
 """فیلتر فروش بر اساس روز شمسی — ۱۲ تیر فقط ۱۲ تیر، بدون قاطی با روز دیگر."""
 
+from datetime import timedelta
+
 from django.utils import timezone
 
 from logic.jalali import date_to_jalali
@@ -26,6 +28,14 @@ def _sold_at_rows(qs):
 
 def today_jalali():
     return date_to_jalali(timezone.localdate())
+
+
+def jalali_week_bounds(day=None):
+    """شروع و پایان هفته شمسی (شنبه تا جمعه) به‌صورت دو تاپل (سال، ماه، روز)."""
+    day = day or timezone.localdate()
+    start = day - timedelta(days=(day.weekday() + 2) % 7)
+    end = start + timedelta(days=6)
+    return date_to_jalali(start), date_to_jalali(end)
 
 
 def filter_sales_for_jalali_day(qs, jy, jm, jd):

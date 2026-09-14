@@ -57,7 +57,7 @@ def product_material_to_dict(pm):
     unit_cost = Decimal(material.unit_cost or 0)
     line_cost = qty * unit_cost
     return {
-        "id": pm.id,
+        "id": f"{pm.product_id}:{pm.material_id}",
         "material_id": material.id,
         "material": material_to_dict(material),
         "quantity": float(qty),
@@ -252,7 +252,6 @@ def _parse_product_materials(raw_items):
             raise ValueError("مقدار مصرف متریال باید بزرگ‌تر از صفر باشد.")
         parsed.append(
             {
-                "id": item.get("id"),
                 "material_id": int(material_id),
                 "quantity": quantity,
                 "sort_order": int(item.get("sort_order") if item.get("sort_order") is not None else idx),
@@ -264,7 +263,7 @@ def _parse_product_materials(raw_items):
 @transaction.atomic
 def sync_product_materials(product, raw_items):
     items = _parse_product_materials(raw_items)
-    keep_ids = []
+    keep_material_ids = []
     for item in items:
         material = Material.objects.filter(
             pk=item["material_id"],
@@ -273,18 +272,12 @@ def sync_product_materials(product, raw_items):
         ).first()
         if not material:
             raise ValueError("متریال انتخاب‌شده یافت نشد یا هنوز تایید اداری نشده است.")
-        pm_id = item.get("id")
-        if pm_id:
-            pm = ProductMaterial.objects.filter(pk=pm_id, product=product).first()
-            if not pm:
-                pm = ProductMaterial(product=product, material=material)
-        else:
-            pm, _ = ProductMaterial.objects.get_or_create(product=product, material=material)
+        pm, _ = ProductMaterial.objects.get_or_create(product=product, material=material)
         pm.quantity = item["quantity"]
         pm.sort_order = item["sort_order"]
         pm.save()
-        keep_ids.append(pm.id)
-    product.product_materials.exclude(pk__in=keep_ids).delete()
+        keep_material_ids.append(material.pk)
+    product.product_materials.exclude(material_id__in=keep_material_ids).delete()
     return product
 
 
@@ -374,18 +367,36 @@ def _format_material_shortages(requirements):
 
 @transaction.atomic
 def deduct_materials_for_factory_order(factory_order):
+    from backend.models import Material, Sale
+
+    factory_order = Sale.objects.select_for_update().get(pk=factory_order.pk)
     if getattr(factory_order, "materials_deducted_at", None):
         return factory_order
 
     requirements = compute_factory_order_material_requirements(factory_order)
+    tracked = [item for item in requirements if item["available_stock"] is not None]
+    material_ids = sorted({item["material_id"] for item in tracked})
+    locked = {}
+    if material_ids:
+        locked = {
+            material.pk: material
+            for material in Material.objects.select_for_update().filter(pk__in=material_ids).order_by("pk")
+        }
+    for item in tracked:
+        material = locked[item["material_id"]]
+        stock = Decimal(material.stock or 0)
+        req_qty = Decimal(str(item["required_quantity"]))
+        shortage = max(Decimal(0), req_qty - stock)
+        item["available_stock"] = float(stock)
+        item["shortage"] = float(shortage)
+        item["sufficient"] = stock >= req_qty
+
     shortages = _format_material_shortages(requirements)
     if shortages:
         raise ValueError("موجودی متریال کافی نیست — " + "؛ ".join(shortages))
 
-    for item in requirements:
-        if item["available_stock"] is None:
-            continue
-        material = Material.objects.select_for_update().get(pk=item["material_id"])
+    for item in tracked:
+        material = locked[item["material_id"]]
         InventoryTransaction.objects.create(
             material=material,
             quantity=-Decimal(str(item["required_quantity"])),
@@ -407,14 +418,23 @@ def deduct_materials_for_factory_order(factory_order):
 
 @transaction.atomic
 def restore_materials_for_factory_order(factory_order):
+    from backend.models import Material, Sale
+
+    factory_order = Sale.objects.select_for_update().get(pk=factory_order.pk)
     if not getattr(factory_order, "materials_deducted_at", None):
         return factory_order
 
     requirements = compute_factory_order_material_requirements(factory_order)
-    for item in requirements:
-        if item["available_stock"] is None:
-            continue
-        material = Material.objects.select_for_update().get(pk=item["material_id"])
+    tracked = [item for item in requirements if item["available_stock"] is not None]
+    material_ids = sorted({item["material_id"] for item in tracked})
+    locked = {}
+    if material_ids:
+        locked = {
+            material.pk: material
+            for material in Material.objects.select_for_update().filter(pk__in=material_ids).order_by("pk")
+        }
+    for item in tracked:
+        material = locked[item["material_id"]]
         InventoryTransaction.objects.create(
             material=material,
             quantity=Decimal(str(item["required_quantity"])),

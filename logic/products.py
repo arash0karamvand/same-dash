@@ -74,7 +74,7 @@ def product_to_dict(p, include_variants=True, *, audience="sales"):
                 material__is_deleted=False,
                 material__is_active=True,
                 material__approval_status_ref_id=Material.APPROVAL_APPROVED,
-            ).order_by("sort_order", "id")
+            ).order_by("sort_order", "material_id")
         ]
         material_cost = compute_product_material_cost(p)
         data["materials"] = materials
@@ -132,10 +132,11 @@ def _sync_variants(product, variants_data):
         variant.save()
         requested_stock = item.get("stock")
         if requested_stock is not None:
-            stock_delta = Decimal(requested_stock) - Decimal(variant.stock)
+            locked = ProductVariant.objects.select_for_update().get(pk=variant.pk)
+            stock_delta = Decimal(requested_stock) - Decimal(locked.stock or 0)
             if stock_delta:
                 InventoryTransaction.objects.create(
-                    variant=variant,
+                    variant=locked,
                     quantity=stock_delta,
                     reason="catalog_stock_adjustment",
                     reference=f"product:{product.pk}",
@@ -356,3 +357,122 @@ def resolve_line_item_from_catalog(item):
         "unit_price": price,
         "quantity": int(item.get("quantity") or 1),
     }
+
+
+SALE_STOCK_REASON = "sale"
+SALE_STOCK_ROLLBACK_REASON = "sale_rollback"
+
+
+def _sale_line_stock_reference(sale, line):
+    return f"sale:{sale.pk}:line:{line.pk}"
+
+
+def _format_stock_qty(value):
+    value = Decimal(value or 0)
+    if value == value.to_integral_value():
+        return str(int(value))
+    return format(value.normalize(), "f")
+
+
+def _lock_variants(variant_ids):
+    ids = sorted({vid for vid in variant_ids if vid})
+    if not ids:
+        return {}
+    rows = list(
+        ProductVariant.objects.select_for_update()
+        .select_related("product")
+        .filter(pk__in=ids)
+        .order_by("pk")
+    )
+    return {variant.pk: variant for variant in rows}
+
+
+def _variant_label(variant):
+    name = variant.product.name if variant.product_id else "محصول"
+    if variant.color_name:
+        return f"{name} ({variant.color_name})"
+    return name
+
+
+def deduct_variant_stock_for_sale(sale, *, recorded_by=None):
+    """کسر موجودی رنگ محصول با قفل ردیف — جلوگیری از فروش همزمان بیش از موجودی."""
+    from collections import defaultdict
+
+    from backend.models import Sale
+
+    Sale.objects.select_for_update().get(pk=sale.pk)
+    lines = [line for line in sale.line_items.all() if line.variant_id]
+    if not lines:
+        return
+
+    pending_by_variant = defaultdict(list)
+    for line in lines:
+        reference = _sale_line_stock_reference(sale, line)
+        if InventoryTransaction.objects.filter(reference=reference, reason=SALE_STOCK_REASON).exists():
+            continue
+        pending_by_variant[line.variant_id].append(line)
+
+    if not pending_by_variant:
+        return
+
+    locked = _lock_variants(pending_by_variant)
+    for variant_id, variant_lines in pending_by_variant.items():
+        variant = locked.get(variant_id)
+        if variant is None:
+            continue
+        if not variant.inventory_movements.exists():
+            continue
+        needed = sum((Decimal(line.quantity or 0) for line in variant_lines), Decimal(0))
+        stock = Decimal(variant.stock or 0)
+        if stock < needed:
+            raise ValueError(
+                f"موجودی «{_variant_label(variant)}» کافی نیست — "
+                f"موجود {_format_stock_qty(stock)}، درخواست {_format_stock_qty(needed)}."
+            )
+        for line in variant_lines:
+            qty = Decimal(line.quantity or 0)
+            if qty <= 0:
+                continue
+            InventoryTransaction.objects.create(
+                variant=variant,
+                quantity=-qty,
+                reason=SALE_STOCK_REASON,
+                reference=_sale_line_stock_reference(sale, line),
+                recorded_by=recorded_by,
+            )
+
+
+def restore_variant_stock_for_sale(sale, *, recorded_by=None):
+    """بازگشت موجودی کسرشدهٔ فروش — برای حذف، لغو یا ویرایش اقلام."""
+    from backend.models import Sale
+
+    Sale.objects.select_for_update().get(pk=sale.pk)
+    deducted = list(
+        InventoryTransaction.objects.filter(
+            reference__startswith=f"sale:{sale.pk}:line:",
+            reason=SALE_STOCK_REASON,
+            variant_id__isnull=False,
+        )
+    )
+    pending = []
+    for tx in deducted:
+        if InventoryTransaction.objects.filter(
+            reference=tx.reference, reason=SALE_STOCK_ROLLBACK_REASON
+        ).exists():
+            continue
+        pending.append(tx)
+    if not pending:
+        return
+
+    locked = _lock_variants(tx.variant_id for tx in pending)
+    for tx in pending:
+        variant = locked.get(tx.variant_id)
+        if variant is None:
+            continue
+        InventoryTransaction.objects.create(
+            variant=variant,
+            quantity=-tx.quantity,
+            reason=SALE_STOCK_ROLLBACK_REASON,
+            reference=tx.reference,
+            recorded_by=recorded_by,
+        )

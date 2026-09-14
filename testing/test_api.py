@@ -256,6 +256,10 @@ class DashboardApiTest(TestCase):
         self.assertIn("customers_count", body["data"])
         self.assertIn("sales_today", body["data"])
         self.assertIn("jalali_day", body["data"]["sales_today"])
+        self.assertIn("sales_this_week", body["data"])
+        self.assertIn("sales_this_month", body["data"])
+        self.assertIn("start_jalali_day", body["data"]["sales_this_week"])
+        self.assertIn("jalali_month", body["data"]["sales_this_month"])
 
 
 class StaffApiTest(TestCase):

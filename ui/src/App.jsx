@@ -9,6 +9,7 @@ import Layout from './components/Layout'
 import Login from './pages/Login'
 import { canAccessRoute, getFirstAccessibleRoute } from './utils/permissions'
 import { navigateToRoute, parseRoute, resolvePage } from './utils/routing'
+import { preventNumberInputWheel } from './utils/numberInputs'
 import Dashboard from './pages/Dashboard'
 import Customers from './pages/Customers'
 import Products from './pages/Products'
@@ -136,7 +137,11 @@ function Shell() {
       })
     }
     window.addEventListener('popstate', onPop)
-    return () => window.removeEventListener('popstate', onPop)
+    document.addEventListener('wheel', preventNumberInputWheel, { passive: false })
+    return () => {
+      window.removeEventListener('popstate', onPop)
+      document.removeEventListener('wheel', preventNumberInputWheel)
+    }
   }, [])
 
   useEffect(() => {

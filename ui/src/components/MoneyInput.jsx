@@ -1,7 +1,8 @@
 // ورودی مبلغ با نمایش حروف فارسی زیر فیلد
 
+import { useLayoutEffect, useRef } from 'react'
 import { CURRENCY_UNIT } from '../config/money'
-import { getAmountWords } from '../utils/format'
+import { digitsOnly, formatGroupedDigits, getAmountWords } from '../utils/format'
 
 export default function MoneyInput({
   value,
@@ -18,12 +19,51 @@ export default function MoneyInput({
   id,
 }) {
   const words = getAmountWords(value, unit)
+  const inputRef = useRef(null)
+  const caretDigitsRef = useRef(null)
+  const display = formatGroupedDigits(value)
+
+  const emit = (event, raw) => {
+    onChange({
+      ...event,
+      target: { value: raw, name, id },
+    })
+  }
+
+  const handleChange = (event) => {
+    const rawDisplay = event.target.value
+    const caret = event.target.selectionStart ?? rawDisplay.length
+    caretDigitsRef.current = digitsOnly(rawDisplay.slice(0, caret)).length
+    let raw = digitsOnly(rawDisplay)
+    if (max != null && max !== '' && raw && Number(raw) > Number(max)) {
+      raw = String(Math.trunc(Number(max)))
+    }
+    emit(event, raw)
+  }
+
+  useLayoutEffect(() => {
+    const input = inputRef.current
+    const digitsWanted = caretDigitsRef.current
+    if (!input || digitsWanted == null || document.activeElement !== input) return
+    const formatted = input.value
+    let pos = 0
+    let seen = 0
+    while (pos < formatted.length && seen < digitsWanted) {
+      if (/\d/.test(formatted[pos])) seen += 1
+      pos += 1
+    }
+    input.setSelectionRange(pos, pos)
+    caretDigitsRef.current = null
+  }, [display])
 
   return (
     <div className="money-input-wrap">
       <input
+        ref={inputRef}
         className={className}
-        type="number"
+        type="text"
+        inputMode="numeric"
+        autoComplete="off"
         name={name}
         id={id}
         min={min}
@@ -32,9 +72,9 @@ export default function MoneyInput({
         required={required}
         placeholder={placeholder}
         disabled={disabled}
-        value={value}
-        onChange={onChange}
-        inputMode="numeric"
+        value={display}
+        onChange={handleChange}
+        onWheel={(event) => event.currentTarget.blur()}
       />
       {words ? <span className="money-input-hint" aria-live="polite">{words}</span> : null}
     </div>
