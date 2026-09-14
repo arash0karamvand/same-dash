@@ -10,9 +10,10 @@ from io import BytesIO
 from django.db import transaction
 from django.utils import timezone
 
-from backend.models import Account, AccountingEntry, DetailedAccount, SubsidiaryAccount
-from logic.accounting import generate_document_code
-from logic.accounting_accounts import CHART_OF_ACCOUNTS, seed_accounts
+from backend.models import Account, JournalEntry
+from logic.accounting import create_journal
+from logic.accounting_accounts import seed_accounts
+from logic.chart_of_accounts import infer_account_class, infer_normal_balance, slug_for_code
 from logic.jalali import parse_jalali_date
 from logic.ledger import OFFICE_LEDGER
 
@@ -233,32 +234,6 @@ def parse_account_code(code):
     raise ValueError(f"کد حساب نامعتبر: {code}")
 
 
-def infer_account_class(code):
-    first = (code or "0")[0]
-    return {
-        "1": "asset",
-        "4": "liability",
-        "5": "liability",
-        "6": "equity",
-        "7": "revenue",
-        "8": "expense",
-        "9": "expense",
-    }.get(first, "asset")
-
-
-def infer_normal_balance(account_class):
-    if account_class in {"liability", "equity", "revenue"}:
-        return "credit"
-    return "debit"
-
-
-def _slug_for_code(code):
-    for row in CHART_OF_ACCOUNTS:
-        if row.get("code") == code:
-            return row["slug"]
-    return f"excel_{code}"
-
-
 def validate_excel_workbook(workbook):
     parsed = ParsedExcel()
     general_ws = _find_sheet(workbook, SHEET_ALIASES["general"])
@@ -352,8 +327,7 @@ def parse_excel_file(file_obj):
 
 
 def _get_or_create_general_account(code, name, *, ledger=OFFICE_LEDGER):
-    AccountModel = ledger.Account
-    account = AccountModel.objects.filter(code=code).first()
+    account = ledger.accounts().filter(code=code, parent__isnull=True).first()
     if account:
         clean_name = name.strip()
         if clean_name and account.name != clean_name:
@@ -361,10 +335,10 @@ def _get_or_create_general_account(code, name, *, ledger=OFFICE_LEDGER):
             account.save(update_fields=["name"])
         return account, False
 
-    slug = _slug_for_code(code)
+    slug = slug_for_code(code)
     account_class = infer_account_class(code)
-    account, created = AccountModel.objects.get_or_create(
-        slug=slug,
+    account, created = Account.objects.get_or_create(
+        ledger=ledger.model, slug=slug,
         defaults={
             "code": code,
             "name": name.strip() or f"حساب {code}",
@@ -381,43 +355,41 @@ def _get_or_create_general_account(code, name, *, ledger=OFFICE_LEDGER):
 
 
 def _get_or_create_subsidiary(general_code, sub_code, name, *, ledger=OFFICE_LEDGER):
-    AccountModel = ledger.Account
-    SubsidiaryModel = ledger.SubsidiaryAccount
-    account = AccountModel.objects.filter(code=general_code).first()
+    account = ledger.accounts().filter(code=general_code, parent__isnull=True).first()
     if not account:
         account, _ = _get_or_create_general_account(general_code, name, ledger=ledger)
-    sub = SubsidiaryModel.objects.filter(account=account, code=sub_code).first()
+    sub = ledger.accounts().filter(parent=account, code=sub_code).first()
     if sub:
         clean_name = name.strip()
         if clean_name and sub.name != clean_name:
             sub.name = clean_name
             sub.save(update_fields=["name"])
         return sub, False
-    sub = SubsidiaryModel.objects.create(
-        account=account,
+    sub = Account.objects.create(
+        ledger=ledger.model, parent=account, slug=f"{account.slug}-{sub_code}",
         code=sub_code,
         name=name.strip() or f"معین {general_code}/{sub_code}",
+        account_class=account.account_class, normal_balance=account.normal_balance,
     )
     return sub, True
 
 
 def _get_or_create_detailed(general_code, sub_code, detail_code, name, *, ledger=OFFICE_LEDGER):
-    SubsidiaryModel = ledger.SubsidiaryAccount
-    DetailedModel = ledger.DetailedAccount
-    subsidiary = SubsidiaryModel.objects.filter(account__code=general_code, code=sub_code).first()
+    subsidiary = ledger.accounts().filter(parent__code=general_code, code=sub_code).first()
     if not subsidiary:
         subsidiary, _ = _get_or_create_subsidiary(general_code, sub_code, name, ledger=ledger)
-    detail = DetailedModel.objects.filter(subsidiary=subsidiary, code=detail_code).first()
+    detail = ledger.accounts().filter(parent=subsidiary, code=detail_code).first()
     if detail:
         clean_name = name.strip()
         if clean_name and detail.name != clean_name:
             detail.name = clean_name
             detail.save(update_fields=["name"])
         return detail, False
-    detail = DetailedModel.objects.create(
-        subsidiary=subsidiary,
+    detail = Account.objects.create(
+        ledger=ledger.model, parent=subsidiary, slug=f"{subsidiary.slug}-{detail_code}",
         code=detail_code,
         name=name.strip() or f"تفصیلی {general_code}/{sub_code}/{detail_code}",
+        account_class=subsidiary.account_class, normal_balance=subsidiary.normal_balance,
     )
     return detail, True
 
@@ -432,7 +404,6 @@ def _resolve_detailed_by_code(full_code, fallback_name="", *, ledger=OFFICE_LEDG
 @transaction.atomic
 def import_excel_file(file_obj, *, dry_run=False, approve=False, force=False, ledger=OFFICE_LEDGER):
     seed_accounts(ledger=ledger)
-    EntryModel = ledger.AccountingEntry
     parsed = parse_excel_file(file_obj)
     if parsed.errors:
         return _build_report(parsed, dry_run=dry_run, committed=False)
@@ -487,9 +458,7 @@ def import_excel_file(file_obj, *, dry_run=False, approve=False, force=False, le
             parsed.detail_ledger_account_name,
             ledger=ledger,
         )
-        subsidiary = detailed.subsidiary
-        account = subsidiary.account
-        doc_codes = {}
+        documents = {}
 
         for row in parsed.detail_ledger_rows:
             if row.debit <= 0 and row.credit <= 0:
@@ -500,43 +469,26 @@ def import_excel_file(file_obj, *, dry_run=False, approve=False, force=False, le
                 parsed.warnings.append(f"تاریخ نامعتبر {row.entry_date}: {exc}")
                 continue
 
-            exists = EntryModel.objects.filter(
-                detailed=detailed,
-                document_number=row.document_number,
-                entry_date__date=entry_date.date(),
-                debit=row.debit,
-                credit=row.credit,
-                description=row.description,
-            ).exists()
-            if exists:
-                stats["entries_skipped"] += 1
+            documents.setdefault((row.document_number, entry_date), []).append(row)
+
+        for (number, entry_date), rows in documents.items():
+            if JournalEntry.objects.filter(ledger__code=ledger.id, document_number=number).exists():
+                stats["entries_skipped"] += len(rows)
                 continue
-
-            doc_code = doc_codes.get(row.document_number)
-            if not doc_code:
-                doc_code = generate_document_code(entry_date=entry_date, ledger=ledger)
-                doc_codes[row.document_number] = doc_code
-
-            amount = row.debit or row.credit
-            EntryModel.objects.create(
-                entry_type="manual",
-                account=account,
-                subsidiary=subsidiary,
-                detailed=detailed,
-                debit=row.debit,
-                credit=row.credit,
-                amount=amount,
-                description=row.description or f"سند {row.document_number}",
-                document_code=doc_code,
-                document_number=row.document_number,
-                attach_code=row.attach_code,
-                general_account=account.get_account_class_display(),
-                subsidiary_account=subsidiary.name,
-                detailed_account=detailed.name,
-                is_approved=approve,
-                entry_date=entry_date,
+            debit = sum(row.debit for row in rows)
+            credit = sum(row.credit for row in rows)
+            if len(rows) < 2 or debit != credit:
+                parsed.warnings.append(f"سند {number} نامتوازن یا تک‌ردیفی بود و وارد نشد.")
+                stats["entries_skipped"] += len(rows)
+                continue
+            create_journal(
+                lines=[{"account": detailed, "debit": row.debit, "credit": row.credit,
+                        "description": row.description or f"سند {number}"} for row in rows],
+                entry_type="manual", description=f"سند وارداتی {number}",
+                document_number=number, entry_date=entry_date,
+                is_approved=approve, ledger=ledger,
             )
-            stats["entries_created"] += 1
+            stats["entries_created"] += len(rows)
 
     if dry_run:
         transaction.set_rollback(True)

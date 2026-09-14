@@ -6,7 +6,7 @@ export const RECORD_FILTER_SCOPES = {
 }
 
 const OFFICE_SECTION_DEFAULTS = {
-  resultLimit: 30,
+  resultLimit: 10,
   liveSearch: true,
   compact: true,
   unified: true,
@@ -103,7 +103,7 @@ export const OFFICE_PORTAL_FILTER = {
 }
 
 /** تبدیل state فیلتر به query string برای API لیست اداری */
-export function recordFiltersToQueryString(filters, { limit = 30, extra = {} } = {}) {
+export function recordFiltersToQueryString(filters, { limit = 10, offset = 0, extra = {} } = {}) {
   const p = new URLSearchParams()
   if (filters?.date_from) p.set('date_from', filters.date_from)
   if (filters?.date_to) p.set('date_to', filters.date_to)
@@ -118,13 +118,14 @@ export function recordFiltersToQueryString(filters, { limit = 30, extra = {} } =
     p.set('amount_field', filters.amount_field)
   }
   p.set('limit', String(limit))
+  if (offset) p.set('offset', String(offset))
   Object.entries(extra).forEach(([k, v]) => {
     if (v != null && v !== '') p.set(k, String(v))
   })
   return p.toString()
 }
 
-export function recordFiltersToApiParams(filters, { limit = 30 } = {}) {
+export function recordFiltersToApiParams(filters, { limit = 10 } = {}) {
   if (!filters?.model) return null
   return {
     model: filters.model,

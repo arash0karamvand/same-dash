@@ -1,105 +1,57 @@
-"""محاسبه دفتر کل — افتتاحیه، گردش و مانده هر حساب."""
+"""General ledger calculated from posted or draft journal lines."""
 
 from decimal import Decimal
-
 from django.db.models import Q, Sum
 
+from backend.models import AccountClosure, JournalEntry, JournalLine
 from logic.accounting_accounts import account_to_dict, seed_accounts
 from logic.ledger import OFFICE_LEDGER
 
 
-def _money(value):
-    return int(value or 0)
+def _split(debit, credit):
+    net = Decimal(debit or 0) - Decimal(credit or 0)
+    return (int(net), 0) if net >= 0 else (0, int(-net))
 
 
-def _split_balance(debit_sum, credit_sum):
-    """خالص بدهکار/بستانکار را به دو ستون نمایشی تبدیل می‌کند."""
-    net = Decimal(debit_sum or 0) - Decimal(credit_sum or 0)
-    if net >= 0:
-        return _money(net), 0
-    return 0, _money(-net)
-
-
-def _entry_base_qs(*, approved_only=False, ledger=OFFICE_LEDGER):
-    EntryModel = ledger.AccountingEntry
-    qs = EntryModel.objects.filter(account__isnull=False)
-    if ledger.syncs_sales:
-        qs = qs.filter(Q(sale__isnull=True) | Q(sale__is_deleted=False))
-    if approved_only:
-        qs = qs.filter(is_approved=True)
-    return qs
-
-
-def ledger_for_accounts(*, date_from=None, date_to=None, account_class=None, approved_only=False, ledger=OFFICE_LEDGER):
-    """ردیف دفتر کل برای هر حساب فعال."""
+def ledger_for_accounts(*, date_from=None, date_to=None, account_class=None,
+                        approved_only=False, ledger=OFFICE_LEDGER):
     seed_accounts(ledger=ledger)
-    AccountModel = ledger.Account
-
-    accounts = AccountModel.objects.filter(is_active=True).order_by("sort_order", "name")
+    accounts = ledger.accounts().filter(parent__isnull=True, is_active=True)
     if account_class:
         accounts = accounts.filter(account_class=account_class)
-
-    base = _entry_base_qs(approved_only=approved_only, ledger=ledger)
-
+    base = JournalLine.objects.filter(journal__ledger__code=ledger.id)
+    if approved_only:
+        base = base.filter(journal__status_ref_id=JournalEntry.STATUS_POSTED)
     rows = []
-    for account in accounts:
-        account_entries = base.filter(account_id=account.id)
-
-        opening_qs = account_entries
+    for account in accounts.order_by("sort_order", "name"):
+        descendants = AccountClosure.objects.filter(ancestor=account).values("descendant_id")
+        lines = base.filter(account_id__in=descendants)
+        opening = lines.filter(journal__entry_date__date__lt=date_from) if date_from else lines.none()
+        turnover = lines
         if date_from:
-            opening_qs = opening_qs.filter(entry_date__date__lt=date_from)
-
-        turnover_qs = account_entries
-        if date_from:
-            turnover_qs = turnover_qs.filter(entry_date__date__gte=date_from)
+            turnover = turnover.filter(journal__entry_date__date__gte=date_from)
         if date_to:
-            turnover_qs = turnover_qs.filter(entry_date__date__lte=date_to)
-
-        opening_agg = opening_qs.aggregate(debit=Sum("debit"), credit=Sum("credit"))
-        turnover_agg = turnover_qs.aggregate(debit=Sum("debit"), credit=Sum("credit"))
-
-        opening_debit_raw = opening_agg["debit"] or 0
-        opening_credit_raw = opening_agg["credit"] or 0
-        turnover_debit = _money(turnover_agg["debit"])
-        turnover_credit = _money(turnover_agg["credit"])
-
-        opening_debit, opening_credit = _split_balance(opening_debit_raw, opening_credit_raw)
-
-        total_debit_raw = Decimal(opening_debit_raw) + Decimal(turnover_agg["debit"] or 0)
-        total_credit_raw = Decimal(opening_credit_raw) + Decimal(turnover_agg["credit"] or 0)
-        balance_debit, balance_credit = _split_balance(total_debit_raw, total_credit_raw)
-
-        info = account_to_dict(account)
-        rows.append(
-            {
-                "account_id": account.id,
-                "account_code": account.code or str(account.sort_order).zfill(4),
-                "account_name": account.name,
-                "account_class": info["account_class"],
-                "account_class_label": info["account_class_label"],
-                "opening_debit": opening_debit,
-                "opening_credit": opening_credit,
-                "turnover_debit": turnover_debit,
-                "turnover_credit": turnover_credit,
-                "balance_debit": balance_debit,
-                "balance_credit": balance_credit,
-            }
+            turnover = turnover.filter(journal__entry_date__date__lte=date_to)
+        op = opening.aggregate(d=Sum("debit"), c=Sum("credit"))
+        turn = turnover.aggregate(d=Sum("debit"), c=Sum("credit"))
+        opening_debit, opening_credit = _split(op["d"], op["c"])
+        balance_debit, balance_credit = _split(
+            Decimal(op["d"] or 0) + Decimal(turn["d"] or 0),
+            Decimal(op["c"] or 0) + Decimal(turn["c"] or 0),
         )
-
+        info = account_to_dict(account)
+        rows.append({
+            "account_id": account.id, "account_code": account.code,
+            "account_name": account.name, "account_class": info["account_class"],
+            "account_class_label": info["account_class_label"],
+            "opening_debit": opening_debit, "opening_credit": opening_credit,
+            "turnover_debit": int(turn["d"] or 0), "turnover_credit": int(turn["c"] or 0),
+            "balance_debit": balance_debit, "balance_credit": balance_credit,
+        })
     return rows
 
 
 def ledger_totals(rows):
-    keys = (
-        "opening_debit",
-        "opening_credit",
-        "turnover_debit",
-        "turnover_credit",
-        "balance_debit",
-        "balance_credit",
-    )
-    totals = {key: 0 for key in keys}
-    for row in rows:
-        for key in keys:
-            totals[key] += row.get(key) or 0
-    return totals
+    keys = ("opening_debit", "opening_credit", "turnover_debit", "turnover_credit",
+            "balance_debit", "balance_credit")
+    return {key: sum(row.get(key, 0) for row in rows) for key in keys}

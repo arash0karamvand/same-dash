@@ -16,7 +16,8 @@
 
 .users-table-wrap,
 .roles-matrix-wrap {
-  overflow: hidden;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 
 .settings-section {

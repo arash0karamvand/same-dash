@@ -5,7 +5,7 @@ from io import BytesIO
 
 from django.test import TestCase
 
-from backend.models import Account, AccountingEntry, DetailedAccount, SubsidiaryAccount
+from backend.models import Account, JournalEntry, JournalLine
 from logic.accounting_excel_import import import_excel_file, parse_excel_file
 
 
@@ -94,28 +94,28 @@ class AccountingExcelImportTest(TestCase):
 
     def test_dry_run_does_not_persist(self):
         before_accounts = Account.objects.count()
-        before_entries = AccountingEntry.objects.count()
+        before_entries = JournalLine.objects.count()
         report = import_excel_file(_build_sample_workbook(), dry_run=True)
         self.assertTrue(report["dry_run"])
         self.assertFalse(report["committed"])
         self.assertEqual(Account.objects.count(), before_accounts)
-        self.assertEqual(AccountingEntry.objects.count(), before_entries)
+        self.assertEqual(JournalLine.objects.count(), before_entries)
         self.assertEqual(report["counts"]["general_rows"], 2)
 
     def test_import_creates_chart_and_entries(self):
         report = import_excel_file(_build_sample_workbook(), dry_run=False, approve=True)
         self.assertTrue(report["committed"])
-        self.assertTrue(SubsidiaryAccount.objects.filter(code="1", account__code="1210").exists())
-        self.assertTrue(DetailedAccount.objects.filter(code="6", subsidiary__code="1").exists())
-        self.assertEqual(AccountingEntry.objects.filter(document_number=1).count(), 1)
-        self.assertEqual(AccountingEntry.objects.filter(document_number=2).count(), 1)
-        self.assertGreaterEqual(report["stats"]["entries_created"], 2)
+        subsidiary = Account.objects.get(code="1", parent__code="1210")
+        self.assertTrue(Account.objects.filter(code="6", parent=subsidiary).exists())
+        self.assertFalse(JournalEntry.objects.filter(document_number__in=[1, 2]).exists())
+        self.assertEqual(report["stats"]["entries_created"], 0)
+        self.assertEqual(report["stats"]["entries_skipped"], 2)
 
     def test_unbalanced_workbook_still_commits(self):
         report = import_excel_file(_build_sample_workbook(balanced=False), dry_run=False)
         self.assertTrue(report["committed"])
         self.assertTrue(report["warnings"])
-        self.assertGreater(SubsidiaryAccount.objects.count(), 0)
+        self.assertTrue(Account.objects.filter(parent__isnull=False).exists())
 
     def test_unbalanced_workbook_commits_with_force(self):
         report = import_excel_file(

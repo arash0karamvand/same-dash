@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { authApi } from '../api/client'
 import Select from '../components/Select'
-import { Badge, Button, Card, EmptyState, Field, FilterBar, Modal, StatCard } from '../components/ui'
+import { Badge, Button, Card, EmptyState, Field, FilterBar, LoadMoreButton, Modal, StatCard } from '../components/ui'
+import { PAGE_SIZE } from '../config/pagination'
 import PortalModuleMatrix from '../components/PortalModuleMatrix'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmContext'
@@ -61,6 +62,9 @@ export default function Users() {
   const [search, setSearch] = useState('')
   const [roleFilter, setRoleFilter] = useState('')
   const [activeFilter, setActiveFilter] = useState('')
+  const [total, setTotal] = useState(0)
+  const [offset, setOffset] = useState(0)
+  const [loadingMore, setLoadingMore] = useState(false)
 
   const [createOpen, setCreateOpen] = useState(false)
   const [createForm, setCreateForm] = useState(EMPTY_CREATE)
@@ -90,20 +94,26 @@ export default function Users() {
     setOrgRanks(ranks.results || [])
   }, [])
 
-  const loadUsers = useCallback(async () => {
-    setLoading(true)
+  const loadUsers = useCallback(async ({ append = false, offset: nextOffset = 0 } = {}) => {
+    if (append) setLoadingMore(true)
+    else setLoading(true)
     try {
       const data = await authApi.users({
         search: search.trim() || undefined,
         role: roleFilter || undefined,
         active: activeFilter || undefined,
+        offset: nextOffset,
+        limit: PAGE_SIZE,
       })
-      setUsers(data.results || [])
+      setUsers((prev) => (append ? [...prev, ...(data.results || [])] : (data.results || [])))
+      setTotal(data.total || 0)
+      setOffset(data.offset ?? nextOffset)
       setStats(data.stats || { total: 0, active: 0, pending: 0 })
     } catch (e) {
       showFlash('error', e.message)
     } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
   }, [search, roleFilter, activeFilter, showFlash])
 
@@ -112,7 +122,7 @@ export default function Users() {
   }, [loadMeta, showFlash])
 
   useEffect(() => {
-    const t = setTimeout(loadUsers, search ? 300 : 0)
+    const t = setTimeout(() => loadUsers({ offset: 0 }), search ? 300 : 0)
     return () => clearTimeout(t)
   }, [loadUsers, search])
 
@@ -391,6 +401,11 @@ export default function Users() {
                 </tbody>
               </table>
             </div>
+            <LoadMoreButton
+              hasMore={users.length < total}
+              loading={loadingMore}
+              onClick={() => loadUsers({ append: true, offset: offset + PAGE_SIZE })}
+            />
           </>
         )}
       </Card>

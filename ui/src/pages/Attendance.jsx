@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react'
 import { attendanceApi, staffApi } from '../api/client'
 import PersianDateInput from '../components/PersianDateInput'
 import Select from '../components/Select'
-import { Badge, Button, Card, EmptyState, Field, FilterBar, Modal } from '../components/ui'
+import { Badge, Button, Card, EmptyState, Field, FilterBar, LoadMoreButton, Modal } from '../components/ui'
+import { PAGE_SIZE, PICKER_LIMIT } from '../config/pagination'
 import { useConfirm } from '../context/ConfirmContext'
 import { useConfig } from '../context/ConfigContext'
 import { formatDate } from '../utils/format'
@@ -20,11 +21,16 @@ export default function Attendance() {
   const [branch, setBranch] = useState('')
   const [selectedSellerId, setSelectedSellerId] = useState('')
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [total, setTotal] = useState(0)
+  const [offset, setOffset] = useState(0)
   const [error, setError] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState(null)
   const [form, setForm] = useState(EMPTY)
   const [filterDate, setFilterDate] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [approvalFilter, setApprovalFilter] = useState('')
 
   const branchLabel = branchOptions.find((b) => b.value === branch)?.label
 
@@ -33,30 +39,38 @@ export default function Attendance() {
   }, [branch, branchOptions])
 
   const loadSellers = async () => {
-    const data = await staffApi.list(branch)
+    const data = await staffApi.list(branch, 'seller', { limit: PICKER_LIMIT })
     setSellers(data.results)
   }
 
-  const load = async () => {
-    setLoading(true)
+  const load = async ({ append = false, offset: nextOffset = 0 } = {}) => {
+    if (append) setLoadingMore(true)
+    else setLoading(true)
     try {
       const params = new URLSearchParams({ branch })
       if (filterDate) {
         params.set('date_from', filterDate)
         params.set('date_to', filterDate)
       }
+      if (statusFilter) params.set('status', statusFilter)
+      if (approvalFilter) params.set('approval_status', approvalFilter)
+      params.set('offset', String(nextOffset))
+      params.set('limit', String(PAGE_SIZE))
       const data = await attendanceApi.list(params.toString())
-      setRecords(data.results)
+      setRecords((prev) => (append ? [...prev, ...(data.results || [])] : (data.results || [])))
+      setTotal(data.total || 0)
+      setOffset(data.offset ?? nextOffset)
       setError('')
     } catch (e) {
       setError(e.message)
     } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
   }
 
   useEffect(() => { loadSellers().catch((e) => setError(e.message)) }, [branch])
-  useEffect(() => { load() }, [branch, filterDate])
+  useEffect(() => { load() }, [branch, filterDate, statusFilter, approvalFilter])
 
   const openCreateForSeller = (sellerId) => {
     setEditing(null)
@@ -127,27 +141,81 @@ export default function Attendance() {
               clearLabel="همه تاریخ‌ها"
             />
           </Field>
+          <Field label="وضعیت حضور">
+            <Select
+              value={statusFilter}
+              onChange={setStatusFilter}
+              options={[
+                { value: '', label: 'همه' },
+                { value: 'present', label: 'حاضر' },
+                { value: 'absent', label: 'غایب' },
+              ]}
+              placeholder="همه"
+            />
+          </Field>
+          <Field label="تایید">
+            <Select
+              value={approvalFilter}
+              onChange={setApprovalFilter}
+              options={[
+                { value: '', label: 'همه' },
+                { value: 'pending', label: 'در انتظار' },
+                { value: 'approved', label: 'تایید شده' },
+                { value: 'rejected', label: 'رد شده' },
+              ]}
+              placeholder="همه"
+            />
+          </Field>
         </FilterBar>
-        {loading ? <div className="loading">…</div> : (
-          <table className="table">
-            <thead>
-              <tr><th>فروشنده</th><th>شعبه کاری</th><th>تاریخ</th><th>وضعیت</th><th>تایید</th><th>عملیات</th></tr>
-            </thead>
-            <tbody>
+        {loading ? <div className="loading">…</div> : records.length === 0 ? (
+          <EmptyState text="رکوردی یافت نشد." />
+        ) : (
+          <>
+            <div className="table-wrap attendance-table-desktop">
+              <table className="table">
+                <thead>
+                  <tr><th>فروشنده</th><th>شعبه کاری</th><th>تاریخ</th><th>وضعیت</th><th>تایید</th><th>عملیات</th></tr>
+                </thead>
+                <tbody>
+                  {records.map((r) => (
+                    <tr key={r.id}>
+                      <td>{r.seller_name}</td>
+                      <td>{r.work_branch_label}</td>
+                      <td>{formatDate(r.date)}</td>
+                      <td><Badge color={r.status === 'present' ? 'var(--success)' : 'var(--danger)'}>{r.status_display}</Badge></td>
+                      <td><Badge color={r.approval_status === 'approved' ? 'var(--success)' : 'var(--warning)'}>{r.approval_status_display}</Badge></td>
+                      <td className="row-actions">
+                        <button type="button" className="link danger" onClick={() => remove(r.id)}>حذف</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="attendance-cards-mobile">
               {records.map((r) => (
-                <tr key={r.id}>
-                  <td>{r.seller_name}</td>
-                  <td>{r.work_branch_label}</td>
-                  <td>{formatDate(r.date)}</td>
-                  <td><Badge color={r.status === 'present' ? 'var(--success)' : 'var(--danger)'}>{r.status_display}</Badge></td>
-                  <td><Badge color={r.approval_status === 'approved' ? 'var(--success)' : 'var(--warning)'}>{r.approval_status_display}</Badge></td>
-                  <td className="row-actions">
+                <div key={r.id} className="m-card">
+                  <div className="m-card-head">
+                    <strong>{r.seller_name}</strong>
+                    <span className="muted">{formatDate(r.date)}</span>
+                  </div>
+                  <div className="m-card-grid">
+                    <div><span className="muted">شعبه کاری</span>{r.work_branch_label}</div>
+                    <div><span className="muted">وضعیت</span><Badge color={r.status === 'present' ? 'var(--success)' : 'var(--danger)'}>{r.status_display}</Badge></div>
+                    <div><span className="muted">تایید</span><Badge color={r.approval_status === 'approved' ? 'var(--success)' : 'var(--warning)'}>{r.approval_status_display}</Badge></div>
+                  </div>
+                  <div className="m-card-actions">
                     <button type="button" className="link danger" onClick={() => remove(r.id)}>حذف</button>
-                  </td>
-                </tr>
+                  </div>
+                </div>
               ))}
-            </tbody>
-          </table>
+            </div>
+            <LoadMoreButton
+              hasMore={records.length < total}
+              loading={loadingMore}
+              onClick={() => load({ append: true, offset: offset + PAGE_SIZE })}
+            />
+          </>
         )}
       </Card>
       <Modal title="ثبت حضور" open={modalOpen} onClose={() => setModalOpen(false)}>

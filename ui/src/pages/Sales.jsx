@@ -21,7 +21,8 @@ import ProductLines from '../components/ProductLines'
 import PersianDateInput from '../components/PersianDateInput'
 import SaleDiscountFields, { saleBalanceDue } from '../components/SaleDiscountFields'
 import Select from '../components/Select'
-import { Badge, Button, Card, EmptyState, Field, FilterBar, Modal, StatCard } from '../components/ui'
+import { Badge, Button, Card, EmptyState, Field, FilterBar, LoadMoreButton, Modal, StatCard } from '../components/ui'
+import { PAGE_SIZE, withPageParams } from '../config/pagination'
 import PersonalSalesPanel from '../components/PersonalSalesPanel'
 import PersianMonthPicker from '../components/PersianMonthPicker'
 import { formatDate, formatMoney } from '../utils/format'
@@ -277,6 +278,9 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
   const [selectedCustomer, setSelectedCustomer] = useState(null)
 
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [salesTotal, setSalesTotal] = useState(0)
+  const [salesOffset, setSalesOffset] = useState(0)
 
   const [error, setError] = useState('')
 
@@ -294,7 +298,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
 
   const [form, setForm] = useState(EMPTY_FORM)
 
-  const [filters, setFilters] = useState({ payment_method: '', date_from: '', date_to: '', search: '' })
+  const [filters, setFilters] = useState({ payment_method: '', payment_status: '', order_kind: '', date_from: '', date_to: '', search: '' })
 
   useEffect(() => {
     if (summaryOnly) setPersonalCollapsed(false)
@@ -313,8 +317,9 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
 
 
 
-  const load = async (nextFilters = filters) => {
-    setLoading(true)
+  const load = async (nextFilters = filters, { append = false, offset = 0 } = {}) => {
+    if (append) setLoadingMore(true)
+    else setLoading(true)
     try {
       const jNow = currentJalali()
       if (summaryOnly) {
@@ -325,6 +330,8 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
         const monthlyData = results[0]
         const breakdownData = isShop ? results[1] : null
         setSales([])
+        setSalesTotal(0)
+        setSalesOffset(0)
         setSummary({ total_final: monthlyData.total_final, count: monthlyData.count })
         setMonthly(monthlyData)
         setDaily(null)
@@ -335,15 +342,24 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
       }
       if (!canViewList) {
         setSales([])
+        setSalesTotal(0)
         setSummary(null)
         setError('')
         return
       }
 
-      const params = buildParams(nextFilters)
+      const params = withPageParams(buildParams(nextFilters), { offset, limit: PAGE_SIZE })
       if (branchQueueView) {
         const q = new URLSearchParams(params)
         q.set('queue', 'branch')
+        if (append) {
+          const listData = await salesApi.list(q.toString())
+          setSales((prev) => [...prev, ...(listData.results || [])])
+          setSalesTotal(listData.total || 0)
+          setSalesOffset(listData.offset ?? offset)
+          setError('')
+          return
+        }
         const bm = breakdownMonth
         const reportTasks = [
           salesApi.monthlyReport(jNow.year, jNow.month),
@@ -366,12 +382,23 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
         const breakdownData = isShop ? allResults[nextIdx++] : null
         const dailyData = viewAllSales ? allResults[nextIdx] : null
         setSales(listData.results)
+        setSalesTotal(listData.total || 0)
+        setSalesOffset(listData.offset ?? 0)
         setSummary(null)
         setMonthly(monthlyData)
         setYearly(yearlyData)
         setDaily(viewAllSales ? dailyData : null)
         setDailyBreakdown(breakdownData)
         setCustomers([])
+        setError('')
+        return
+      }
+
+      if (append) {
+        const salesData = await salesApi.list(params)
+        setSales((prev) => [...prev, ...(salesData.results || [])])
+        setSalesTotal(salesData.total || 0)
+        setSalesOffset(salesData.offset ?? offset)
         setError('')
         return
       }
@@ -390,6 +417,8 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
       const yearlyData = viewAllSales ? results[3] : null
 
       setSales(salesData.results)
+      setSalesTotal(salesData.total || 0)
+      setSalesOffset(salesData.offset ?? 0)
       setSummary(salesData.summary)
       setCustomers([])
       if (viewAllSales) {
@@ -406,6 +435,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
       setError(e.message)
     } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
   }
 
@@ -961,6 +991,27 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
                 placeholder="همه"
               />
             </Field>
+            <Field label="وضعیت پرداخت">
+              <Select
+                value={filters.payment_status}
+                onChange={(v) => setFilters({ ...filters, payment_status: v })}
+                options={[
+                  { value: '', label: 'همه' },
+                  { value: 'paid', label: 'پرداخت‌شده' },
+                  { value: 'unpaid', label: 'پرداخت‌نشده' },
+                  { value: 'installment', label: 'قسطی' },
+                ]}
+                placeholder="همه"
+              />
+            </Field>
+            <Field label="نوع سفارش">
+              <Select
+                value={filters.order_kind}
+                onChange={(v) => setFilters({ ...filters, order_kind: v })}
+                options={[{ value: '', label: 'همه' }, ...orderKinds]}
+                placeholder="همه"
+              />
+            </Field>
             <Field label="از تاریخ">
               <PersianDateInput
                 value={filters.date_from}
@@ -1276,6 +1327,12 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
               )
             })}
           </div>
+
+          <LoadMoreButton
+            hasMore={sales.length < salesTotal}
+            loading={loadingMore}
+            onClick={() => load(filters, { append: true, offset: salesOffset + PAGE_SIZE })}
+          />
 
           </>
 

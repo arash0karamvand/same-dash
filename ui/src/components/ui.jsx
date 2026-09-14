@@ -1,8 +1,11 @@
 // مجموعه کامپوننت‌های پایه و قابل‌استفاده مجدد رابط کاربری.
 
-import { forwardRef } from 'react'
+import { forwardRef, useEffect } from 'react'
 import Icon from './icons/Icon'
+import { useMediaQuery } from '../hooks/useMediaQuery'
+import { PAGE_SIZE } from '../config/pagination'
 import { badgeStyle, badgeVariantFromColor } from '../config/statusColors'
+import { toPersianDigits } from '../utils/jalali'
 
 const STAT_ACCENT_DEFAULT = 'var(--accent)'
 
@@ -86,13 +89,28 @@ export function Card({ title, actions, children, className = '', elevated = fals
 
 // پنجره مودال ساده
 export function Modal({ title, open, onClose, children, wide = false, className = '' }) {
+  const isMobile = useMediaQuery('(max-width: 767px)')
+
+  useEffect(() => {
+    if (!open) return undefined
+    document.body.classList.add('modal-open')
+    return () => document.body.classList.remove('modal-open')
+  }, [open])
+
   if (!open) return null
+
+  const sheetClass = isMobile ? ' modal--sheet' : ''
+
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div
-        className={`modal liquid-glass liquid-glass--strong liquid-glass--panel ${wide ? 'modal-wide' : ''}${className ? ` ${className}` : ''}`}
+        className={`modal liquid-glass liquid-glass--strong liquid-glass--panel${wide ? ' modal-wide' : ''}${sheetClass}${className ? ` ${className}` : ''}`}
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-label={title}
       >
+        {isMobile && <div className="modal-sheet-handle" aria-hidden />}
         <div className="modal-head">
           <h3>{title}</h3>
           <button type="button" className="modal-close" onClick={onClose} aria-label="بستن">
@@ -120,6 +138,17 @@ export function FilterBar({ children, className = '' }) {
   return (
     <div className={`page-filters liquid-glass liquid-glass--panel liquid-glass--jelly${className ? ` ${className}` : ''}`}>
       {children}
+    </div>
+  )
+}
+
+export function LoadMoreButton({ hasMore, loading, onClick, pageSize = PAGE_SIZE }) {
+  if (!hasMore) return null
+  return (
+    <div className="load-more-actions">
+      <Button type="button" disabled={loading} onClick={onClick}>
+        {loading ? 'در حال بارگذاری…' : `نمایش ${toPersianDigits(pageSize)} رکورد دیگر`}
+      </Button>
     </div>
   )
 }

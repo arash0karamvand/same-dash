@@ -167,6 +167,7 @@ urlpatterns = [
 
     # --- Accounting ---
     path("accounting/", accounting.entry_list, name="accounting-list"),
+    path("accounting/meta/", accounting.meta, name="accounting-meta"),
     path("accounting/accounts/", accounting.account_list, name="accounting-accounts"),
     path("accounting/models/", accounting.document_models, name="accounting-document-models"),
     path("accounting/ledger/", accounting.ledger, name="accounting-ledger"),
@@ -208,6 +209,7 @@ urlpatterns = [
 
     # --- Factory accounting (جدول مجزا) ---
     path("factory-accounting/", factory_accounting.entry_list, name="factory-accounting-list"),
+    path("factory-accounting/meta/", factory_accounting.meta, name="factory-accounting-meta"),
     path("factory-accounting/accounts/", factory_accounting.account_list, name="factory-accounting-accounts"),
     path("factory-accounting/models/", factory_accounting.document_models, name="factory-accounting-document-models"),
     path("factory-accounting/ledger/", factory_accounting.ledger, name="factory-accounting-ledger"),

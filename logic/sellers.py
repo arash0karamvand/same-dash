@@ -72,7 +72,7 @@ def ensure_seller_for_user(user, branch=None, staff_kind=None):
         return None
 
     profile = _staff_profile(user)
-    resolved_branch = branch or (profile.branch if profile else None) or DEFAULT_BRANCH
+    resolved_branch = branch or (profile.branch_id if profile else None) or DEFAULT_BRANCH
     name = user.get_full_name() or user.username
     resolved_kind = staff_kind or staff_kind_for_user(user)
 
@@ -82,7 +82,7 @@ def ensure_seller_for_user(user, branch=None, staff_kind=None):
         if inactive:
             inactive.is_active = True
             inactive.full_name = name
-            inactive.branch = resolved_branch
+            inactive.branch_id = resolved_branch
             inactive.staff_kind = resolved_kind
             inactive.save(update_fields=["is_active", "full_name", "branch", "staff_kind"])
             return inactive
@@ -92,8 +92,8 @@ def ensure_seller_for_user(user, branch=None, staff_kind=None):
         if seller.full_name != name:
             seller.full_name = name
             updates.append("full_name")
-        if resolved_branch and seller.branch != resolved_branch:
-            seller.branch = resolved_branch
+        if resolved_branch and seller.branch_id != resolved_branch:
+            seller.branch_id = resolved_branch
             updates.append("branch")
         if seller.staff_kind != resolved_kind:
             seller.staff_kind = resolved_kind
@@ -104,7 +104,7 @@ def ensure_seller_for_user(user, branch=None, staff_kind=None):
 
     return Seller.objects.create(
         full_name=name,
-        branch=resolved_branch,
+        branch_id=resolved_branch,
         user=user,
         staff_kind=resolved_kind,
     )
@@ -141,9 +141,9 @@ def sync_seller_profiles():
 def get_user_branch(user):
     seller = get_seller_for_user(user)
     if seller:
-        return seller.branch
+        return seller.branch_id
     profile = _staff_profile(user)
-    return profile.branch if profile else None
+    return profile.branch_id if profile else None
 
 
 def effective_sale_branch(user, today=None):
@@ -170,8 +170,8 @@ def effective_sale_branch(user, today=None):
         .first()
     )
     if record:
-        return record.work_branch or seller.branch
-    return seller.branch
+        return record.work_branch_id or seller.branch_id
+    return seller.branch_id
 
 
 def resolve_sale_branch_for_create(user, requested_branch=None):
@@ -187,7 +187,7 @@ def resolve_sale_branch_for_create(user, requested_branch=None):
         return code
 
     seller = get_seller_for_user(user)
-    branch = effective_sale_branch(user) or (seller.branch if seller else "")
+    branch = effective_sale_branch(user) or (seller.branch_id if seller else "")
     if not branch:
         raise ValueError("شعبه فروشنده مشخص نیست.")
     return branch

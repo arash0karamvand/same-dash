@@ -3,7 +3,7 @@ import { recordFilterApi } from '../api/client'
 import MoneyInput from './MoneyInput'
 import PersianDateInput from './PersianDateInput'
 import Select from './Select'
-import { Button, EmptyState, Field, FilterBar } from './ui'
+import { Button, EmptyState, Field, FilterBar, LoadMoreButton } from './ui'
 import { formatDate, formatMoney } from '../utils/format'
 import { toPersianDigits } from '../utils/jalali'
 
@@ -25,11 +25,12 @@ function buildInitialFilters(lockModel, defaultModel, initialFilters = {}) {
   return merged
 }
 
-function buildQueryParams(filters, limit = 30) {
+function buildQueryParams(filters, limit = 10, offset = 0) {
   if (!filters.model) return null
   const params = {
     model: filters.model,
     limit,
+    offset,
     date_from: filters.date_from || undefined,
     date_to: filters.date_to || undefined,
     name: filters.name.trim() || undefined,
@@ -54,7 +55,7 @@ export default function RecordFilterPanel({
   debounceMs = 450,
   compact = false,
   unified = false,
-  resultLimit = 30,
+  resultLimit = 10,
   hideResults = false,
   onFiltersChange,
   initialFilters = {},
@@ -75,6 +76,7 @@ export default function RecordFilterPanel({
   )
   const [applied, setApplied] = useState(null)
   const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [metaLoading, setMetaLoading] = useState(true)
   const [error, setError] = useState('')
   const requestSeq = useRef(0)
@@ -308,40 +310,78 @@ export default function RecordFilterPanel({
             <strong>{toPersianDigits(applied.total)}</strong> رکورد
             {applied.model_label ? ` — ${applied.model_label}` : ''}
             {applied.total > applied.results.length && (
-              <> — نمایش {toPersianDigits(applied.results.length)} اخیر</>
+              <> — نمایش {toPersianDigits(applied.results.length)}</>
             )}
             {loading ? ' …' : ''}
           </p>
           {applied.total === 0 ? (
             <EmptyState text="با این فیلتر رکوردی یافت نشد." />
           ) : (
-            <div className="table-wrap">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>شناسه</th>
-                    <th>عنوان</th>
-                    <th>نوع</th>
-                    <th>مبلغ</th>
-                    <th>تاریخ</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {applied.results.map((row) => (
-                    <tr key={row.id}>
-                      <td>{row.id}</td>
-                      <td>
-                        <div>{row.title}</div>
-                        {row.subtitle && <div className="muted small">{row.subtitle}</div>}
-                      </td>
-                      <td>{row.type_display || '—'}</td>
-                      <td>{row.amount != null ? formatMoney(row.amount) : '—'}</td>
-                      <td>{row.date ? formatDate(row.date) : '—'}</td>
+            <>
+              <div className="table-wrap record-filter-table-desktop">
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>شناسه</th>
+                      <th>عنوان</th>
+                      <th>نوع</th>
+                      <th>مبلغ</th>
+                      <th>تاریخ</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {applied.results.map((row) => (
+                      <tr key={row.id}>
+                        <td>{row.id}</td>
+                        <td>
+                          <div>{row.title}</div>
+                          {row.subtitle && <div className="muted small">{row.subtitle}</div>}
+                        </td>
+                        <td>{row.type_display || '—'}</td>
+                        <td>{row.amount != null ? formatMoney(row.amount) : '—'}</td>
+                        <td>{row.date ? formatDate(row.date) : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="record-filter-cards-mobile">
+                {applied.results.map((row) => (
+                  <div key={row.id} className="m-card">
+                    <div className="m-card-head">
+                      <strong>{row.title}</strong>
+                      <span className="muted">#{row.id}</span>
+                    </div>
+                    {row.subtitle && <p className="muted small">{row.subtitle}</p>}
+                    <div className="m-card-grid">
+                      <div><span className="muted">نوع</span>{row.type_display || '—'}</div>
+                      <div><span className="muted">مبلغ</span>{row.amount != null ? formatMoney(row.amount) : '—'}</div>
+                      <div><span className="muted">تاریخ</span>{row.date ? formatDate(row.date) : '—'}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <LoadMoreButton
+                hasMore={applied.results.length < applied.total}
+                loading={loadingMore}
+                onClick={async () => {
+                  const params = buildQueryParams(filters, resultLimit, applied.results.length)
+                  if (!params) return
+                  setLoadingMore(true)
+                  try {
+                    const data = await recordFilterApi.query(params)
+                    setApplied((prev) => ({
+                      ...data,
+                      results: [...(prev?.results || []), ...(data.results || [])],
+                    }))
+                  } catch (err) {
+                    setError(err.message)
+                  } finally {
+                    setLoadingMore(false)
+                  }
+                }}
+              />
+            </>
           )}
         </div>
       )}

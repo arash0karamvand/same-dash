@@ -1,4 +1,4 @@
-"""پیکربندی دفتر حسابداری — اداری و کارخانه جدا."""
+"""Ledger selectors backed by the unified accounting tables."""
 
 from dataclasses import dataclass
 
@@ -7,51 +7,58 @@ from dataclasses import dataclass
 class LedgerConfig:
     id: str
     label: str
-    Account: type
-    SubsidiaryAccount: type
-    DetailedAccount: type
-    AccountingEntry: type
     document_prefix: str = "S"
-    entity_type: str = "AccountingEntry"
     syncs_sales: bool = True
 
+    @property
+    def entity_type(self):
+        return "JournalEntry"
 
-def _office_ledger():
-    from backend.models import Account, AccountingEntry, DetailedAccount, SubsidiaryAccount
+    @property
+    def model(self):
+        from backend.models import Ledger
 
-    return LedgerConfig(
-        id="office",
-        label="اداری",
-        Account=Account,
-        SubsidiaryAccount=SubsidiaryAccount,
-        DetailedAccount=DetailedAccount,
-        AccountingEntry=AccountingEntry,
-        document_prefix="S",
-        entity_type="AccountingEntry",
-        syncs_sales=True,
-    )
+        return Ledger.objects.get(code=self.id)
+
+    def accounts(self):
+        from backend.models import Account
+
+        return Account.objects.filter(ledger__code=self.id)
+
+    def journals(self):
+        from backend.models import JournalEntry
+
+        return JournalEntry.objects.filter(ledger__code=self.id)
+
+    def lines(self):
+        from backend.models import JournalLine
+
+        return JournalLine.objects.filter(journal__ledger__code=self.id)
+
+    @property
+    def Account(self):
+        """Legacy model-like adapter; callers should still scope through this ledger."""
+        from backend.models import Account
+
+        config = self
+
+        class ScopedAccount:
+            objects = config.accounts()
+
+        return ScopedAccount
+
+    @property
+    def AccountingEntry(self):
+        """Legacy line adapter backed by the unified journal tables."""
+        from backend.models import AccountingEntry
+
+        config = self
+
+        class ScopedEntry:
+            objects = AccountingEntry.objects.filter(journal__ledger__code=config.id)
+
+        return ScopedEntry
 
 
-def _factory_ledger():
-    from backend.models import (
-        FactoryAccount,
-        FactoryAccountingEntry,
-        FactoryDetailedAccount,
-        FactorySubsidiaryAccount,
-    )
-
-    return LedgerConfig(
-        id="factory",
-        label="کارخانه",
-        Account=FactoryAccount,
-        SubsidiaryAccount=FactorySubsidiaryAccount,
-        DetailedAccount=FactoryDetailedAccount,
-        AccountingEntry=FactoryAccountingEntry,
-        document_prefix="F",
-        entity_type="FactoryAccountingEntry",
-        syncs_sales=False,
-    )
-
-
-OFFICE_LEDGER = _office_ledger()
-FACTORY_LEDGER = _factory_ledger()
+OFFICE_LEDGER = LedgerConfig("office", "اداری", "S", True)
+FACTORY_LEDGER = LedgerConfig("factory", "کارخانه", "F", False)

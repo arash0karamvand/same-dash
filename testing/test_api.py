@@ -181,7 +181,7 @@ class SaleApiTest(TestCase):
         self.assertTrue(body["ok"])
         self.customer.refresh_from_db()
         self.assertEqual(int(self.customer.total_purchases), 1000000)
-        self.assertEqual(AccountingEntry.objects.count(), 1)
+        self.assertEqual(AccountingEntry.objects.count(), 2)
 
     def test_operator_sees_only_own_sales(self):
         Sale.objects.create(
@@ -260,7 +260,7 @@ class DashboardApiTest(TestCase):
 
 class StaffApiTest(TestCase):
     def setUp(self):
-        self.seller = Seller.objects.create(full_name="Test Seller", branch="branch_1")
+        self.seller = Seller.objects.create(full_name="Test Seller", branch_id="branch_1")
         make_user("adm", role=roles.ADMIN)
         make_user("sm", role=roles.SALES_MANAGER)
         self.admin = Client()
@@ -481,7 +481,8 @@ class AccountingApiTest(TestCase):
         self.assertTrue(body["ok"])
         self.assertTrue(body["data"]["committed"])
         self.assertGreater(DetailedAccount.objects.count(), 0)
-        self.assertGreater(body["data"]["stats"]["entries_created"], 0)
+        self.assertEqual(body["data"]["stats"]["entries_created"], 0)
+        self.assertEqual(body["data"]["stats"]["entries_skipped"], 2)
 
 
 class UserManagementTest(TestCase):
@@ -526,3 +527,47 @@ class UserManagementTest(TestCase):
         body = parse(resp)
         self.assertTrue(body["ok"])
         self.assertTrue(any("description" in r for r in body["data"]["results"]))
+
+
+class ListPaginationApiTest(TestCase):
+    def setUp(self):
+        LoyaltyLevel.objects.create(name="Bronze", min_purchase=0, max_purchase=10_000_000)
+        make_user("op", role=roles.OPERATOR)
+        self.admin = make_user("admin", role=roles.ADMIN)
+        self.client = Client()
+        self.client.login(username="op", password="secret123")
+        self.admin_client = Client()
+        self.admin_client.login(username="admin", password="secret123")
+        for i in range(12):
+            Customer.objects.create(full_name=f"C{i:02d}", phone=f"09120000{i:03d}")
+
+    def test_customers_default_page_is_ten(self):
+        resp = self.client.get("/api/customers/")
+        body = parse(resp)["data"]
+        self.assertEqual(body["limit"], 10)
+        self.assertEqual(body["offset"], 0)
+        self.assertEqual(body["total"], 12)
+        self.assertEqual(len(body["results"]), 10)
+
+    def test_customers_load_more(self):
+        resp = self.client.get("/api/customers/?offset=10&limit=10")
+        body = parse(resp)["data"]
+        self.assertEqual(body["total"], 12)
+        self.assertEqual(len(body["results"]), 2)
+
+    def test_sales_page_and_summary_use_full_queryset(self):
+        customer = Customer.objects.first()
+        for i in range(12):
+            Sale.objects.create(
+                customer=customer,
+                amount=100 + i,
+                discount=0,
+                final_amount=100 + i,
+                recorded_by=self.admin,
+            )
+        resp = self.admin_client.get("/api/sales/")
+        body = parse(resp)["data"]
+        self.assertEqual(body["limit"], 10)
+        self.assertEqual(len(body["results"]), 10)
+        self.assertEqual(body["total"], 12)
+        self.assertEqual(body["summary"]["count"], 12)

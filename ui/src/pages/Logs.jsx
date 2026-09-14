@@ -1,17 +1,18 @@
 import { useCallback, useEffect, useState } from 'react'
 import { auditApi } from '../api/client'
 import Select from '../components/Select'
-import { Button, Card, EmptyState, Field, FilterBar } from '../components/ui'
+import { Button, Card, EmptyState, Field, FilterBar, LoadMoreButton } from '../components/ui'
+import { PAGE_SIZE } from '../config/pagination'
 import { formatDate } from '../utils/format'
-
-const PAGE_SIZE = 200
 
 export default function Logs() {
   const [logs, setLogs] = useState([])
   const [actions, setActions] = useState([])
+  const [entityTypes, setEntityTypes] = useState([])
   const [total, setTotal] = useState(0)
   const [offset, setOffset] = useState(0)
   const [action, setAction] = useState('')
+  const [entityType, setEntityType] = useState('')
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -27,12 +28,14 @@ export default function Logs() {
         offset: nextOffset,
         limit: PAGE_SIZE,
         action: action || undefined,
+        entity_type: entityType || undefined,
         search: search.trim() || undefined,
       })
       setLogs((prev) => (append ? [...prev, ...data.results] : data.results))
       setTotal(data.total)
       setOffset(nextOffset)
       if (data.actions?.length) setActions(data.actions)
+      if (data.entity_types?.length) setEntityTypes(data.entity_types)
       setError('')
     } catch (e) {
       setError(e.message)
@@ -40,13 +43,11 @@ export default function Logs() {
       setLoading(false)
       setLoadingMore(false)
     }
-  }, [action, search])
+  }, [action, entityType, search])
 
   useEffect(() => {
     load({ offset: 0 })
   }, [load])
-
-  const hasMore = logs.length < total
 
   return (
     <div className="page">
@@ -58,6 +59,14 @@ export default function Logs() {
               value={action}
               onChange={setAction}
               options={[{ value: '', label: 'همه' }, ...actions]}
+              placeholder="همه"
+            />
+          </Field>
+          <Field label="نوع موجودیت">
+            <Select
+              value={entityType}
+              onChange={setEntityType}
+              options={[{ value: '', label: 'همه' }, ...entityTypes]}
               placeholder="همه"
             />
           </Field>
@@ -82,33 +91,44 @@ export default function Logs() {
           <EmptyState text="لاگی ثبت نشده." />
         ) : (
           <>
-            <table className="table">
-              <thead>
-                <tr><th>زمان</th><th>کاربر</th><th>عملیات</th><th>موجودیت</th><th>شرح</th></tr>
-              </thead>
-              <tbody>
-                {logs.map((l) => (
-                  <tr key={l.id} className={l.is_executive_only ? 'row-highlight' : ''}>
-                    <td>{formatDate(l.created_at)}</td>
-                    <td>{l.user_name}</td>
-                    <td>{l.action_display}</td>
-                    <td>{l.entity_type || '—'}</td>
-                    <td>{l.message}{l.is_executive_only ? ' 🔒' : ''}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {hasMore && (
-              <div className="form-actions" style={{ marginTop: 16 }}>
-                <Button
-                  type="button"
-                  disabled={loadingMore}
-                  onClick={() => load({ offset: offset + PAGE_SIZE, append: true })}
-                >
-                  {loadingMore ? 'در حال بارگذاری…' : 'نمایش بیشتر'}
-                </Button>
-              </div>
-            )}
+            <div className="table-wrap logs-table-desktop">
+              <table className="table">
+                <thead>
+                  <tr><th>زمان</th><th>کاربر</th><th>عملیات</th><th>موجودیت</th><th>شرح</th></tr>
+                </thead>
+                <tbody>
+                  {logs.map((l) => (
+                    <tr key={l.id} className={l.is_executive_only ? 'row-highlight' : ''}>
+                      <td>{formatDate(l.created_at)}</td>
+                      <td>{l.user_name}</td>
+                      <td>{l.action_display}</td>
+                      <td>{l.entity_type || '—'}</td>
+                      <td>{l.message}{l.is_executive_only ? ' 🔒' : ''}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="logs-cards-mobile">
+              {logs.map((l) => (
+                <div key={l.id} className={`m-card${l.is_executive_only ? ' row-highlight' : ''}`}>
+                  <div className="m-card-head">
+                    <strong>{l.action_display}</strong>
+                    <span className="muted small">{formatDate(l.created_at)}</span>
+                  </div>
+                  <div className="m-card-grid">
+                    <div><span className="muted">کاربر</span>{l.user_name}</div>
+                    <div><span className="muted">موجودیت</span>{l.entity_type || '—'}</div>
+                  </div>
+                  <p className="muted small" style={{ margin: '8px 0 0' }}>{l.message}{l.is_executive_only ? ' 🔒' : ''}</p>
+                </div>
+              ))}
+            </div>
+            <LoadMoreButton
+              hasMore={logs.length < total}
+              loading={loadingMore}
+              onClick={() => load({ offset: offset + PAGE_SIZE, append: true })}
+            />
           </>
         )}
       </Card>

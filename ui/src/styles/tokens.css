@@ -224,3 +224,17 @@
   --content-pad-start: 48px;
   --content-pad-end: 28px;
 }
+
+@media (max-width: 1440px) {
+  :root {
+    --content-pad-start: 16px;
+    --content-pad-end: 16px;
+  }
+}
+
+@media (max-width: 767px) {
+  :root {
+    --content-pad-start: 14px;
+    --content-pad-end: 14px;
+  }
+}

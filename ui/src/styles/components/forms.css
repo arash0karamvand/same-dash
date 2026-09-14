@@ -128,6 +128,12 @@ textarea:disabled {
   margin-bottom: 14px;
 }
 
+.load-more-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 16px;
+}
+
 .search-input {
   width: 100%;
   max-width: 280px;
@@ -179,6 +185,19 @@ input[type='radio'] {
 @media (max-width: 767px) {
   .page-filters {
     grid-template-columns: 1fr;
-    overflow-x: auto;
+    padding: 14px 16px;
+  }
+
+  .page-filters .search-input {
+    max-width: none;
+  }
+
+  .page-filters-actions {
+    width: 100%;
+  }
+
+  .page-filters-actions .btn {
+    flex: 1;
+    justify-content: center;
   }
 }

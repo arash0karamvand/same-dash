@@ -33,10 +33,10 @@ class EmployeeRankingTest(TestCase):
 
         self.seller_user = User.objects.create_user(username="seller1", password="secret123")
         roles.assign_role(self.seller_user, roles.PENDING)
-        StaffProfile.objects.create(user=self.seller_user, branch=BRANCH_1, job_title="فروشنده")
+        StaffProfile.objects.create(user=self.seller_user, branch_id=BRANCH_1, job_title="فروشنده")
         self.seller = Seller.objects.create(
             full_name="فروشنده یک",
-            branch=BRANCH_1,
+            branch_id=BRANCH_1,
             user=self.seller_user,
         )
 
@@ -47,14 +47,14 @@ class EmployeeRankingTest(TestCase):
             date=today,
             status="present",
             approval_status="approved",
-            work_branch=BRANCH_1,
+            work_branch_id=BRANCH_1,
         )
         StaffAttendance.objects.create(
             seller=self.seller,
             date=yesterday,
             status="present",
             approval_status="approved",
-            work_branch=BRANCH_2,
+            work_branch_id=BRANCH_2,
         )
 
         customer = Customer.objects.create(full_name="C1", phone="09123334444")
@@ -65,7 +65,7 @@ class EmployeeRankingTest(TestCase):
             paid_amount=1000,
             payment_status="paid",
             recorded_by=self.seller_user,
-            branch=BRANCH_1,
+            branch_id=BRANCH_1,
             sold_at=timezone.now(),
         )
         Sale.objects.create(
@@ -75,7 +75,7 @@ class EmployeeRankingTest(TestCase):
             paid_amount=500,
             payment_status="paid",
             recorded_by=self.seller_user,
-            branch=BRANCH_2,
+            branch_id=BRANCH_2,
             sold_at=timezone.now(),
         )
 

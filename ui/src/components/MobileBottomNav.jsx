@@ -4,7 +4,7 @@ import { canSeePortal } from '../utils/permissions'
 import Icon from './icons/Icon'
 import { iconForPortal } from '../config/iconMap'
 
-export default function MobileBottomNav({ user, portals, currentPortal, onNavigate, onOpenMenu }) {
+export default function MobileBottomNav({ user, portals, currentPortal, menuOpen = false, onNavigate, onOpenMenu }) {
   const items = (portals || []).filter((p) => canSeePortal(user, p)).slice(0, 4)
 
   return (
@@ -23,7 +23,13 @@ export default function MobileBottomNav({ user, portals, currentPortal, onNaviga
           <span className="mobile-nav-label">{p.label}</span>
         </button>
       ))}
-      <button type="button" className="mobile-nav-item" onClick={onOpenMenu}>
+      <button
+        type="button"
+        className={`mobile-nav-item${menuOpen ? ' active' : ''}`}
+        aria-expanded={menuOpen}
+        aria-haspopup="dialog"
+        onClick={onOpenMenu}
+      >
         <span className="mobile-nav-icon" aria-hidden>
           <Icon name="menu" size={20} />
         </span>

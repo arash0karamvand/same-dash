@@ -6,13 +6,18 @@
 """
 
 import json
+import logging
 from functools import wraps
 
+from django.conf import settings
+from django.db.utils import OperationalError, ProgrammingError
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
 from auth.permissions import has_permission
 from auth.roles import get_user_role, is_staff_user
+
+logger = logging.getLogger(__name__)
 
 
 def success(data=None, status=200):
@@ -53,7 +58,21 @@ def api_view(*methods, auth=True, allow_roles=None, permission=None):
                         return fail("Permission denied", status=403)
                 elif not is_staff_user(request.user):
                     return fail("Permission denied", status=403)
-            return view(request, *args, **kwargs)
+            try:
+                return view(request, *args, **kwargs)
+            except (OperationalError, ProgrammingError) as exc:
+                logger.exception("Database error in %s", view.__name__)
+                detail = f" ({exc})" if settings.DEBUG else ""
+                return fail(
+                    "خطا در اتصال به پایگاه داده. دیتابیس را بسازید و migrate را اجرا کنید."
+                    + detail,
+                    status=500,
+                )
+            except Exception as exc:
+                logger.exception("Unhandled API error in %s", view.__name__)
+                if settings.DEBUG:
+                    return fail(f"{type(exc).__name__}: {exc}", status=500)
+                return fail("خطای داخلی سرور.", status=500)
 
         return csrf_exempt(wrapper)
 

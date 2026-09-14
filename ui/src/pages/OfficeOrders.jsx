@@ -5,7 +5,8 @@ import { officeApi } from '../api/client'
 import OfficeSectionCard from '../components/OfficeSectionCard'
 import { OFFICE_ORDERS_FILTER, recordFiltersToQueryString } from '../config/recordFilterSections'
 import { useConfig } from '../context/ConfigContext'
-import { Badge, Button, EmptyState, Modal } from '../components/ui'
+import { Badge, Button, EmptyState, LoadMoreButton, Modal } from '../components/ui'
+import { PAGE_SIZE } from '../config/pagination'
 import { formatDate, formatMoney } from '../utils/format'
 import { toPersianDigits } from '../utils/jalali'
 
@@ -76,7 +77,10 @@ export default function OfficeOrders() {
   const { choices } = useConfig()
   const stageChoices = choices('workflow_stage')
   const [orders, setOrders] = useState([])
+  const [total, setTotal] = useState(0)
+  const [offset, setOffset] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState('')
   const [expandedId, setExpandedId] = useState(null)
   const [detailOrder, setDetailOrder] = useState(null)
@@ -93,17 +97,24 @@ export default function OfficeOrders() {
     return fromDb || WORKFLOW_COLORS[stage] || 'var(--accent)'
   }
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async ({ append = false, offset: nextOffset = 0 } = {}) => {
+    if (append) setLoadingMore(true)
+    else setLoading(true)
     setError('')
     try {
-      const data = await officeApi.list(listFilterQuery)
-      setOrders(data.results || [])
+      const params = new URLSearchParams(listFilterQuery)
+      params.set('offset', String(nextOffset))
+      params.set('limit', String(PAGE_SIZE))
+      const data = await officeApi.list(params.toString())
+      setOrders((prev) => (append ? [...prev, ...(data.results || [])] : (data.results || [])))
+      setTotal(data.total || 0)
+      setOffset(data.offset ?? nextOffset)
     } catch (e) {
       setError(e.message)
-      setOrders([])
+      if (!append) setOrders([])
     } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
   }, [listFilterQuery])
 
@@ -135,7 +146,7 @@ export default function OfficeOrders() {
     <div className="page office-orders-tracking">
       <OfficeSectionCard
         section={OFFICE_ORDERS_FILTER}
-        actions={<Button type="button" variant="ghost" onClick={load}>بروزرسانی</Button>}
+        actions={<Button type="button" variant="ghost" onClick={() => load({ offset: 0 })}>بروزرسانی</Button>}
         onFiltersChange={(filters) => {
           setListFilterQuery(
             recordFiltersToQueryString(filters, {
@@ -277,6 +288,11 @@ export default function OfficeOrders() {
                 )
               })}
             </div>
+            <LoadMoreButton
+              hasMore={orders.length < total}
+              loading={loadingMore}
+              onClick={() => load({ append: true, offset: offset + PAGE_SIZE })}
+            />
           </>
         )}
       </OfficeSectionCard>

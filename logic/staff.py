@@ -1,5 +1,7 @@
 """منطق مدیریت فروشندگان و مدیران (Seller)."""
 
+from django.db.models import Q
+
 from auth.branches import BRANCH_CHOICES, BRANCH_LABELS, DEFAULT_BRANCH
 from auth.permissions import (
     DELETE_MANAGERS,
@@ -18,8 +20,8 @@ def seller_to_dict(seller):
     return {
         "id": seller.id,
         "full_name": seller.full_name,
-        "branch": seller.branch,
-        "branch_label": BRANCH_LABELS.get(seller.branch, "—"),
+        "branch": seller.branch_id,
+        "branch_label": BRANCH_LABELS.get(seller.branch_id, "—"),
         "phone": seller.phone,
         "has_login": seller.user_id is not None,
         "is_active": seller.is_active,
@@ -64,13 +66,21 @@ def can_view_staff(user, staff_kind):
     return False
 
 
-def list_staff(staff_kind, branch=""):
+def list_staff(staff_kind, branch="", params=None):
+    params = params or {}
     qs = Seller.objects.filter(is_active=True, staff_kind=staff_kind).order_by("full_name")
     if branch:
         qs = qs.filter(branch=branch)
+    search = (params.get("search") or "").strip()
+    if search:
+        qs = qs.filter(Q(full_name__icontains=search) | Q(phone__icontains=search))
+    from logic.pagination import paginate
+
+    page, meta = paginate(qs, params)
     return {
         "branches": [{"value": v, "label": l} for v, l in BRANCH_CHOICES],
-        "results": [seller_to_dict(s) for s in qs],
+        "results": [seller_to_dict(s) for s in page],
+        **meta,
     }
 
 
@@ -87,7 +97,7 @@ def create_staff(full_name, branch=None, phone="", staff_kind=None):
 
     return Seller.objects.create(
         full_name=full_name,
-        branch=branch,
+        branch_id=branch,
         phone=phone,
         staff_kind=staff_kind,
     )

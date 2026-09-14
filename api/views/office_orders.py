@@ -13,7 +13,8 @@ from logic.office_orders import (
     list_office_orders,
     office_tracking_queryset,
 )
-from logic.record_filter import _parse_limit, apply_office_order_search_filters
+from logic.pagination import paginate
+from logic.record_filter import apply_office_order_search_filters
 from logic.sale_workflow import approve_office_order, reject_office_order, rollback_office_workflow_step
 
 
@@ -32,25 +33,23 @@ def office_order_list(request):
         return fail("Permission denied", status=403)
     if scope == "tracking":
         qs = office_tracking_queryset(request.user)
-        if status:
-            qs = qs.filter(status=status)
+        if status == OfficeOrder.STATUS_PENDING:
+            qs = qs.filter(workflow_stage_id=Sale.WORKFLOW_STAGE_BRANCH_APPROVED)
+        elif status == OfficeOrder.STATUS_RELEASED:
+            qs = qs.exclude(workflow_stage_id=Sale.WORKFLOW_STAGE_BRANCH_APPROVED)
     else:
         qs = list_office_orders(request.user, status=status)
 
     qs = apply_office_order_search_filters(qs, request.GET)
-    limit = _parse_limit(request.GET)
-    total = qs.count()
-    summary_qs = qs
-    qs = qs[:limit]
+    page, meta = paginate(qs, request.GET)
 
     return success(
         {
             "results": [
-                office_order_to_dict(o, include_lines=True, user=request.user) for o in qs
+                office_order_to_dict(o, include_lines=True, user=request.user) for o in page
             ],
-            "summary": aggregate_office_orders(summary_qs),
-            "total": total,
-            "limit": limit,
+            "summary": aggregate_office_orders(qs),
+            **meta,
         }
     )
 
@@ -133,7 +132,7 @@ def office_order_reject(request, pk):
     return success(
         {
             "source_sale_id": sale.id,
-            "workflow_stage": sale.workflow_stage,
+            "workflow_stage": sale.workflow_stage_id,
             "message": "سفارش به صف فروشگاه بازگردانده شد.",
         }
     )
@@ -168,7 +167,7 @@ def office_order_rollback(request, pk):
         return success(
             {
                 "source_sale_id": result.id,
-                "workflow_stage": result.workflow_stage,
+                "workflow_stage": result.workflow_stage_id,
                 "message": "سفارش به صف فروشگاه بازگردانده شد.",
                 "removed": True,
             }

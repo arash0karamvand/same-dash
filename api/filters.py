@@ -26,11 +26,11 @@ def apply_sales_filters(qs, params):
     if payment_status:
         if payment_status == "partial":
             payment_status = "installment"
-        qs = qs.filter(payment_status=payment_status)
+        qs = qs.filter(payment_status_ref_id=payment_status)
 
     payment_method = params.get("payment_method")
     if payment_method:
-        qs = qs.filter(payment_method=payment_method)
+        qs = qs.filter(payment_method_ref_id=payment_method)
 
     date_from = parse_date(params.get("date_from"))
     date_to = parse_date(params.get("date_to"))
@@ -69,7 +69,7 @@ def apply_sales_filters(qs, params):
 
     order_kind = (params.get("order_kind") or "").strip()
     if order_kind:
-        qs = qs.filter(order_kind=order_kind)
+        qs = qs.filter(order_kind_ref_id=order_kind)
 
     order_status = (params.get("order_status") or "").strip()
     if order_status:

@@ -47,7 +47,7 @@ class ResetBusinessDataTests(TestCase):
         self.assertEqual(Sale.objects.count(), 0)
 
     def test_deletes_staff_profiles_of_non_admins(self):
-        StaffProfile.objects.create(user=self.operator, branch="branch_1")
+        StaffProfile.objects.create(user=self.operator, branch_id="branch_1")
         reset_business_data()
         self.assertEqual(StaffProfile.objects.filter(user=self.operator).count(), 0)
 

@@ -3,8 +3,10 @@
 from django.db import models
 from django.utils import timezone
 
+from backend.models.base import ReferenceQuerySet
 
-class SoftDeleteQuerySet(models.QuerySet):
+
+class SoftDeleteQuerySet(ReferenceQuerySet):
     def alive(self):
         return self.filter(is_deleted=False)
 

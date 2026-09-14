@@ -63,16 +63,18 @@ class Command(BaseCommand):
 
         for idx, spec in enumerate(DEMO_SELLERS):
             user = self._ensure_user(spec["username"], spec["full_name"], SELLER_ROLE)
-            profile, _ = StaffProfile.objects.get_or_create(user=user, defaults={"branch": spec["home_branch"]})
-            profile.branch = spec["home_branch"]
+            profile, _ = StaffProfile.objects.get_or_create(
+                user=user, defaults={"branch_id": spec["home_branch"]}
+            )
+            profile.branch_id = spec["home_branch"]
             profile.job_title = "فروشنده"
             profile.save()
 
             seller, _ = Seller.objects.get_or_create(
                 user=user,
-                defaults={"full_name": spec["full_name"], "branch": spec["home_branch"]},
+                defaults={"full_name": spec["full_name"], "branch_id": spec["home_branch"]},
             )
-            seller.branch = spec["home_branch"]
+            seller.branch_id = spec["home_branch"]
             seller.full_name = spec["full_name"]
             seller.is_active = True
             seller.save()
@@ -83,7 +85,7 @@ class Command(BaseCommand):
                 defaults={
                     "status": "present",
                     "approval_status": "approved",
-                    "work_branch": spec["home_branch"],
+                    "work_branch_id": spec["home_branch"],
                     "check_in_at": timezone.now(),
                 },
             )
@@ -96,7 +98,7 @@ class Command(BaseCommand):
                     defaults={
                         "status": "present",
                         "approval_status": "approved",
-                        "work_branch": BRANCH_2,
+                        "work_branch_id": BRANCH_2,
                         "check_in_at": timezone.now(),
                     },
                 )

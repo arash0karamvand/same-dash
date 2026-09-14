@@ -32,7 +32,12 @@ def can_list_sales(user):
         return False
     if is_executive_user(user):
         return True
-    return has_permission(user, APPROVE_SALE_BRANCH) or is_branch_supervisor(user)
+    return (
+        has_permission(user, VIEW_SALES)
+        or has_permission(user, VIEW_OWN_SALES)
+        or has_permission(user, APPROVE_SALE_BRANCH)
+        or is_branch_supervisor(user)
+    )
 
 
 def can_view_sales_reports(user):
@@ -54,13 +59,16 @@ def sales_queryset(user, params=None):
     )
     pending_q = qs.filter(
         workflow_stage=STAGE_PENDING_BRANCH,
-        transferred_to_office_at__isnull=True,
     )
     if is_executive_user(user):
         queue = (params.get("queue") or "").strip()
         if queue == "branch":
             return pending_q
         return qs
+    if has_permission(user, VIEW_SALES):
+        return qs
+    if has_permission(user, VIEW_OWN_SALES):
+        return qs.filter(recorded_by=user)
     if has_permission(user, APPROVE_SALE_BRANCH) or is_branch_supervisor(user):
         branch = get_user_branch(user) or effective_sale_branch(user)
         if branch:

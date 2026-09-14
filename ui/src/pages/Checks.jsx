@@ -9,7 +9,8 @@ import Select from '../components/Select'
 import OfficeSectionCard from '../components/OfficeSectionCard'
 import { CHECK_NOTES_LABEL, CHECK_ROW_FIELDS, EMPTY_CHECK_ROW } from '../config/checkForm'
 import { OFFICE_INSTALLMENTS_FILTER } from '../config/recordFilterSections'
-import { Badge, Button, Card, EmptyState, Field, FilterBar, Modal } from '../components/ui'
+import { Badge, Button, Card, EmptyState, Field, FilterBar, LoadMoreButton, Modal } from '../components/ui'
+import { PAGE_SIZE, PICKER_LIMIT, withPageParams } from '../config/pagination'
 import { useConfirm } from '../context/ConfirmContext'
 import { formatDate, formatMoney } from '../utils/format'
 import { currentJalali, jalaliMonthToGregorian, PERSIAN_MONTHS, todayIso, toPersianDigits } from '../utils/jalali'
@@ -78,7 +79,12 @@ export default function Checks() {
   const [sales, setSales] = useState([])
   const [jYear, setJYear] = useState(init.year)
   const [jMonth, setJMonth] = useState(init.month)
+  const [statusFilter, setStatusFilter] = useState('')
+  const [search, setSearch] = useState('')
+  const [total, setTotal] = useState(0)
+  const [offset, setOffset] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState(null)
@@ -87,20 +93,34 @@ export default function Checks() {
   const range = jalaliMonthToGregorian(jYear, jMonth)
   const monthLabel = `${PERSIAN_MONTHS[jMonth - 1]} ${toPersianDigits(jYear)}`
 
-  const load = async () => {
-    setLoading(true)
+  const load = async ({ append = false, offset: nextOffset = 0 } = {}) => {
+    if (append) setLoadingMore(true)
+    else setLoading(true)
     try {
       const params = new URLSearchParams({
         date_from: range.dateFrom,
         date_to: range.dateTo,
         payment_method: 'check',
       })
+      if (statusFilter) params.set('status', statusFilter)
+      if (search.trim()) params.set('search', search.trim())
+      const listParams = withPageParams(params, { offset: nextOffset, limit: PAGE_SIZE })
+      if (append) {
+        const list = await installmentsApi.list(listParams)
+        setItems((prev) => [...prev, ...(list.results || [])])
+        setTotal(list.total || 0)
+        setOffset(list.offset ?? nextOffset)
+        setError('')
+        return
+      }
       const [list, rep, salesData] = await Promise.all([
-        installmentsApi.list(params.toString()),
+        installmentsApi.list(listParams),
         installmentsApi.checksReport({ dateFrom: range.dateFrom, dateTo: range.dateTo }),
-        salesApi.list('payment_status=installment'),
+        salesApi.list(withPageParams('payment_status=installment', { limit: PICKER_LIMIT })),
       ])
       setItems(list.results)
+      setTotal(list.total || 0)
+      setOffset(list.offset ?? 0)
       setReport(rep)
       setSales(salesData.results)
       setError('')
@@ -108,10 +128,11 @@ export default function Checks() {
       setError(e.message)
     } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
   }
 
-  useEffect(() => { load() }, [jYear, jMonth])
+  useEffect(() => { load() }, [jYear, jMonth, statusFilter])
 
   const openCreate = () => {
     setEditing(null)
@@ -232,6 +253,31 @@ export default function Checks() {
               onChange={(y, m) => { setJYear(y); setJMonth(m) }}
             />
           </Field>
+          <Field label="وضعیت">
+            <Select
+              value={statusFilter}
+              onChange={setStatusFilter}
+              options={[
+                { value: '', label: 'همه' },
+                { value: 'pending', label: 'در انتظار' },
+                { value: 'paid', label: 'وصول‌شده' },
+                { value: 'cancelled', label: 'لغوشده' },
+              ]}
+              placeholder="همه"
+            />
+          </Field>
+          <Field label="جستجو">
+            <input
+              className="search-input"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="شماره چک، بانک یا مشتری…"
+              onKeyDown={(e) => e.key === 'Enter' && load()}
+            />
+          </Field>
+          <div className="page-filters-actions">
+            <Button type="button" variant="ghost" onClick={() => load()}>اعمال فیلتر</Button>
+          </div>
         </FilterBar>
         {loading ? <div className="loading">در حال بارگذاری…</div> : items.length === 0 ? (
           <EmptyState text="چکی در این ماه نیست." />
@@ -304,6 +350,11 @@ export default function Checks() {
                 </div>
               ))}
             </div>
+            <LoadMoreButton
+              hasMore={items.length < total}
+              loading={loadingMore}
+              onClick={() => load({ append: true, offset: offset + PAGE_SIZE })}
+            />
           </>
         )}
       </OfficeSectionCard>

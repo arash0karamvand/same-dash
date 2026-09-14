@@ -7,7 +7,7 @@ import BrandLogo from '../components/BrandLogo'
 import ThemeToggle from '../components/ThemeToggle'
 
 export default function Login() {
-  const { login, refresh } = useAuth()
+  const { login } = useAuth()
   const [form, setForm] = useState({ username: '', password: '' })
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
@@ -20,7 +20,6 @@ export default function Login() {
     setBusy(true)
     try {
       await login({ username: form.username, password: form.password })
-      await refresh()
     } catch (err) {
       setError(err.message)
     } finally {

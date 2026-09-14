@@ -15,8 +15,10 @@ from backend.models import (
     Sale,
 )
 
-DEFAULT_RECORD_FILTER_LIMIT = 30
-MAX_RECORD_FILTER_LIMIT = 500
+from logic.pagination import MAX_PAGE_SIZE, PAGE_SIZE
+
+DEFAULT_RECORD_FILTER_LIMIT = PAGE_SIZE
+MAX_RECORD_FILTER_LIMIT = MAX_PAGE_SIZE
 
 
 def _parse_amount(value):
@@ -176,7 +178,13 @@ def apply_office_order_search_filters(qs, params):
 
     qs = _apply_date_range(qs, "sold_at", date_from, date_to)
     if type_field and type_value:
-        qs = qs.filter(**{type_field: type_value})
+        if type_field == "status":
+            if type_value == OfficeOrder.STATUS_PENDING:
+                qs = qs.filter(workflow_stage_id=Sale.WORKFLOW_STAGE_BRANCH_APPROVED)
+            elif type_value == OfficeOrder.STATUS_RELEASED:
+                qs = qs.exclude(workflow_stage_id=Sale.WORKFLOW_STAGE_BRANCH_APPROVED)
+        else:
+            qs = qs.filter(**{type_field: type_value})
     if name:
         qs = qs.filter(
             Q(customer__full_name__icontains=name)
@@ -336,7 +344,14 @@ def query_filtered_records(params, *, include_executive_logs=False):
 
     elif model_key == "accounting_entry":
         qs = AccountingEntry.objects.all()
-        qs = _apply_date_range(qs, "entry_date", date_from, date_to)
+        if date_from:
+            qs = qs.filter(journal__entry_date__gte=timezone.make_aware(
+                datetime.combine(date_from, time.min)
+            ))
+        if date_to:
+            qs = qs.filter(journal__entry_date__lte=timezone.make_aware(
+                datetime.combine(date_to, time.max)
+            ))
         if type_field and type_value:
             qs = qs.filter(**{type_field: type_value})
         elif type_value:
@@ -344,27 +359,34 @@ def query_filtered_records(params, *, include_executive_logs=False):
         if name:
             qs = qs.filter(
                 Q(description__icontains=name)
-                | Q(document_code__icontains=name)
-                | Q(detailed_account__icontains=name)
+                | Q(journal__document_code__icontains=name)
+                | Q(account__name__icontains=name)
             )
-        qs = _apply_amount_range(qs, "amount", amount_min, amount_max)
+        if amount_min is not None:
+            qs = qs.filter(Q(debit__gte=amount_min) | Q(credit__gte=amount_min))
+        if amount_max is not None:
+            qs = qs.filter(
+                Q(debit__gt=0, debit__lte=amount_max)
+                | Q(credit__gt=0, credit__lte=amount_max)
+            )
         total = qs.count()
-        rows = qs.order_by("-entry_date")[offset : offset + limit]
+        rows = qs.order_by("-journal__entry_date")[offset : offset + limit]
         results = [_serialize_accounting_entry(r) for r in rows]
 
     elif model_key == "audit_log":
-        qs = AuditLog.objects.select_related("user").all()
+        qs = AuditLog.objects.select_related("user", "entity_type_ref").all()
         if not include_executive_logs:
             qs = qs.filter(is_executive_only=False)
         qs = _apply_date_range(qs, "created_at", date_from, date_to)
         if type_field and type_value:
-            qs = qs.filter(**{type_field: type_value})
+            field = "entity_type_ref_id" if type_field == "entity_type" else type_field
+            qs = qs.filter(**{field: type_value})
         elif type_value:
             qs = qs.filter(action=type_value)
         if name:
             qs = qs.filter(
                 Q(message__icontains=name)
-                | Q(entity_type__icontains=name)
+                | Q(entity_type_ref__code__icontains=name)
                 | Q(user__username__icontains=name)
                 | Q(user__first_name__icontains=name)
                 | Q(user__last_name__icontains=name)

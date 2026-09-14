@@ -29,6 +29,7 @@ def _bind(name):
     return office_accounting.make_view(name, ledger=_LEDGER, perms=_PERMS)
 
 
+meta = _bind("meta")
 account_list = _bind("account_list")
 document_models = _bind("document_models")
 ledger = _bind("ledger")

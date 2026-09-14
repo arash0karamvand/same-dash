@@ -54,7 +54,7 @@ def _attendance_by_user(user_ids, period, jy, jm, jd):
         ay, am, ad = date_to_jalali(att.date)
         if not _in_jalali_period(period, ay, am, ad, jy, jm, jd):
             continue
-        branch = att.work_branch or att.seller.branch or ""
+        branch = att.work_branch_id or att.seller.branch_id or ""
         by_user[uid][branch] += 1
     return by_user
 
@@ -138,7 +138,7 @@ def build_employee_ranking(qs, period, jy, jm=None, jd=None, branch=None):
     for rank, uid in enumerate(ranked_ids, start=1):
         user = users.get(uid)
         profile = profiles.get(uid)
-        home_branch = profile.branch if profile else ""
+        home_branch = profile.branch_id if profile else ""
         sales_rows = _sales_branch_rows(user_branch_sales[uid])
         att_rows = _branch_rows(attendance_map.get(uid, {}))
 

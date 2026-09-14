@@ -3,7 +3,7 @@
 from django.core.cache import cache
 
 from auth.permissions import PERMISSION_LABELS
-from backend.models import MenuSection
+from backend.models import MenuSection, Permission
 
 CACHE_KEY = "menu_sections_v1"
 CACHE_TTL = 60
@@ -118,9 +118,9 @@ def create_menu_section(
         sort_order=int(sort_order or 0),
         is_active=bool(is_active),
         system_admin=bool(system_admin),
-        menu_permission_codes=menu_permission_codes or [],
-        section_permission_codes=section_permission_codes or [],
     )
+    _set_permissions(sec.menu_permissions, menu_permission_codes or [])
+    _set_permissions(sec.section_permissions, section_permission_codes or [])
     invalidate_menu_cache()
     return sec
 
@@ -140,12 +140,23 @@ def update_menu_section(sec, data):
     if "system_admin" in data:
         sec.system_admin = bool(data.get("system_admin"))
     if "menu_permission_codes" in data:
-        sec.menu_permission_codes = data.get("menu_permission_codes") or []
+        _set_permissions(sec.menu_permissions, data.get("menu_permission_codes") or [])
     if "section_permission_codes" in data:
-        sec.section_permission_codes = data.get("section_permission_codes") or []
+        _set_permissions(sec.section_permissions, data.get("section_permission_codes") or [])
     sec.save()
     invalidate_menu_cache()
     return sec
+
+
+def _set_permissions(relation, codes):
+    relation.set(
+        [
+            Permission.objects.get_or_create(
+                code=code, defaults={"label": PERMISSION_LABELS.get(code, code)}
+            )[0]
+            for code in codes
+        ]
+    )
 
 
 def deactivate_menu_section(sec):

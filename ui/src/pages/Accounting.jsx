@@ -2,7 +2,13 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { accountingApi } from '../api/client'
+import AccountingFiltersCollapsible, { countAccountingFilters } from '../components/AccountingFiltersCollapsible'
+import AccountingStatusChips from '../components/AccountingStatusChips'
+import AccountingShell from '../components/accounting/AccountingShell'
+import LedgerExplorer from '../components/accounting/LedgerExplorer'
+import ReportLevelNav from '../components/accounting/ReportLevelNav'
 import AccountDetailPanel from '../components/AccountDetailPanel'
+import { isReportTab } from '../config/accountingNav'
 import LedgerSidePanelContent from '../components/LedgerSidePanelContent'
 import {
   DEFAULT_DRILL_PANEL_LAYOUT,
@@ -24,7 +30,8 @@ import TrialBalanceFilterPanel, {
 import { TRIAL_BALANCE_FILTERS, LEDGER_DRILL_FILTER } from '../config/recordFilterSections'
 import Select from '../components/Select'
 import PersianDateInput from '../components/PersianDateInput'
-import { Button, Card, EmptyState, Field, FilterBar, Modal } from '../components/ui'
+import { Button, Card, EmptyState, Field, FilterBar, LoadMoreButton, Modal } from '../components/ui'
+import { PAGE_SIZE } from '../config/pagination'
 import {
   ACCOUNTING_TABS,
   ACCOUNTING_MENU,
@@ -52,6 +59,7 @@ import {
   saveAccountChild,
   saveAccountEdit,
 } from '../utils/accountHelpers'
+import { useMediaQuery } from '../hooks/useMediaQuery'
 import { formatDate, formatNumber, formatRial } from '../utils/format'
 import { hasPermission } from '../utils/permissions'
 
@@ -293,15 +301,31 @@ const EMPTY_LEDGER_COL_FILTERS = {
 
 function DetailLedgerTable({ ledger, loading, compact = false, onEditEntry, onDeleteEntry, canApprove }) {
   const [colFilters, setColFilters] = useState(EMPTY_LEDGER_COL_FILTERS)
+  const [mobileQuery, setMobileQuery] = useState('')
+  const compactView = useMediaQuery('(max-width: 1449px)')
 
   useEffect(() => {
     setColFilters(EMPTY_LEDGER_COL_FILTERS)
+    setMobileQuery('')
   }, [ledger?.header?.detailed_code, ledger?.header?.detailed_name])
 
   const filteredLines = useMemo(() => {
     if (!ledger?.lines?.length) return []
-    return ledger.lines.filter((line) => ledgerLineMatchesFilters(line, colFilters))
-  }, [ledger, colFilters])
+    let lines = ledger.lines.filter((line) => ledgerLineMatchesFilters(line, colFilters))
+    const q = mobileQuery.trim().toLowerCase()
+    if (q) {
+      lines = lines.filter((line) => {
+        const hay = [
+          line.description,
+          line.attach_code,
+          line.document_number != null ? String(line.document_number) : '',
+          line.entry_date ? formatDate(line.entry_date) : '',
+        ].join(' ').toLowerCase()
+        return hay.includes(q)
+      })
+    }
+    return lines
+  }, [ledger, colFilters, mobileQuery])
 
   const setCol = (key) => (e) => setColFilters({ ...colFilters, [key]: e.target.value })
 
@@ -335,6 +359,16 @@ function DetailLedgerTable({ ledger, loading, compact = false, onEditEntry, onDe
           </>
         )}
       </div>
+      {compactView && (
+        <div className="accounting-mobile-ledger-search">
+          <input
+            className="search-input"
+            value={mobileQuery}
+            onChange={(e) => setMobileQuery(e.target.value)}
+            placeholder="جستجو در شرح، شماره سند، ع یا تاریخ…"
+          />
+        </div>
+      )}
       <div className={`table-wrap accounting-ledger-wrap accounting-table-desktop${compact ? ' ledger-table-compact' : ''}`}>
         <table className="table accounting-ledger-table">
           <thead>
@@ -503,6 +537,7 @@ export default function Accounting({
   const accountingGuideKey = `${guidePrefix}__${activeTab}`
   useRegisterPageGuide(accountingGuideKey, PAGE_GUIDE_DEFAULTS[accountingGuideKey] || '')
   const [classFilter, setClassFilter] = useState('')
+  const [classOptions, setClassOptions] = useState(ACCOUNT_CLASS_OPTIONS)
   const [trialDateFrom, setTrialDateFrom] = useState('')
   const [trialDateTo, setTrialDateTo] = useState('')
   const [error, setError] = useState('')
@@ -581,7 +616,8 @@ export default function Accounting({
   const [docListLoading, setDocListLoading] = useState(false)
   const [docListSearch, setDocListSearch] = useState('')
   const [docListApproved, setDocListApproved] = useState('')
-  const DOC_LIST_LIMIT = 30
+  const [docListLoadingMore, setDocListLoadingMore] = useState(false)
+  const DOC_LIST_LIMIT = PAGE_SIZE
 
   const [entryEdit, setEntryEdit] = useState(null)
   const [entryEditSaving, setEntryEditSaving] = useState(false)
@@ -593,6 +629,7 @@ export default function Accounting({
   const [chartChildForm, setChartChildForm] = useState(EMPTY_CHART_CHILD)
   const [chartChildSaving, setChartChildSaving] = useState(false)
   const [chartPanelTab, setChartPanelTab] = useState('edit')
+  const [ledgerTreeSearch, setLedgerTreeSearch] = useState('')
   const chartDetailRef = useRef(null)
 
   const [lineAccountPick, setLineAccountPick] = useState(null)
@@ -983,8 +1020,9 @@ export default function Accounting({
     }
   }, [classFilter, dateRange])
 
-  const loadDocumentList = useCallback(async (offset = 0) => {
-    setDocListLoading(true)
+  const loadDocumentList = useCallback(async (offset = 0, append = false) => {
+    if (append) setDocListLoadingMore(true)
+    else setDocListLoading(true)
     try {
       const data = await api.listDocuments({
         search: docListSearch.trim() || undefined,
@@ -995,7 +1033,7 @@ export default function Accounting({
         offset,
         limit: DOC_LIST_LIMIT,
       })
-      setDocListRows(data.results || [])
+      setDocListRows((prev) => (append ? [...prev, ...(data.results || [])] : (data.results || [])))
       setDocListTotal(data.total || 0)
       setDocListOffset(data.offset || 0)
       setError('')
@@ -1003,14 +1041,15 @@ export default function Accounting({
       setError(e.message)
     } finally {
       setDocListLoading(false)
+      setDocListLoadingMore(false)
     }
   }, [api, docListSearch, docListApproved, classFilter, trialDateFrom, trialDateTo])
 
   const refreshAll = useCallback(async () => {
     await Promise.all([loadAccounts(), loadTrialBalance()])
     if (activeTab === 'ledger') await loadLedgerGeneral()
-    if (activeTab === 'documents' && docView === 'list') await loadDocumentList(docListOffset)
-  }, [loadAccounts, loadTrialBalance, loadLedgerGeneral, loadDocumentList, activeTab, docView, docListOffset])
+    if (activeTab === 'documents' && docView === 'list') await loadDocumentList(0)
+  }, [loadAccounts, loadTrialBalance, loadLedgerGeneral, loadDocumentList, activeTab, docView])
 
   const resetDocForm = () => {
     setDocEditCode('')
@@ -1063,7 +1102,7 @@ export default function Accounting({
     if (!window.confirm(`سند ${docCode} حذف شود؟`)) return
     try {
       await api.deleteDocument(docCode)
-      await loadDocumentList(docListOffset)
+      await loadDocumentList(0)
       await refreshAll()
     } catch (err) {
       setError(err.message)
@@ -1073,7 +1112,7 @@ export default function Accounting({
   const toggleDocumentApproval = async (doc, approve) => {
     try {
       await api.approveDocument(doc.document_code, approve)
-      await loadDocumentList(docListOffset)
+      await loadDocumentList(0)
     } catch (err) {
       setError(err.message)
     }
@@ -1122,6 +1161,16 @@ export default function Accounting({
   }
 
   useEffect(() => { loadAccounts() }, [loadAccounts])
+
+  useEffect(() => {
+    if (!api.meta) return undefined
+    let cancelled = false
+    api.meta().then((data) => {
+      if (cancelled || !data?.account_classes?.length) return
+      setClassOptions([{ value: '', label: 'همه گروه‌ها' }, ...data.account_classes])
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [api])
   useEffect(() => { loadTrialBalance() }, [loadTrialBalance])
   useEffect(() => {
     if (activeTab === 'ledger') {
@@ -2085,57 +2134,41 @@ export default function Accounting({
     return sumTrialBalanceTotals(filteredTrialRows)
   }, [activeTab, trialFilterOn, filteredTrialRows, trialTotals])
 
-  return (
-    <div className="page accounting-page">
-      <div className="accounting-toolbar">
-        {canCreate && activeTab === 'documents' && docView === 'form' && docCanEdit && (
-          <Button type="button" onClick={saveDocument} disabled={docSaving || !docTotals.hasAmounts}>
-            {docSaving ? 'در حال ثبت…' : docEditCode ? 'ذخیره تغییرات' : `ثبت ${TERMS.document}`}
-          </Button>
-        )}
-        {canCreate && activeTab === 'documents' && docView === 'list' && (
-          <Button type="button" onClick={openNewDocument}>+ سند جدید</Button>
-        )}
-        {activeTab === 'documents' && docView === 'form' && (
-          <Button type="button" variant="ghost" onClick={() => { resetDocForm(); setDocView('list') }}>
-            بازگشت به فهرست
-          </Button>
-        )}
-        {canCreate && activeTab === 'upload-excel' && (
-          <Button type="button" onClick={runExcelImport} disabled={importLoading || !importFile}>
-            {importLoading ? 'در حال پردازش…' : importDryRun ? 'اعتبارسنجی فایل' : 'بارگذاری و ثبت'}
-          </Button>
-        )}
-        {(canCreate || canEditChart) && activeTab === 'ledger' && (
-          <Button
-            type="button"
-            onClick={() => {
-              if (activeLedgerCard === 'ledger') {
-                openLedgerAccountPanel('document')
-              } else if (ledgerAccountSelection && ledgerAccountSelection.level !== 'detailed') {
-                openLedgerAccountPanel('add')
-              } else {
-                openLedgerAccountPanel('edit')
-              }
-            }}
-          >
-            {ledgerAccountPanelOpen ? 'پنل ساخت' : '+ ساخت حساب / سند'}
-          </Button>
-        )}
-      </div>
+  const accountingToolbar = (
+    <>
+      {canCreate && activeTab === 'documents' && docView === 'form' && docCanEdit && (
+        <Button type="button" onClick={saveDocument} disabled={docSaving || !docTotals.hasAmounts}>
+          {docSaving ? 'در حال ثبت…' : docEditCode ? 'ذخیره تغییرات' : `ثبت ${TERMS.document}`}
+        </Button>
+      )}
+      {canCreate && activeTab === 'documents' && docView === 'list' && (
+        <Button type="button" onClick={openNewDocument}>+ سند جدید</Button>
+      )}
+      {activeTab === 'documents' && docView === 'form' && (
+        <Button type="button" variant="ghost" onClick={() => { resetDocForm(); setDocView('list') }}>
+          بازگشت به فهرست
+        </Button>
+      )}
+      {canCreate && activeTab === 'upload-excel' && (
+        <Button type="button" onClick={runExcelImport} disabled={importLoading || !importFile}>
+          {importLoading ? 'در حال پردازش…' : importDryRun ? 'اعتبارسنجی فایل' : 'بارگذاری و ثبت'}
+        </Button>
+      )}
+    </>
+  )
 
-      <div className="accounting-tabs">
-        {visibleTabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            className={`accounting-tab ${activeTab === tab.id ? 'active' : ''}`}
-            onClick={() => setActiveTab(tab.id)}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+  return (
+    <AccountingShell
+      pageTitle={pageTitle}
+      ledgerKind={ledgerKind}
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
+      visibleTabs={visibleTabs}
+      toolbar={accountingToolbar}
+    >
+      {isReportTab(activeTab) && (
+        <ReportLevelNav activeTab={activeTab} onChange={setActiveTab} visibleTabs={visibleTabs} />
+      )}
 
       {TRIAL_TABS.includes(activeTab) && trialFilterConfig && (
         <Card title={trialFilterConfig.title} className="section-record-filter accounting-section-filter">
@@ -2151,74 +2184,62 @@ export default function Accounting({
         </Card>
       )}
 
-      {activeTab === 'ledger' && (
-        <Card title={LEDGER_DRILL_FILTER.title} className="section-record-filter accounting-section-filter">
-          <TrialBalanceFilterPanel
-            codeLabel={LEDGER_DRILL_FILTER.codeLabel}
-            nameLabel={LEDGER_DRILL_FILTER.nameLabel}
-            value={ledgerTextFilter}
-            onChange={setLedgerTextFilter}
-            onReset={() => setLedgerTextFilter(EMPTY_TRIAL_BALANCE_FILTER)}
-            shownCount={filteredLedgerGeneralRows.length}
-            totalCount={ledgerGeneralRows.length}
-          />
-          {ledgerFilterOn && (ledgerFilterCounts.subsidiary.shown !== ledgerFilterCounts.subsidiary.total
-            || ledgerFilterCounts.detailed.shown !== ledgerFilterCounts.detailed.total) && (
-            <p className="record-filter-count muted ledger-drill-filter-meta">
-              {drillGeneral && ledgerFilterCounts.subsidiary.total > 0 && (
-                <span>
-                  معین: <strong>{formatNumber(ledgerFilterCounts.subsidiary.shown)}</strong>
-                  {' '}از {formatNumber(ledgerFilterCounts.subsidiary.total)}
-                  {' · '}
-                </span>
-              )}
-              {drillSubsidiary && ledgerFilterCounts.detailed.total > 0 && (
-                <span>
-                  تفصیلی: <strong>{formatNumber(ledgerFilterCounts.detailed.shown)}</strong>
-                  {' '}از {formatNumber(ledgerFilterCounts.detailed.total)}
-                </span>
-              )}
-            </p>
-          )}
-        </Card>
-      )}
-
       {[...TRIAL_TABS, 'ledger', 'documents'].includes(activeTab) && (
-        <FilterBar>
-          <Field label={TERMS.accountGroup}>
-            <Select value={classFilter} onChange={setClassFilter} options={ACCOUNT_CLASS_OPTIONS} placeholder="همه" />
-          </Field>
-          {(TRIAL_TABS.includes(activeTab) || activeTab === 'ledger') && (
-            <>
-              <Field label={TERMS.dateFrom}>
-                <PersianDateInput
-                  value={trialDateFrom}
-                  onChange={setTrialDateFrom}
-                  placeholder={TERMS.dateFrom}
-                  maxIso={trialDateTo || undefined}
-                  onClear={() => setTrialDateFrom('')}
-                  clearLabel="پاک کردن"
-                />
-              </Field>
-              <Field label={TERMS.dateTo}>
-                <PersianDateInput
-                  value={trialDateTo}
-                  onChange={setTrialDateTo}
-                  placeholder={TERMS.dateTo}
-                  minIso={trialDateFrom || undefined}
-                  onClear={() => setTrialDateTo('')}
-                  clearLabel="پاک کردن"
-                />
-              </Field>
-            </>
-          )}
-        </FilterBar>
+        <AccountingFiltersCollapsible
+          title="فیلتر گزارش"
+          activeCount={countAccountingFilters({
+            classFilter,
+            dateFrom: (TRIAL_TABS.includes(activeTab) || activeTab === 'ledger') ? trialDateFrom : '',
+            dateTo: (TRIAL_TABS.includes(activeTab) || activeTab === 'ledger') ? trialDateTo : '',
+          })}
+        >
+          <FilterBar>
+            <Field label={TERMS.accountGroup}>
+              <Select value={classFilter} onChange={setClassFilter} options={classOptions} placeholder="همه" />
+            </Field>
+            {(TRIAL_TABS.includes(activeTab) || activeTab === 'ledger') && (
+              <>
+                <Field label={TERMS.dateFrom}>
+                  <PersianDateInput
+                    value={trialDateFrom}
+                    onChange={setTrialDateFrom}
+                    placeholder={TERMS.dateFrom}
+                    maxIso={trialDateTo || undefined}
+                    onClear={() => setTrialDateFrom('')}
+                    clearLabel="پاک کردن"
+                  />
+                </Field>
+                <Field label={TERMS.dateTo}>
+                  <PersianDateInput
+                    value={trialDateTo}
+                    onChange={setTrialDateTo}
+                    placeholder={TERMS.dateTo}
+                    minIso={trialDateFrom || undefined}
+                    onClear={() => setTrialDateTo('')}
+                    clearLabel="پاک کردن"
+                  />
+                </Field>
+              </>
+            )}
+          </FilterBar>
+        </AccountingFiltersCollapsible>
       )}
 
       {error && <div className="alert-error">{error}</div>}
 
       {TRIAL_TABS.includes(activeTab) && (
         <Card title={`${ACCOUNTING_TABS.find((t) => t.id === activeTab)?.label} — ${reportMeta}`}>
+          <div className="accounting-record-strip">
+            <span><strong>{formatNumber(filteredTrialRows.length)}</strong> حساب نمایش داده می‌شود</span>
+            {trialFilterOn && filteredTrialRows.length !== trialRows.length && (
+              <span className="muted">از {formatNumber(trialRows.length)} حساب</span>
+            )}
+            {displayTrialTotals?.turnover_balanced != null && (
+              <span className={displayTrialTotals.turnover_balanced ? 'doc-balanced' : 'doc-unbalanced'}>
+                {displayTrialTotals.turnover_balanced ? `✓ ${TERMS.balanced}` : `⚠ ${TERMS.unbalanced}`}
+              </span>
+            )}
+          </div>
           <TrialBalanceTable
             rows={filteredTrialRows}
             totals={displayTrialTotals}
@@ -2235,8 +2256,11 @@ export default function Accounting({
       )}
 
       {activeTab === 'documents' && docView === 'list' && (
-        <Card title={ACCOUNTING_MENU.documents}>
-          <FilterBar>
+        <Card
+          title={ACCOUNTING_MENU.documents}
+          actions={docListTotal > 0 ? <span className="muted small">{formatNumber(docListTotal)} سند</span> : null}
+        >
+          <div className="accounting-doc-list-toolbar">
             <Field label="جستجو">
               <input
                 className="search-input"
@@ -2245,19 +2269,24 @@ export default function Accounting({
                 placeholder="شرح، کد یا شماره سند…"
               />
             </Field>
-            <Field label="وضعیت تایید">
-              <Select
-                value={docListApproved}
-                onChange={setDocListApproved}
-                options={[
-                  { value: '', label: 'همه' },
-                  { value: 'true', label: 'تایید شده' },
-                  { value: 'false', label: 'در انتظار' },
-                ]}
-                placeholder="همه"
-              />
-            </Field>
-          </FilterBar>
+            <AccountingStatusChips
+              value={docListApproved}
+              onChange={setDocListApproved}
+              options={[
+                { value: '', label: 'همه' },
+                { value: 'true', label: 'تایید شده' },
+                { value: 'false', label: 'در انتظار' },
+              ]}
+            />
+          </div>
+          {docListRows.length > 0 && (
+            <div className="accounting-record-strip">
+              <span><strong>{formatNumber(docListRows.length)}</strong> سند بارگذاری شده</span>
+              {docListRows.length < docListTotal && (
+                <span className="muted">از {formatNumber(docListTotal)} سند</span>
+              )}
+            </div>
+          )}
           {docListLoading ? (
             <div className="loading">در حال بارگذاری…</div>
           ) : !docListRows.length ? (
@@ -2323,7 +2352,20 @@ export default function Accounting({
               </div>
               <div className="accounting-doc-list-cards-mobile">
                 {docListRows.map((doc) => (
-                  <div key={doc.document_code} className="m-card accounting-doc-list-card">
+                  <div
+                    key={doc.document_code}
+                    className="m-card accounting-doc-list-card accounting-doc-list-card--clickable"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => openEditDocument(doc.document_code)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        openEditDocument(doc.document_code)
+                      }
+                    }}
+                  >
+                    <p className="accounting-doc-list-card-hint">برای مشاهده/ویرایش ضربه بزنید</p>
                     <div className="m-card-head accounting-entry-card-head">
                       <div>
                         <strong>{doc.document_code}</strong>
@@ -2333,7 +2375,7 @@ export default function Accounting({
                           {doc.entry_date ? formatDate(doc.entry_date) : '—'}
                         </p>
                       </div>
-                      <span className={`accounting-doc-list-status${doc.is_approved ? '' : ' muted'}`}>
+                      <span className={`accounting-doc-list-status-badge${doc.is_approved ? ' is-approved' : ' is-pending'}`}>
                         {doc.is_approved ? '✓ تایید' : '○ در انتظار'}
                       </span>
                     </div>
@@ -2354,7 +2396,7 @@ export default function Accounting({
                       <div><span className="muted">{TERMS.credit}</span><strong>{formatRial(doc.total_credit)}</strong></div>
                       <div><span className="muted">ردیف</span><strong>{formatNumber(doc.line_count)}</strong></div>
                     </div>
-                    <div className="accounting-doc-list-actions ledger-entry-actions">
+                    <div className="accounting-doc-list-actions ledger-entry-actions" onClick={(e) => e.stopPropagation()}>
                       <button type="button" className="btn btn-ghost btn-sm" onClick={() => openEditDocument(doc.document_code)} title="مشاهده/ویرایش">✎ ویرایش</button>
                       {canDelete && !doc.is_transferred && !doc.has_system_entries && (
                         <button type="button" className="btn btn-ghost btn-sm danger" onClick={() => deleteDocumentByCode(doc.document_code)} title="حذف">× حذف</button>
@@ -2370,17 +2412,11 @@ export default function Accounting({
                   </div>
                 ))}
               </div>
-              <div className="accounting-pagination">
-                <Button type="button" variant="ghost" disabled={docListOffset <= 0} onClick={() => loadDocumentList(Math.max(0, docListOffset - DOC_LIST_LIMIT))}>
-                  قبلی
-                </Button>
-                <span className="muted">
-                  {formatNumber(docListOffset + 1)}–{formatNumber(Math.min(docListOffset + DOC_LIST_LIMIT, docListTotal))} از {formatNumber(docListTotal)}
-                </span>
-                <Button type="button" variant="ghost" disabled={docListOffset + DOC_LIST_LIMIT >= docListTotal} onClick={() => loadDocumentList(docListOffset + DOC_LIST_LIMIT)}>
-                  بعدی
-                </Button>
-              </div>
+              <LoadMoreButton
+                hasMore={docListRows.length < docListTotal}
+                loading={docListLoadingMore}
+                onClick={() => loadDocumentList(docListOffset + DOC_LIST_LIMIT, true)}
+              />
             </>
           )}
         </Card>
@@ -2574,37 +2610,45 @@ export default function Accounting({
       )}
 
       {activeTab === 'ledger' && (
-        <LedgerWorkspace
-          title={`${ACCOUNTING_MENU.ledger} — ${reportMeta}`}
-          breadcrumb={ledgerBreadcrumb || null}
-        >
-          <div
-            ref={ledgerLayoutRef}
-            className={`ld-layout${ledgerAccountPanelOpen ? ' ld-layout--with-side' : ''}${drillLayoutHasMaximized ? ' ld-layout--maximized' : ''}`}
-          >
-            <div className="ld-main">
-              {drillLayoutHasMaximized && (
-                <div className="ld-rail">
-                  {maximizedPanelId !== 'general' && renderGeneralPanel(true)}
-                  {maximizedPanelId !== 'subsidiary' && renderSubsidiaryPanel(true)}
-                  {maximizedPanelId !== 'detailed' && renderDetailedPanel(true)}
-                  {maximizedPanelId !== 'ledger' && renderLedgerPanel(true)}
-                </div>
-              )}
-              <div ref={drillStageWrapRef} className="ld-stage-wrap">
-                {drillLayoutHasMaximized ? (
-                  <div className="ld-stage ld-stage--single">
-                    {maximizedPanelId === 'general' && renderGeneralPanel()}
-                    {maximizedPanelId === 'subsidiary' && renderSubsidiaryPanel()}
-                    {maximizedPanelId === 'detailed' && renderDetailedPanel()}
-                    {maximizedPanelId === 'ledger' && renderLedgerPanel()}
-                  </div>
-                ) : (
-                  renderDrillStageResizable()
-                )}
-              </div>
-            </div>
-
+        <LedgerExplorer
+          accountGroups={accountGroups}
+          subsidiaries={subsidiaries}
+          details={details}
+          ledgerGeneralRows={filteredLedgerGeneralRows}
+          drillSubsidiaryRows={filteredDrillSubsidiaryRows}
+          drillDetailedRows={filteredDrillDetailedRows}
+          drillGeneral={drillGeneral}
+          drillSubsidiary={drillSubsidiary}
+          drillDetailed={drillDetailed}
+          breadcrumb={ledgerBreadcrumb}
+          detailHint={ledgerDetailHint}
+          treeSearch={ledgerTreeSearch}
+          onTreeSearchChange={setLedgerTreeSearch}
+          loadingGeneral={ledgerGeneralLoading}
+          loadingSubsidiary={drillSubsidiaryLoading}
+          loadingDetailed={drillDetailedLoading}
+          onSelectGeneral={selectDrillGeneral}
+          onSelectSubsidiary={selectDrillSubsidiary}
+          onSelectDetailed={selectDrillDetailed}
+          canCreate={canCreate || canEditChart}
+          onQuickDoc={() => openLedgerAccountPanel('document')}
+          onManageAccount={() => {
+            if (ledgerAccountSelection?.level !== 'detailed') {
+              openLedgerAccountPanel('add')
+            } else {
+              openLedgerAccountPanel('edit')
+            }
+          }}
+          ledgerPanel={(
+            <DetailLedgerTable
+              ledger={detailLedger}
+              loading={detailLoading}
+              onEditEntry={canEdit ? setEntryEdit : undefined}
+              onDeleteEntry={canDelete ? deleteLedgerEntry : undefined}
+              canApprove={canApprove}
+            />
+          )}
+          sidePanel={ledgerAccountPanelOpen ? (
             <LedgerSidePanel
               open={ledgerAccountPanelOpen}
               minimized={ledgerAccountPanelMinimized}
@@ -2644,8 +2688,8 @@ export default function Accounting({
                 }}
               />
             </LedgerSidePanel>
-          </div>
-        </LedgerWorkspace>
+          ) : null}
+        />
       )}
 
       {activeTab === 'chart-of-accounts' && (
@@ -3032,6 +3076,6 @@ export default function Accounting({
         </div>
       </Modal>
 
-    </div>
+    </AccountingShell>
   )
 }

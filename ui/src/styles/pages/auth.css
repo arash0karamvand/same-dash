@@ -34,6 +34,16 @@
   z-index: 1;
 }
 
+@media (max-width: 480px) {
+  .auth-card {
+    padding: 28px 18px;
+  }
+
+  .auth-brand h1 {
+    font-size: var(--text-lg);
+  }
+}
+
 .auth-card--centered {
   text-align: center;
 }

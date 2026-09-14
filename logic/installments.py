@@ -3,6 +3,7 @@
 from decimal import Decimal, InvalidOperation
 
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.dateparse import parse_date as django_parse_date
 
@@ -72,7 +73,7 @@ def pay_installment(installment, recorded_by=None):
 
 
 def checks_report(year=None, month=None, date_from=None, date_to=None):
-    qs = SaleInstallment.objects.filter(payment_method="check").select_related("sale", "sale__customer")
+    qs = SaleInstallment.objects.filter(payment_method_ref_id="check").select_related("sale", "sale__customer")
     if date_from and date_to:
         qs = qs.filter(due_date__gte=date_from, due_date__lte=date_to)
     elif year and month:
@@ -113,7 +114,7 @@ def apply_installment_filters(qs, params, parse_date_fn):
         qs = qs.filter(sale_id=sale_id)
     payment_method = params.get("payment_method")
     if payment_method:
-        qs = qs.filter(payment_method=payment_method)
+        qs = qs.filter(payment_method_ref_id=payment_method)
     status = params.get("status")
     if status:
         qs = qs.filter(status=status)
@@ -127,6 +128,15 @@ def apply_installment_filters(qs, params, parse_date_fn):
         qs = qs.filter(due_date__gte=date_from)
     if date_to:
         qs = qs.filter(due_date__lte=date_to)
+    search = (params.get("search") or "").strip()
+    if search:
+        qs = qs.filter(
+            Q(check_number__icontains=search)
+            | Q(bank_name__icontains=search)
+            | Q(receiver_name__icontains=search)
+            | Q(sale__customer__full_name__icontains=search)
+            | Q(sale__invoice_number__icontains=search)
+        )
     return qs
 
 

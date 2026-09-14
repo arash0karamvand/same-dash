@@ -56,7 +56,7 @@ def auto_approve_branch_on_create(user):
 
 
 def is_workflow_sale(sale):
-    return sale.workflow_stage != STAGE_COMPLETED or sale.order_status == sale.ORDER_STATUS_PENDING
+    return sale.workflow_stage_id != STAGE_COMPLETED or sale.order_status == sale.ORDER_STATUS_PENDING
 
 
 @transaction.atomic
@@ -64,14 +64,13 @@ def approve_sale_branch(sale, user):
     from backend.models import Sale
     from logic.order_queues import create_office_order_from_sale
 
-    if sale.workflow_stage != STAGE_PENDING_BRANCH:
+    if sale.workflow_stage_id != STAGE_PENDING_BRANCH:
         raise ValueError("این سفارش در مرحله تایید سرپرست شعبه نیست.")
     if sale.order_status == Sale.ORDER_STATUS_CANCELLED:
         raise ValueError("سفارش لغو شده است.")
-    if sale.transferred_to_office_at:
-        raise ValueError("این سفارش قبلاً به اداری ارسال شده است.")
 
     create_office_order_from_sale(sale, user)
+    sale.refresh_from_db()
     return sale
 
 
@@ -105,12 +104,14 @@ def approve_office_order(
         raise ValueError("برای سفارش چکی، انتخاب حساب ثبت چک الزامی است.")
 
     create_factory_order_from_office(office_order, user)
+    office_order.refresh_from_db()
+    sale.refresh_from_db()
 
     outstanding = balance_due(sale)
     from backend.models import Sale
 
     if sale.accounting_mode == Sale.ACCOUNTING_MODE_AUTOMATIC:
-        if not sale.accounting_entries.exists():
+        if not sale.journal_links.exists():
             _create_sale_accounting(sale, outstanding)
         from logic.accounting import approve_sale_accounting_entries
 
@@ -159,13 +160,8 @@ def get_office_workflow_snapshot(office_order, factory_order=None):
     """وضعیت فعلی کالا، واحد مسئول و امکان برگشت یک مرحله."""
     from backend.models import FactoryOrder, OfficeOrder
 
-    if factory_order is None:
-        try:
-            factory_order = office_order.factory_order
-        except FactoryOrder.DoesNotExist:
-            factory_order = None
-    if factory_order and factory_order.is_deleted:
-        factory_order = None
+    if factory_order is None and office_order.status == OfficeOrder.STATUS_RELEASED:
+        factory_order = office_order
 
     if office_order.status == OfficeOrder.STATUS_PENDING:
         return {
@@ -179,19 +175,7 @@ def get_office_workflow_snapshot(office_order, factory_order=None):
             "rollback_action": "to_shop",
         }
 
-    if not factory_order:
-        return {
-            "workflow_stage": STAGE_BRANCH_APPROVED,
-            "workflow_stage_display": "ارسال‌شده — بدون رکورد کارخانه",
-            "holder_department": "—",
-            "holder_name": None,
-            "holder_detail": "—",
-            "can_rollback": False,
-            "rollback_label": None,
-            "rollback_action": None,
-        }
-
-    stage = factory_order.workflow_stage
+    stage = factory_order.workflow_stage_id
     if stage == FactoryOrder.WORKFLOW_STAGE_COMPLETED:
         return {
             "workflow_stage": STAGE_COMPLETED,
@@ -269,116 +253,81 @@ def get_office_workflow_snapshot(office_order, factory_order=None):
 
 @transaction.atomic
 def recall_factory_order_to_office(office_order, user, reason=""):
-    from backend.models import FactoryOrder, OfficeOrder
+    from backend.models import OfficeOrder
+    from logic.order_queues import as_office_order, transition_order
 
     if office_order.status != OfficeOrder.STATUS_RELEASED:
         raise ValueError("فقط سفارش‌های ارسال‌شده به کارخانه قابل بازگردانی به اداری هستند.")
-    try:
-        factory = office_order.factory_order
-    except FactoryOrder.DoesNotExist:
-        raise ValueError("رکورد کارخانه یافت نشد.")
-    if factory.is_deleted:
-        raise ValueError("رکورد کارخانه یافت نشد.")
-    if factory.workflow_stage != FactoryOrder.WORKFLOW_STAGE_ACCOUNTING_APPROVED:
+    if office_order.workflow_stage_id != STAGE_ACCOUNTING_APPROVED:
         raise ValueError("فقط سفارش‌های در صف دریافت کارخانه قابل بازگردانی به اداری هستند.")
 
-    factory.soft_delete()
-    office_order.status = OfficeOrder.STATUS_PENDING
-    office_order.accounting_approved_at = None
-    office_order.accounting_approved_by = None
-    office_order.save(
-        update_fields=["status", "accounting_approved_at", "accounting_approved_by_id"]
+    sale = transition_order(
+        office_order,
+        STAGE_BRANCH_APPROVED,
+        user,
+        note=reason,
+        description=_append_workflow_note(office_order.description, "بازگشت به اداری", reason),
+        accounting_approved_at=None,
+        accounting_approved_by_id=None,
+        factory_released_at=None,
     )
-
-    sale = office_order.source_sale
-    sale.description = _append_workflow_note(sale.description, "بازگشت به اداری", reason)
-    sale.workflow_stage = sale.WORKFLOW_STAGE_COMPLETED
-    sale.accounting_approved_at = None
-    sale.accounting_approved_by = None
-    sale.factory_released_at = None
-    sale.save(
-        update_fields=[
-            "description",
-            "workflow_stage",
-            "accounting_approved_at",
-            "accounting_approved_by_id",
-            "factory_released_at",
-        ]
-    )
-    return office_order
+    return as_office_order(sale)
 
 
 @transaction.atomic
 def rollback_factory_receive(factory_order, user, reason=""):
-    if factory_order.workflow_stage != factory_order.WORKFLOW_STAGE_IN_PRODUCTION:
+    factory_order.refresh_from_db()
+    if factory_order.workflow_stage_id != factory_order.WORKFLOW_STAGE_IN_PRODUCTION:
         raise ValueError("این سفارش در مرحله ساخت نیست.")
-    factory_order.workflow_stage = factory_order.WORKFLOW_STAGE_ACCOUNTING_APPROVED
-    factory_order.factory_received_at = None
-    factory_order.factory_received_by = None
-    factory_order.save(
-        update_fields=["workflow_stage", "factory_received_at", "factory_received_by_id"]
-    )
+    from logic.order_queues import as_factory_order, transition_order
 
-    sale = factory_order.source_sale
-    sale.description = _append_workflow_note(sale.description, "خروج از ساخت", reason)
-    sale.workflow_stage = STAGE_ACCOUNTING_APPROVED
-    sale.factory_received_at = None
-    sale.factory_received_by = None
-    sale.save(
-        update_fields=[
-            "description",
-            "workflow_stage",
-            "factory_received_at",
-            "factory_received_by_id",
-        ]
+    sale = transition_order(
+        factory_order,
+        STAGE_ACCOUNTING_APPROVED,
+        user,
+        note=reason,
+        description=_append_workflow_note(factory_order.description, "خروج از ساخت", reason),
+        factory_received_at=None,
+        factory_received_by_id=None,
     )
-    return factory_order
+    return as_factory_order(sale)
 
 
 @transaction.atomic
 def rollback_factory_production_done(factory_order, user, reason=""):
-    if factory_order.workflow_stage != factory_order.WORKFLOW_STAGE_PRODUCTION_DONE:
+    if factory_order.workflow_stage_id != factory_order.WORKFLOW_STAGE_PRODUCTION_DONE:
         raise ValueError("این سفارش آماده باربری نیست.")
     from logic.materials import restore_materials_for_factory_order
+    from logic.order_queues import as_factory_order, transition_order
 
     restore_materials_for_factory_order(factory_order)
-    factory_order.workflow_stage = factory_order.WORKFLOW_STAGE_IN_PRODUCTION
-    factory_order.production_done_at = None
-    factory_order.save(update_fields=["workflow_stage", "production_done_at"])
-
-    sale = factory_order.source_sale
-    sale.description = _append_workflow_note(sale.description, "بازگشت به ساخت", reason)
-    sale.workflow_stage = STAGE_IN_PRODUCTION
-    sale.production_done_at = None
-    sale.save(update_fields=["description", "workflow_stage", "production_done_at"])
-    return factory_order
+    sale = transition_order(
+        factory_order,
+        STAGE_IN_PRODUCTION,
+        user,
+        note=reason,
+        description=_append_workflow_note(factory_order.description, "بازگشت به ساخت", reason),
+        production_done_at=None,
+    )
+    return as_factory_order(sale)
 
 
 @transaction.atomic
 def rollback_factory_freight_receive(factory_order, user, reason=""):
-    if factory_order.workflow_stage != factory_order.WORKFLOW_STAGE_IN_FREIGHT:
+    if factory_order.workflow_stage_id != factory_order.WORKFLOW_STAGE_IN_FREIGHT:
         raise ValueError("این سفارش در مرحله باربری نیست.")
-    factory_order.workflow_stage = factory_order.WORKFLOW_STAGE_PRODUCTION_DONE
-    factory_order.freight_received_at = None
-    factory_order.freight_received_by = None
-    factory_order.save(
-        update_fields=["workflow_stage", "freight_received_at", "freight_received_by_id"]
-    )
+    from logic.order_queues import as_factory_order, transition_order
 
-    sale = factory_order.source_sale
-    sale.description = _append_workflow_note(sale.description, "خروج از تحویل", reason)
-    sale.workflow_stage = STAGE_PRODUCTION_DONE
-    sale.freight_received_at = None
-    sale.freight_received_by = None
-    sale.save(
-        update_fields=[
-            "description",
-            "workflow_stage",
-            "freight_received_at",
-            "freight_received_by_id",
-        ]
+    sale = transition_order(
+        factory_order,
+        STAGE_PRODUCTION_DONE,
+        user,
+        note=reason,
+        description=_append_workflow_note(factory_order.description, "خروج از تحویل", reason),
+        freight_received_at=None,
+        freight_received_by_id=None,
     )
-    return factory_order
+    return as_factory_order(sale)
 
 
 @transaction.atomic
@@ -393,7 +342,7 @@ def rollback_office_workflow_step(office_order, user, reason=""):
     if action == "to_office":
         return recall_factory_order_to_office(office_order, user, reason=reason)
 
-    factory = office_order.factory_order
+    factory = office_order
     if action == "from_production":
         rollback_factory_receive(factory, user, reason=reason)
     elif action == "from_production_done":
@@ -417,7 +366,7 @@ def _append_office_rejection_note(description, reason=""):
 
 @transaction.atomic
 def reject_office_order(office_order, user, reason=""):
-    from backend.models import OfficeOrderInstallment
+    from logic.order_queues import transition_order
 
     if office_order.status != office_order.STATUS_PENDING:
         raise ValueError("فقط سفارش‌های در انتظار تایید اداری قابل عدم تایید هستند.")
@@ -426,68 +375,55 @@ def reject_office_order(office_order, user, reason=""):
     if sale.order_status == sale.ORDER_STATUS_CANCELLED:
         raise ValueError("سفارش لغو شده است.")
 
-    sale.accounting_entries.filter(is_approved=False).delete()
+    from backend.models import JournalEntry
+    JournalEntry.objects.filter(
+        order_links__order=sale,
+        status_ref_id=JournalEntry.STATUS_DRAFT,
+    ).delete()
 
-    for inst in office_order.installments.filter(is_deleted=False):
-        inst.soft_delete()
-    office_order.soft_delete()
-
-    sale.description = _append_office_rejection_note(sale.description, reason)
-    sale.transferred_to_office_at = None
-    sale.office_released_at = None
-    sale.branch_approved_at = None
-    sale.branch_approved_by = None
-    sale.workflow_stage = STAGE_PENDING_BRANCH
-    sale.save(
-        update_fields=[
-            "description",
-            "transferred_to_office_at",
-            "office_released_at",
-            "branch_approved_at",
-            "branch_approved_by_id",
-            "workflow_stage",
-        ]
+    return transition_order(
+        sale,
+        STAGE_PENDING_BRANCH,
+        user,
+        note=reason,
+        description=_append_office_rejection_note(sale.description, reason),
+        office_released_at=None,
+        branch_approved_at=None,
+        branch_approved_by_id=None,
     )
-    return sale
 
 
 @transaction.atomic
 def receive_factory_order(factory_order, user):
-    if factory_order.workflow_stage != factory_order.WORKFLOW_STAGE_ACCOUNTING_APPROVED:
+    if factory_order.workflow_stage_id != factory_order.WORKFLOW_STAGE_ACCOUNTING_APPROVED:
         raise ValueError("این سفارش هنوز برای کارخانه ارسال نشده است.")
-    factory_order.workflow_stage = factory_order.WORKFLOW_STAGE_IN_PRODUCTION
-    factory_order.factory_received_at = timezone.now()
-    factory_order.factory_received_by = user
-    factory_order.save(
-        update_fields=["workflow_stage", "factory_received_at", "factory_received_by_id"]
-    )
+    from logic.order_queues import as_factory_order, transition_order
 
-    sale = factory_order.source_sale
-    sale.workflow_stage = STAGE_IN_PRODUCTION
-    sale.factory_received_at = factory_order.factory_received_at
-    sale.factory_received_by = user
-    sale.save(
-        update_fields=["workflow_stage", "factory_received_at", "factory_received_by_id"]
+    sale = transition_order(
+        factory_order,
+        STAGE_IN_PRODUCTION,
+        user,
+        factory_received_at=timezone.now(),
+        factory_received_by_id=user.pk if user else None,
     )
-    return factory_order
+    return as_factory_order(sale)
 
 
 @transaction.atomic
 def complete_factory_production(factory_order, user):
-    if factory_order.workflow_stage != factory_order.WORKFLOW_STAGE_IN_PRODUCTION:
+    if factory_order.workflow_stage_id != factory_order.WORKFLOW_STAGE_IN_PRODUCTION:
         raise ValueError("این سفارش در مرحله ساخت کارخانه نیست.")
     from logic.materials import deduct_materials_for_factory_order
+    from logic.order_queues import as_factory_order, transition_order
 
     deduct_materials_for_factory_order(factory_order)
-    factory_order.workflow_stage = factory_order.WORKFLOW_STAGE_PRODUCTION_DONE
-    factory_order.production_done_at = timezone.now()
-    factory_order.save(update_fields=["workflow_stage", "production_done_at"])
-
-    sale = factory_order.source_sale
-    sale.workflow_stage = STAGE_PRODUCTION_DONE
-    sale.production_done_at = factory_order.production_done_at
-    sale.save(update_fields=["workflow_stage", "production_done_at"])
-    return factory_order
+    sale = transition_order(
+        factory_order,
+        STAGE_PRODUCTION_DONE,
+        user,
+        production_done_at=timezone.now(),
+    )
+    return as_factory_order(sale)
 
 
 @transaction.atomic
@@ -495,26 +431,20 @@ def receive_factory_freight(factory_order, user):
     today = timezone.localdate()
     if factory_order.delivery_date != today:
         raise ValueError("فقط سفارش‌های با تاریخ تحویل امروز قابل دریافت هستند.")
-    if factory_order.workflow_stage != factory_order.WORKFLOW_STAGE_PRODUCTION_DONE:
+    if factory_order.workflow_stage_id != factory_order.WORKFLOW_STAGE_PRODUCTION_DONE:
         raise ValueError("این سفارش هنوز آماده باربری نیست.")
     from logic.materials import deduct_materials_for_factory_order
+    from logic.order_queues import as_factory_order, transition_order
 
     deduct_materials_for_factory_order(factory_order)
-    factory_order.workflow_stage = factory_order.WORKFLOW_STAGE_IN_FREIGHT
-    factory_order.freight_received_at = timezone.now()
-    factory_order.freight_received_by = user
-    factory_order.save(
-        update_fields=["workflow_stage", "freight_received_at", "freight_received_by_id"]
+    sale = transition_order(
+        factory_order,
+        STAGE_IN_FREIGHT,
+        user,
+        freight_received_at=timezone.now(),
+        freight_received_by_id=user.pk if user else None,
     )
-
-    sale = factory_order.source_sale
-    sale.workflow_stage = STAGE_IN_FREIGHT
-    sale.freight_received_at = factory_order.freight_received_at
-    sale.freight_received_by = user
-    sale.save(
-        update_fields=["workflow_stage", "freight_received_at", "freight_received_by_id"]
-    )
-    return factory_order
+    return as_factory_order(sale)
 
 
 @transaction.atomic
@@ -522,14 +452,14 @@ def complete_factory_freight(factory_order, user):
     today = timezone.localdate()
     if factory_order.delivery_date != today:
         raise ValueError("فقط سفارش‌های با تاریخ تحویل امروز قابل تکمیل هستند.")
-    if factory_order.workflow_stage != factory_order.WORKFLOW_STAGE_IN_FREIGHT:
+    if factory_order.workflow_stage_id != factory_order.WORKFLOW_STAGE_IN_FREIGHT:
         raise ValueError("این سفارش در مرحله باربری نیست.")
-    factory_order.workflow_stage = factory_order.WORKFLOW_STAGE_COMPLETED
-    factory_order.freight_completed_at = timezone.now()
-    factory_order.save(update_fields=["workflow_stage", "freight_completed_at"])
+    from logic.order_queues import as_factory_order, transition_order
 
-    sale = factory_order.source_sale
-    sale.workflow_stage = STAGE_COMPLETED
-    sale.freight_completed_at = factory_order.freight_completed_at
-    sale.save(update_fields=["workflow_stage", "freight_completed_at"])
-    return factory_order
+    sale = transition_order(
+        factory_order,
+        STAGE_COMPLETED,
+        user,
+        freight_completed_at=timezone.now(),
+    )
+    return as_factory_order(sale)

@@ -110,33 +110,56 @@ export default function Levels() {
         ) : levels.length === 0 ? (
           <EmptyState text="سطحی تعریف نشده است." />
         ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>سطح</th>
-                <th>از (حداقل خرید)</th>
-                <th>تا (حداکثر خرید)</th>
-                <th>امتیاز</th>
-                <th>وضعیت</th>
-                <th>عملیات</th>
-              </tr>
-            </thead>
-            <tbody>
+          <>
+            <div className="table-wrap levels-table-desktop">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>سطح</th>
+                    <th>از (حداقل خرید)</th>
+                    <th>تا (حداکثر خرید)</th>
+                    <th>امتیاز</th>
+                    <th>وضعیت</th>
+                    <th>عملیات</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {levels.map((t) => (
+                    <tr key={t.id}>
+                      <td><Badge color={t.color}>{t.name}</Badge></td>
+                      <td>{formatMoney(t.min_purchase)}</td>
+                      <td>{t.max_purchase === null ? 'بدون سقف' : formatMoney(t.max_purchase)}</td>
+                      <td>{t.points}</td>
+                      <td>{t.is_active ? 'فعال' : 'غیرفعال'}</td>
+                      <td className="row-actions">
+                        <button className="link" onClick={() => openEdit(t)}>ویرایش</button>
+                        <button className="link danger" onClick={() => remove(t)}>حذف</button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="levels-cards-mobile">
               {levels.map((t) => (
-                <tr key={t.id}>
-                  <td><Badge color={t.color}>{t.name}</Badge></td>
-                  <td>{formatMoney(t.min_purchase)}</td>
-                  <td>{t.max_purchase === null ? 'بدون سقف' : formatMoney(t.max_purchase)}</td>
-                  <td>{t.points}</td>
-                  <td>{t.is_active ? 'فعال' : 'غیرفعال'}</td>
-                  <td className="row-actions">
-                    <button className="link" onClick={() => openEdit(t)}>ویرایش</button>
-                    <button className="link danger" onClick={() => remove(t)}>حذف</button>
-                  </td>
-                </tr>
+                <div key={t.id} className="m-card">
+                  <div className="m-card-head">
+                    <Badge color={t.color}>{t.name}</Badge>
+                    <span className="muted">{t.is_active ? 'فعال' : 'غیرفعال'}</span>
+                  </div>
+                  <div className="m-card-grid">
+                    <div><span className="muted">حداقل خرید</span>{formatMoney(t.min_purchase)}</div>
+                    <div><span className="muted">حداکثر خرید</span>{t.max_purchase === null ? 'بدون سقف' : formatMoney(t.max_purchase)}</div>
+                    <div><span className="muted">امتیاز</span>{t.points}</div>
+                  </div>
+                  <div className="m-card-actions">
+                    <button type="button" className="link" onClick={() => openEdit(t)}>ویرایش</button>
+                    <button type="button" className="link danger" onClick={() => remove(t)}>حذف</button>
+                  </div>
+                </div>
               ))}
-            </tbody>
-          </table>
+            </div>
+          </>
         )}
       </Card>
 

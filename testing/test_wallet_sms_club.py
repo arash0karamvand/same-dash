@@ -47,8 +47,9 @@ class WalletApiTest(TestCase):
         self.assertEqual(WalletTransaction.objects.count(), 1)
 
     def test_withdraw_decreases_balance(self):
-        self.customer.wallet_balance = 100000
-        self.customer.save()
+        from logic.wallet import adjust_wallet
+
+        adjust_wallet(self.customer, 100000, description="opening balance")
         resp = self.acc.post(
             f"/api/customers/{self.customer.id}/wallet/",
             data=json.dumps({"action": "withdraw", "amount": 30000}),

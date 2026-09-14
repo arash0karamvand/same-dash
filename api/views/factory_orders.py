@@ -28,12 +28,16 @@ def factory_order_list(request):
         qs = factory_queryset_for_user(request.user, request.GET)
     except ValueError as exc:
         return fail(str(exc), status=400)
+    from logic.pagination import paginate
+
+    page, meta = paginate(qs, request.GET)
     return success(
         {
             "results": [
-                factory_order_to_dict(o, include_lines=True, user=request.user) for o in qs
+                factory_order_to_dict(o, include_lines=True, user=request.user) for o in page
             ],
             "summary": factory_list_summary(qs),
+            **meta,
         }
     )
 

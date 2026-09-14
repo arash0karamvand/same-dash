@@ -1,10 +1,10 @@
 """دسترسی و queryset صف اداری."""
 
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, Sum
 
 from auth.org_roles import is_executive_user
 from auth.permissions import APPROVE_SALE_ACCOUNTING, VIEW_SALES, has_permission
-from backend.models import FactoryOrder, OfficeOrder
+from backend.models import FactoryOrder, OfficeOrder, Sale
 
 
 def accounting_office_queryset(qs):
@@ -16,25 +16,29 @@ def accounting_office_queryset(qs):
         FactoryOrder.WORKFLOW_STAGE_IN_FREIGHT,
     }
     return qs.filter(
-        Q(status=OfficeOrder.STATUS_PENDING)
-        | Q(
-            status=OfficeOrder.STATUS_RELEASED,
-            source_sale__factory_orders__workflow_stage__in=active_factory_stages,
-        )
-    ).distinct()
+        workflow_stage_id__in={Sale.WORKFLOW_STAGE_BRANCH_APPROVED, *active_factory_stages}
+    )
 
 
 def office_base_queryset():
-    return OfficeOrder.objects.select_related(
+    return OfficeOrder.all_objects.filter(
+        is_deleted=False,
+        workflow_stage_id__in={
+            Sale.WORKFLOW_STAGE_BRANCH_APPROVED,
+            Sale.WORKFLOW_STAGE_ACCOUNTING_APPROVED,
+            Sale.WORKFLOW_STAGE_IN_PRODUCTION,
+            Sale.WORKFLOW_STAGE_PRODUCTION_DONE,
+            Sale.WORKFLOW_STAGE_IN_FREIGHT,
+            Sale.WORKFLOW_STAGE_COMPLETED,
+        },
+    ).select_related(
         "customer",
         "recorded_by",
         "seller",
-        "source_sale",
-        "factory_order",
-        "factory_order__accounting_approved_by",
-        "factory_order__factory_received_by",
-        "factory_order__freight_received_by",
-    ).prefetch_related("line_items", "installments").filter(source_sale__is_deleted=False)
+        "accounting_approved_by",
+        "factory_received_by",
+        "freight_received_by",
+    ).prefetch_related("line_items", "installments")
 
 
 def office_queryset_for_user(user):
@@ -60,10 +64,7 @@ def can_view_office_order(user, order):
         return False
     if order.status == OfficeOrder.STATUS_PENDING:
         return True
-    factory = FactoryOrder.objects.filter(source_sale=order.source_sale, is_deleted=False).first()
-    if not factory:
-        return order.status == OfficeOrder.STATUS_RELEASED
-    return factory.workflow_stage != FactoryOrder.WORKFLOW_STAGE_COMPLETED
+    return order.workflow_stage_id != FactoryOrder.WORKFLOW_STAGE_COMPLETED
 
 
 def aggregate_office_orders(qs):
@@ -81,8 +82,10 @@ def aggregate_office_orders(qs):
 
 def list_office_orders(user, status=""):
     qs = office_queryset_for_user(user)
-    if status:
-        qs = qs.filter(status=status)
+    if status == OfficeOrder.STATUS_PENDING:
+        qs = qs.filter(workflow_stage_id=Sale.WORKFLOW_STAGE_BRANCH_APPROVED)
+    elif status == OfficeOrder.STATUS_RELEASED:
+        qs = qs.exclude(workflow_stage_id=Sale.WORKFLOW_STAGE_BRANCH_APPROVED)
     return qs
 
 

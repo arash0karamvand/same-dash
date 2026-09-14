@@ -12,7 +12,21 @@ def apply_customer_filters(qs, params):
     """اعمال فیلترهای لیست مشتریان روی queryset."""
     search = (params.get("search") or "").strip()
     if search:
-        qs = qs.filter(Q(full_name__icontains=search) | Q(phone__icontains=search))
+        qs = qs.filter(
+            Q(full_name__icontains=search)
+            | Q(phone__icontains=search)
+            | Q(membership_code__icontains=search)
+        )
+
+    level_id = params.get("level_id") or params.get("level")
+    if level_id not in (None, ""):
+        qs = qs.filter(level_id=level_id)
+
+    active = params.get("is_active") if params.get("is_active") not in (None, "") else params.get("active")
+    if active in ("1", "true", "True"):
+        qs = qs.filter(is_active=True)
+    elif active in ("0", "false", "False"):
+        qs = qs.filter(is_active=False)
 
     jmonth = params.get("birthday_jmonth")
     jday = params.get("birthday_jday")

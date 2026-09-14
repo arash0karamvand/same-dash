@@ -25,7 +25,7 @@ def staff_list(request):
         if not can_view_staff(request.user, staff_kind):
             return fail("Permission denied", status=403)
         branch = (request.GET.get("branch") or "").strip()
-        return success(list_staff(staff_kind, branch=branch))
+        return success(list_staff(staff_kind, branch=branch, params=request.GET))
 
     data = parse_json(request)
     staff_kind = parse_staff_kind(data.get("staff_kind"), Seller.STAFF_KIND_SELLER)
@@ -46,7 +46,8 @@ def staff_list(request):
     log_action(
         request.user,
         "create",
-        f"افزودن {staff_kind_label(staff_kind)} {seller.full_name} به {BRANCH_LABELS.get(seller.branch, seller.branch)}",
+        f"افزودن {staff_kind_label(staff_kind)} {seller.full_name} به "
+        f"{BRANCH_LABELS.get(seller.branch_id, seller.branch_id)}",
         entity_type="Seller",
         entity_id=seller.id,
     )

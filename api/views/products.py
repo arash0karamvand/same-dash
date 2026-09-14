@@ -148,9 +148,16 @@ def product_list(request):
                 qs = qs.filter(category_id=category_id)
         else:
             qs = filter_products(Product.objects.all(), search=search, category_id=category_id, active_only=active_only)
-        limit = min(int(request.GET.get("limit") or 50), 200)
+        from logic.pagination import paginate
+
+        is_active = (request.GET.get("is_active") or "").strip()
+        if is_active == "1":
+            qs = qs.filter(is_active=True)
+        elif is_active == "0":
+            qs = qs.filter(is_active=False)
+        page, meta = paginate(qs, request.GET)
         audience = _product_audience(request.user)
-        return success({"results": [product_to_dict(p, audience=audience) for p in qs[:limit]]})
+        return success({"results": [product_to_dict(p, audience=audience) for p in page], **meta})
 
     if not _can_manage(request.user):
         return fail("Permission denied", status=403)

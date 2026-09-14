@@ -28,8 +28,11 @@ def attendance_list(request):
     if request.method == "GET":
         if not has_permission(request.user, VIEW_ATTENDANCE):
             return fail("Permission denied", status=403)
+        from logic.pagination import paginate
+
         qs = apply_attendance_filters(list_attendance_base_qs(), request.GET)
-        return success({"results": [attendance_to_dict(r) for r in qs]})
+        page, meta = paginate(qs, request.GET)
+        return success({"results": [attendance_to_dict(r) for r in page], **meta})
 
     if not has_permission(request.user, MANAGE_ATTENDANCE):
         return fail("Permission denied", status=403)

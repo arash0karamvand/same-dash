@@ -7,6 +7,10 @@
   border: 1px solid var(--jelly-rim);
   border-radius: var(--radius-capsule);
   padding: 10px 20px;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-family: var(--font-body);
   font-size: var(--text-sm);
   font-weight: 500;

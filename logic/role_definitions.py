@@ -7,7 +7,7 @@ from django.db.utils import OperationalError
 
 from auth import roles
 from auth.permissions import ROLE_PERMISSIONS, sanitize_role_permissions
-from backend.models import LookupOption, RoleDefinition
+from backend.models import LookupOption, Permission, RoleDefinition
 
 SUPPRESSED_ROLE_CATEGORY = "suppressed_role"
 
@@ -116,7 +116,7 @@ def seed_builtin_roles():
             cleaned = sanitize_role_permissions(rd.slug, rd.permissions or [])
             if cleaned != (rd.permissions or []):
                 rd.permissions = cleaned
-                rd.save(update_fields=["permissions"])
+                rd.save()
             sync_group_for_role(rd.slug)
     except OperationalError:
         _ensure_pending_group()
@@ -169,7 +169,7 @@ def org_rank_to_dict(rank):
     return {
         "id": rank.id,
         "name": rank.name,
-        "branch": rank.branch,
+        "branch": rank.branch_id,
         "color": rank.color,
         "sort_order": rank.sort_order,
         "is_active": rank.is_active,
@@ -208,12 +208,17 @@ def create_role_definition(data):
         slug=slug,
         label=label,
         description=(data.get("description") or "").strip(),
-        permissions=perms,
         is_builtin=False,
         needs_branch=bool(data.get("needs_branch")),
         color=(data.get("color") or "#6366f1").strip()[:20],
         sort_order=int(data.get("sort_order") or 50),
         parent=parent,
+    )
+    rd.permission_set.set(
+        [
+            Permission.objects.get_or_create(code=code, defaults={"label": code})[0]
+            for code in perms
+        ]
     )
     sync_group_for_role(slug)
     return rd
@@ -224,6 +229,7 @@ def update_role_definition(rd, data):
     from auth.permissions import ALL_PERMISSIONS, sanitize_role_permissions
 
     slug = rd.slug
+    permission_codes = None
     if is_locked_role(slug):
         raise PermissionError("مجوزهای این نقش قابل تغییر نیست.")
 
@@ -236,7 +242,7 @@ def update_role_definition(rd, data):
         invalid = set(perms) - ALL_PERMISSIONS
         if invalid:
             raise ValueError(f"مجوز نامعتبر: {', '.join(sorted(invalid))}")
-        rd.permissions = perms
+        permission_codes = perms
     if "needs_branch" in data:
         rd.needs_branch = bool(data.get("needs_branch"))
     if "color" in data:
@@ -247,6 +253,13 @@ def update_role_definition(rd, data):
         ps = (data.get("parent_slug") or "").strip()
         rd.parent = RoleDefinition.objects.filter(slug=ps).first() if ps else None
     rd.save()
+    if permission_codes is not None:
+        rd.permission_set.set(
+            [
+                Permission.objects.get_or_create(code=code, defaults={"label": code})[0]
+                for code in permission_codes
+            ]
+        )
     sync_group_for_role(slug)
     return rd
 
@@ -259,7 +272,7 @@ def create_org_rank(data):
         raise ValueError("نام رتبه الزامی است.")
     return OrgRank.objects.create(
         name=name,
-        branch=(data.get("branch") or "").strip(),
+        branch_id=(data.get("branch") or "").strip() or None,
         color=(data.get("color") or "#6366f1").strip()[:20],
         sort_order=int(data.get("sort_order") or 0),
     )
@@ -269,7 +282,7 @@ def update_org_rank(rank, data):
     if "name" in data:
         rank.name = (data.get("name") or rank.name).strip()
     if "branch" in data:
-        rank.branch = (data.get("branch") or "").strip()
+        rank.branch_id = (data.get("branch") or "").strip() or None
     if "color" in data:
         rank.color = (data.get("color") or rank.color).strip()[:20]
     if "sort_order" in data:

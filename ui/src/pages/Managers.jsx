@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { staffApi } from '../api/client'
-import { Button, Card, EmptyState, Field, Modal } from '../components/ui'
+import { Button, Card, EmptyState, Field, FilterBar, LoadMoreButton, Modal } from '../components/ui'
+import { PAGE_SIZE } from '../config/pagination'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmContext'
 import { useConfig } from '../context/ConfigContext'
@@ -19,21 +20,33 @@ export default function Managers() {
   const canDelete = hasPermission(user, 'delete_managers')
   const [managers, setManagers] = useState([])
   const [branch, setBranch] = useState('')
+  const [search, setSearch] = useState('')
+  const [total, setTotal] = useState(0)
+  const [offset, setOffset] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [form, setForm] = useState(EMPTY)
 
-  const load = async () => {
-    setLoading(true)
+  const load = async ({ append = false, offset: nextOffset = 0 } = {}) => {
+    if (append) setLoadingMore(true)
+    else setLoading(true)
     try {
-      const data = await staffApi.list(branch, 'manager')
-      setManagers(data.results)
+      const data = await staffApi.list(branch, 'manager', {
+        search: search.trim() || undefined,
+        offset: nextOffset,
+        limit: PAGE_SIZE,
+      })
+      setManagers((prev) => (append ? [...prev, ...(data.results || [])] : (data.results || [])))
+      setTotal(data.total || 0)
+      setOffset(data.offset ?? nextOffset)
       setError('')
     } catch (e) {
       setError(e.message)
     } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
   }
 
@@ -107,35 +120,76 @@ export default function Managers() {
             </button>
           ))}
         </div>
+        <FilterBar>
+          <Field label="جستجو">
+            <input
+              className="search-input"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="نام یا موبایل…"
+              onKeyDown={(e) => e.key === 'Enter' && load()}
+            />
+          </Field>
+          <div className="page-filters-actions">
+            <Button type="button" variant="ghost" onClick={() => load()}>جستجو</Button>
+          </div>
+        </FilterBar>
         {loading ? <div className="loading">در حال بارگذاری…</div> : managers.length === 0 ? (
           <EmptyState text={`مدیری در ${branchLabel} ثبت نشده.`} />
         ) : (
-          <table className="table">
-            <thead>
-              <tr>
-                <th>نام</th>
-                <th>موبایل</th>
-                <th>شعبه</th>
-                {canDelete && <th>عملیات</th>}
-              </tr>
-            </thead>
-            <tbody>
+          <>
+            <div className="table-wrap staff-table-desktop">
+              <table className="table">
+                <thead>
+                  <tr>
+                    <th>نام</th>
+                    <th>موبایل</th>
+                    <th>شعبه</th>
+                    {canDelete && <th>عملیات</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {managers.map((m) => (
+                    <tr key={m.id}>
+                      <td>{m.full_name}</td>
+                      <td className="ltr">{m.phone || '—'}</td>
+                      <td>{m.branch_label}</td>
+                      {canDelete && (
+                        <td>
+                          <button type="button" className="link danger" onClick={() => remove(m)}>
+                            حذف
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="staff-cards-mobile">
               {managers.map((m) => (
-                <tr key={m.id}>
-                  <td>{m.full_name}</td>
-                  <td className="ltr">{m.phone || '—'}</td>
-                  <td>{m.branch_label}</td>
+                <div key={m.id} className="m-card">
+                  <div className="m-card-head">
+                    <strong>{m.full_name}</strong>
+                    <span className="muted">{m.branch_label}</span>
+                  </div>
+                  <div className="m-card-grid">
+                    <div><span className="muted">موبایل</span><span className="ltr">{m.phone || '—'}</span></div>
+                  </div>
                   {canDelete && (
-                    <td>
-                      <button type="button" className="link danger" onClick={() => remove(m)}>
-                        حذف
-                      </button>
-                    </td>
+                    <div className="m-card-actions">
+                      <button type="button" className="link danger" onClick={() => remove(m)}>حذف</button>
+                    </div>
                   )}
-                </tr>
+                </div>
               ))}
-            </tbody>
-          </table>
+            </div>
+            <LoadMoreButton
+              hasMore={managers.length < total}
+              loading={loadingMore}
+              onClick={() => load({ append: true, offset: offset + PAGE_SIZE })}
+            />
+          </>
         )}
       </Card>
       <Modal title={`افزودن مدیر — ${branchLabel}`} open={modalOpen} onClose={() => setModalOpen(false)}>

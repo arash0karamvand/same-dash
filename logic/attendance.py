@@ -17,10 +17,10 @@ def attendance_to_dict(record):
         "id": record.id,
         "seller_id": seller.id,
         "seller_name": seller.full_name,
-        "branch": seller.branch,
-        "branch_label": BRANCH_LABELS.get(seller.branch, "—"),
-        "work_branch": record.work_branch or seller.branch,
-        "work_branch_label": BRANCH_LABELS.get(record.work_branch or seller.branch, "—"),
+        "branch": seller.branch_id,
+        "branch_label": BRANCH_LABELS.get(seller.branch_id, "—"),
+        "work_branch": record.work_branch_id or seller.branch_id,
+        "work_branch_label": BRANCH_LABELS.get(record.work_branch_id or seller.branch_id, "—"),
         "date": record.date.isoformat(),
         "status": record.status,
         "status_display": record.get_status_display(),
@@ -74,7 +74,7 @@ def get_active_seller(pk, branch=None):
         seller = Seller.objects.get(pk=pk, is_active=True)
     except Seller.DoesNotExist:
         return None
-    if branch and seller.branch != branch:
+    if branch and seller.branch_id != branch:
         return None
     return seller
 
@@ -91,7 +91,7 @@ def upsert_manager_attendance(seller, day, status, user, branch=None, notes=""):
         date=day,
         defaults={
             "status": status,
-            "work_branch": branch or seller.branch,
+            "work_branch_id": branch or seller.branch_id,
             "approval_status": "approved",
             "notes": (notes or "").strip(),
             "recorded_by": user,
@@ -130,7 +130,7 @@ def soft_delete_attendance(record):
 
 def check_in(seller, user, day=None, status="present", work_branch="", notes=""):
     day = day or timezone.localdate()
-    work_branch = (work_branch or seller.branch).strip()
+    work_branch = (work_branch or seller.branch_id).strip()
 
     record = StaffAttendance.objects.filter(seller=seller, date=day).first()
     if record:
@@ -147,7 +147,7 @@ def check_in(seller, user, day=None, status="present", work_branch="", notes="")
         date=day,
         defaults={
             "status": status or "present",
-            "work_branch": work_branch,
+            "work_branch_id": work_branch,
             "approval_status": "pending",
             "notes": (notes or "").strip(),
             "recorded_by": user,

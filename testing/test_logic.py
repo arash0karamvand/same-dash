@@ -9,6 +9,9 @@ from backend.models import (
     AccountingEntry,
     Customer,
     CustomerLevelHistory,
+    FactoryOrder,
+    JournalEntry,
+    JournalLine,
     LoyaltyLevel,
     OfficeOrder,
     SMSLog,
@@ -52,9 +55,8 @@ class LevelLogicTest(TestCase):
         self.assertIsNone(find_level_for_amount(Decimal("50000000")))
 
     def test_recalculate_creates_history_on_change(self):
-        customer = Customer.objects.create(
-            full_name="تست", phone="09120000003", total_purchases=Decimal("15000000")
-        )
+        customer = Customer.objects.create(full_name="تست", phone="09120000003")
+        record_sale(customer, Decimal("15000000"), payment_status="paid")
         recalculate_customer_level(customer)
         self.assertEqual(customer.level.name, "نقره‌ای")
         self.assertEqual(CustomerLevelHistory.objects.filter(customer=customer).count(), 1)
@@ -71,9 +73,10 @@ class SalesLogicTest(TestCase):
         self.customer.refresh_from_db()
         self.assertEqual(self.customer.total_purchases, Decimal("10000000"))
         self.assertEqual(self.customer.level.name, "نقره‌ای")
-        entry = AccountingEntry.objects.get(entry_type="sale")
+        journal = JournalEntry.objects.get(entry_type="sale")
+        entry = journal.lines.get(account__slug="product_sales")
         self.assertEqual(entry.credit, Decimal("10000000"))
-        payment = AccountingEntry.objects.get(entry_type="payment")
+        payment = journal.lines.get(account__slug="cash_documents")
         self.assertEqual(payment.debit, Decimal("10000000"))
 
     def test_unpaid_sale_does_not_update_customer_totals(self):
@@ -81,7 +84,7 @@ class SalesLogicTest(TestCase):
         self.customer.refresh_from_db()
         self.assertEqual(self.customer.total_purchases, Decimal("0"))
         self.assertIsNone(self.customer.level)
-        self.assertEqual(AccountingEntry.objects.filter(entry_type="receivable").count(), 1)
+        self.assertEqual(JournalLine.objects.filter(account__slug="receivables").count(), 1)
 
     def test_partial_payment_updates_customer_and_receivable(self):
         sale = record_sale(
@@ -92,7 +95,9 @@ class SalesLogicTest(TestCase):
         )
         self.customer.refresh_from_db()
         self.assertEqual(self.customer.total_purchases, Decimal("4000000"))
-        receivable = AccountingEntry.objects.get(entry_type="receivable", sale=sale)
+        receivable = JournalLine.objects.get(
+            journal__order_links__order=sale, account__slug="receivables"
+        )
         self.assertEqual(receivable.debit, Decimal("6000000"))
 
     def test_record_payment_settles_balance(self):
@@ -108,7 +113,13 @@ class SalesLogicTest(TestCase):
         self.assertEqual(sale.payment_status, "paid")
         self.assertEqual(sale.paid_amount, Decimal("8000000"))
         self.assertEqual(self.customer.total_purchases, Decimal("8000000"))
-        self.assertFalse(AccountingEntry.objects.filter(entry_type="receivable", sale=sale).exists())
+        receivable_lines = JournalLine.objects.filter(
+            journal__order_links__order=sale, account__slug="receivables"
+        )
+        self.assertEqual(
+            sum(line.debit - line.credit for line in receivable_lines),
+            Decimal("0"),
+        )
 
     def test_delete_sale_reverses_customer_totals_and_level(self):
         silver = LoyaltyLevel.objects.get(name="نقره‌ای")
@@ -183,9 +194,9 @@ class SalesLogicTest(TestCase):
         sale.refresh_from_db()
         office.refresh_from_db()
 
-        self.assertTrue(office.is_deleted)
+        self.assertFalse(office.is_deleted)
         self.assertEqual(sale.workflow_stage, "pending_branch")
-        self.assertIsNone(sale.transferred_to_office_at)
+        self.assertIsNone(sale.office_released_at)
         self.assertIn("عدم تایید اداری", sale.description)
 
         office2 = create_office_order_from_sale(sale, user)
@@ -208,9 +219,9 @@ class SalesLogicTest(TestCase):
         )
         office = create_office_order_from_sale(sale, user)
         self.assertIsNotNone(office)
-        entries = AccountingEntry.objects.filter(sale=sale)
-        self.assertTrue(entries.filter(entry_type="sale", is_approved=False).exists())
-        payment = entries.filter(entry_type="payment").first()
+        journal = JournalEntry.objects.get(order_links__order=sale, entry_type="sale")
+        self.assertEqual(journal.status, JournalEntry.STATUS_DRAFT)
+        payment = journal.lines.filter(account__slug="bank").first()
         self.assertIsNotNone(payment)
         self.assertEqual(payment.account_id, get_account("bank").id)
 
@@ -226,9 +237,9 @@ class SalesLogicTest(TestCase):
             recorded_by=user,
         )
         office = create_office_order_from_sale(sale, user)
-        self.assertFalse(AccountingEntry.objects.filter(sale=sale).exists())
+        self.assertFalse(JournalEntry.objects.filter(order_links__order=sale).exists())
         approve_office_order(office, user)
-        self.assertFalse(AccountingEntry.objects.filter(sale=sale).exists())
+        self.assertFalse(JournalEntry.objects.filter(order_links__order=sale).exists())
 
     def test_automatic_office_approve_approves_accounting_entries(self):
         from backend.models import AccountingEntry
@@ -243,8 +254,12 @@ class SalesLogicTest(TestCase):
         )
         office = create_office_order_from_sale(sale, user)
         approve_office_order(office, user)
-        self.assertFalse(AccountingEntry.objects.filter(sale=sale, is_approved=False).exists())
-        self.assertTrue(AccountingEntry.objects.filter(sale=sale, is_approved=True).exists())
+        self.assertFalse(
+            JournalEntry.objects.filter(order_links__order=sale, status="draft").exists()
+        )
+        self.assertTrue(
+            JournalEntry.objects.filter(order_links__order=sale, status="posted").exists()
+        )
 
     def test_recall_factory_order_to_office(self):
         user = User.objects.create_user(username="wfuser5", password="secret123")
@@ -270,7 +285,7 @@ class SalesLogicTest(TestCase):
         sale = record_sale(self.customer, Decimal("5000000"), payment_status="paid")
         office = create_office_order_from_sale(sale, user)
         approve_office_order(office, user)
-        factory = office.factory_order
+        factory = FactoryOrder.objects.get(pk=office.pk)
         receive_factory_order(factory, user)
         rollback_factory_receive(factory, user, reason="اشتباه دریافت")
 
@@ -296,7 +311,7 @@ class SalesLogicTest(TestCase):
         user = User.objects.create_user(username="wfuser3", password="secret123")
         sale = record_sale(self.customer, Decimal("5000000"), payment_status="paid")
         office = create_office_order_from_sale(sale, user)
-        sale_entry = AccountingEntry.objects.get(entry_type="sale", sale=sale)
+        sale_entry = AccountingEntry.objects.filter(entry_type="sale", sale=sale).first()
         result = delete_accounting_entry(sale_entry)
         office.refresh_from_db()
         sale.refresh_from_db()

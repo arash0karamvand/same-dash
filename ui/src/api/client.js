@@ -1,6 +1,30 @@
 // کلاینت مرکزی API — تمام مسیرها زیر /api/
 // پاسخ استاندارد: { ok: true, data: ... } یا { ok: false, error: "..." }
 
+function describeApiError(payload, response) {
+  const raw = payload && payload.error
+  if (typeof raw === 'string' && raw.trim()) {
+    const trimmed = raw.trim()
+    if (trimmed.startsWith('<')) {
+      const title = /<title>([^<]+)<\/title>/i.exec(trimmed)
+      if (title?.[1]) return title[1].replace(/\s+/g, ' ').trim()
+      return 'خطای داخلی سرور'
+    }
+    return trimmed.length > 280 ? `${trimmed.slice(0, 280)}…` : trimmed
+  }
+  if (raw && typeof raw === 'object') {
+    return raw.message || raw.detail || JSON.stringify(raw)
+  }
+  if (!response || !response.ok) {
+    const status = response ? response.status : 0
+    if (!status || status === 502 || status === 503 || status === 504) {
+      return 'سرور بک‌اند در دسترس نیست. Django را روی پورت ۸۰۰۰ اجرا کنید.'
+    }
+    return `خطای سرور (${status})`
+  }
+  return 'خطای ناشناخته در ارتباط با سرور'
+}
+
 async function request(method, url, body) {
   const options = {
     method,
@@ -11,7 +35,15 @@ async function request(method, url, body) {
     options.body = JSON.stringify(body)
   }
 
-  const response = await fetch(url, options)
+  let response
+  try {
+    response = await fetch(url, options)
+  } catch {
+    const error = new Error('ارتباط با سرور برقرار نشد. بک‌اند Django روی پورت ۸۰۰۰ در حال اجرا نیست.')
+    error.status = 0
+    throw error
+  }
+
   let payload = null
   const text = await response.text()
   if (text) {
@@ -23,7 +55,7 @@ async function request(method, url, body) {
   }
 
   if (!response.ok || (payload && payload.ok === false)) {
-    const message = (payload && payload.error) || 'خطای ناشناخته در ارتباط با سرور'
+    const message = describeApiError(payload, response)
     const error = new Error(message)
     error.status = response.status
     error.data = payload
@@ -69,6 +101,8 @@ export const authApi = {
     if (opts.search) p.set('search', opts.search)
     if (opts.role) p.set('role', opts.role)
     if (opts.active != null) p.set('active', opts.active)
+    if (opts.offset != null) p.set('offset', opts.offset)
+    if (opts.limit) p.set('limit', opts.limit)
     const q = p.toString()
     return get(`/api/auth/users/${q ? `?${q}` : ''}`)
   },
@@ -90,10 +124,18 @@ export const authApi = {
 }
 
 export const staffApi = {
-  list: (branch = '', kind = 'seller') => {
+  list: (branch = '', kind = 'seller', extra = {}) => {
+    if (branch && typeof branch === 'object') {
+      extra = branch
+      branch = extra.branch || ''
+      kind = extra.kind || extra.staff_kind || 'seller'
+    }
     const params = new URLSearchParams()
     if (branch) params.set('branch', branch)
     if (kind) params.set('kind', kind)
+    if (extra.search) params.set('search', extra.search)
+    if (extra.offset != null) params.set('offset', extra.offset)
+    if (extra.limit) params.set('limit', extra.limit)
     const q = params.toString()
     return get(`/api/staff/${q ? `?${q}` : ''}`)
   },
@@ -106,8 +148,10 @@ export const productsApi = {
     const p = new URLSearchParams()
     if (opts.search) p.set('search', opts.search)
     if (opts.category_id) p.set('category_id', opts.category_id)
+    if (opts.offset != null) p.set('offset', opts.offset)
     if (opts.limit) p.set('limit', opts.limit)
     if (opts.include_inactive) p.set('include_inactive', '1')
+    if (opts.is_active != null && opts.is_active !== '') p.set('is_active', opts.is_active)
     const q = p.toString()
     return get(`/api/products/${q ? `?${q}` : ''}`)
   },
@@ -132,6 +176,7 @@ export const materialsApi = {
   list: (opts = {}) => {
     const p = new URLSearchParams()
     if (opts.search) p.set('search', opts.search)
+    if (opts.offset != null) p.set('offset', opts.offset)
     if (opts.limit) p.set('limit', opts.limit)
     if (opts.include_inactive) p.set('include_inactive', '1')
     if (opts.include_pending) p.set('include_pending', '1')
@@ -183,10 +228,17 @@ export const dashboardApi = {
 export const customersApi = {
   list: (opts = {}) => {
     const p = new URLSearchParams()
-    const search = typeof opts === 'string' ? opts : opts.search
+    const isString = typeof opts === 'string'
+    const search = isString ? opts : opts.search
     if (search) p.set('search', search)
-    if (opts.birthdayJmonth) p.set('birthday_jmonth', opts.birthdayJmonth)
-    if (opts.birthdayJday) p.set('birthday_jday', opts.birthdayJday)
+    if (!isString) {
+      if (opts.birthdayJmonth) p.set('birthday_jmonth', opts.birthdayJmonth)
+      if (opts.birthdayJday) p.set('birthday_jday', opts.birthdayJday)
+      if (opts.level_id) p.set('level_id', opts.level_id)
+      if (opts.is_active != null && opts.is_active !== '') p.set('is_active', opts.is_active)
+      if (opts.offset != null) p.set('offset', opts.offset)
+      if (opts.limit) p.set('limit', opts.limit)
+    }
     const q = p.toString()
     return get(`/api/customers/${q ? `?${q}` : ''}`)
   },
@@ -390,6 +442,7 @@ function createAccountingApi(basePath) {
     remove: (id) => del(`${basePath}/${id}/`),
     approve: (id, isApproved) => put(`${basePath}/${id}/approve/`, { is_approved: isApproved }),
     bulkApprove: (ids) => post(`${basePath}/bulk-approve/`, ids ? { ids } : {}),
+    meta: () => get(`${basePath}/meta/`),
     accounts: () => get(`${basePath}/accounts/`),
     models: (opts = {}) => {
       const p = new URLSearchParams()
@@ -407,6 +460,7 @@ function createAccountingApi(basePath) {
       if (opts.dateFrom) p.set('date_from', opts.dateFrom)
       if (opts.dateTo) p.set('date_to', opts.dateTo)
       if (opts.approvedOnly) p.set('approved_only', 'true')
+      if (opts.offset != null) p.set('offset', opts.offset)
       if (opts.limit) p.set('limit', opts.limit)
       const q = p.toString()
       return get(`${basePath}/ledger/${q ? `?${q}` : ''}`)
@@ -508,7 +562,18 @@ export const accountingApi = createAccountingApi('/api/accounting')
 export const factoryAccountingApi = createAccountingApi('/api/factory-accounting')
 
 export const smsApi = {
-  list: () => get('/api/sms/logs/'),
+  list: (opts = {}) => {
+    const p = new URLSearchParams()
+    if (opts.status) p.set('status', opts.status)
+    if (opts.sms_type) p.set('sms_type', opts.sms_type)
+    if (opts.search) p.set('search', opts.search)
+    if (opts.date_from) p.set('date_from', opts.date_from)
+    if (opts.date_to) p.set('date_to', opts.date_to)
+    if (opts.offset != null) p.set('offset', opts.offset)
+    if (opts.limit) p.set('limit', opts.limit)
+    const q = p.toString()
+    return get(`/api/sms/logs/${q ? `?${q}` : ''}`)
+  },
   send: (data) => post('/api/sms/send/', data),
   sendToLevel: (data) => post('/api/sms/send-to-level/', data),
   sendToAll: (data) => post('/api/sms/send-to-all/', data),

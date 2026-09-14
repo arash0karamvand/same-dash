@@ -28,20 +28,17 @@ def adjust_wallet(customer, amount, description="", user=None, transaction_type=
     if amount == 0:
         raise ValueError("مبلغ نمی‌تواند صفر باشد.")
 
-    new_balance = customer.wallet_balance + amount
+    locked_customer = Customer.objects.select_for_update().get(pk=customer.pk)
+    new_balance = locked_customer.wallet_balance + amount
     if new_balance < 0:
         raise ValueError("موجودی کیف پول کافی نیست.")
 
     if not transaction_type:
         transaction_type = "deposit" if amount > 0 else "withdraw"
 
-    customer.wallet_balance = new_balance
-    customer.save(update_fields=["wallet_balance"])
-
     tx = WalletTransaction.objects.create(
-        customer=customer,
+        customer=locked_customer,
         amount=amount,
-        balance_after=new_balance,
         transaction_type=transaction_type,
         description=(description or "").strip(),
         sale=sale,

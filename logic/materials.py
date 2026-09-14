@@ -5,7 +5,7 @@ from decimal import Decimal, InvalidOperation
 from django.db import transaction
 from django.db.models import Q
 
-from backend.models import Material, Product, ProductMaterial
+from backend.models import InventoryTransaction, Material, Product, ProductMaterial
 
 MATERIAL_APPROVAL_LABELS = {
     Material.APPROVAL_PENDING: "در انتظار تایید اداری",
@@ -70,7 +70,7 @@ def compute_product_material_cost(product):
     total = Decimal(0)
     for pm in product.product_materials.select_related("material").filter(
         material__is_deleted=False,
-        material__approval_status=Material.APPROVAL_APPROVED,
+        material__approval_status_ref_id=Material.APPROVAL_APPROVED,
     ):
         qty = Decimal(pm.quantity or 0)
         unit_cost = Decimal(pm.material.unit_cost or 0)
@@ -120,7 +120,6 @@ def create_material(data, *, user=None, auto_approve=False):
         sku=(data.get("sku") or "").strip(),
         unit=(data.get("unit") or "متر").strip() or "متر",
         unit_cost=unit_cost,
-        stock=stock,
         description=(data.get("description") or "").strip(),
         is_active=is_active,
         approval_status=approval_status,
@@ -128,6 +127,15 @@ def create_material(data, *, user=None, auto_approve=False):
         approved_at=approved_at,
         approved_by=approved_by,
     )
+    if stock not in (None, 0):
+        InventoryTransaction.objects.create(
+            material=material,
+            quantity=stock,
+            unit_cost=unit_cost,
+            reason="initial_stock",
+            reference=f"material:{material.pk}",
+            recorded_by=user,
+        )
     if auto_approve:
         from logic.material_accounting import post_material_inventory_receipt
 
@@ -211,14 +219,21 @@ def _parse_stock(raw):
 
 
 def _apply_stock_update(material, new_stock):
-    """کاهش موجودی فقط از مسیر پایان ساخت سفارش — نه ویرایش دستی."""
+    """Represent an absolute-stock edit as an append-only adjustment."""
     if new_stock is None:
-        material.stock = None
         return
-    current = material.stock
-    if current is not None and Decimal(new_stock) < Decimal(current):
+    current = Decimal(material.stock or 0)
+    if Decimal(new_stock) < current:
         raise ValueError("کاهش موجودی فقط با پایان ساخت سفارش در کارخانه امکان‌پذیر است.")
-    material.stock = new_stock
+    delta = Decimal(new_stock) - current
+    if delta:
+        InventoryTransaction.objects.create(
+            material=material,
+            quantity=delta,
+            unit_cost=material.unit_cost,
+            reason="manual_adjustment",
+            reference=f"material:{material.pk}",
+        )
 
 
 def _parse_product_materials(raw_items):
@@ -291,7 +306,7 @@ def compute_factory_order_material_requirements(factory_order):
             product_id=line.product_id,
             material__is_deleted=False,
             material__is_active=True,
-            material__approval_status=Material.APPROVAL_APPROVED,
+            material__approval_status_ref_id=Material.APPROVAL_APPROVED,
         ).select_related("material")
         for pm in product_materials:
             required[pm.material_id] += product_qty * Decimal(pm.quantity or 0)
@@ -371,9 +386,13 @@ def deduct_materials_for_factory_order(factory_order):
         if item["available_stock"] is None:
             continue
         material = Material.objects.select_for_update().get(pk=item["material_id"])
-        new_stock = Decimal(material.stock or 0) - Decimal(str(item["required_quantity"]))
-        material.stock = new_stock
-        material.save(update_fields=["stock", "updated_at"])
+        InventoryTransaction.objects.create(
+            material=material,
+            quantity=-Decimal(str(item["required_quantity"])),
+            unit_cost=material.unit_cost,
+            reason="production_consumption",
+            reference=f"sale:{factory_order.pk}",
+        )
 
     from logic.material_accounting import post_factory_material_consumption
 
@@ -396,8 +415,13 @@ def restore_materials_for_factory_order(factory_order):
         if item["available_stock"] is None:
             continue
         material = Material.objects.select_for_update().get(pk=item["material_id"])
-        material.stock = Decimal(material.stock or 0) + Decimal(str(item["required_quantity"]))
-        material.save(update_fields=["stock", "updated_at"])
+        InventoryTransaction.objects.create(
+            material=material,
+            quantity=Decimal(str(item["required_quantity"])),
+            unit_cost=material.unit_cost,
+            reason="production_rollback",
+            reference=f"sale:{factory_order.pk}",
+        )
 
     from logic.material_accounting import reverse_factory_material_consumption
 

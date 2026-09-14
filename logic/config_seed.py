@@ -52,7 +52,27 @@ from auth.permissions import (
     VIEW_SMS_LOGS,
 )
 from auth.permissions import sanitize_role_permissions
-from backend.models import Branch, LookupOption, MenuSection, OrgRank, RoleDefinition
+from backend.models import (
+    AccountingMode,
+    ApprovalStatus,
+    AttendanceStatus,
+    Branch,
+    InstallmentStatus,
+    JournalEntryStatus,
+    JournalEntryType,
+    LookupOption,
+    MaterialStatus,
+    MenuSection,
+    OrderKind,
+    OrderStatus,
+    PaymentMethod,
+    PaymentStatus,
+    OrgRank,
+    Permission,
+    RoleDefinition,
+    SmsStatus,
+    SmsType,
+)
 
 DEFAULT_BRANCHES = [
     {"code": "branch_1", "label": "کمرد", "color": "#6366f1", "sort_order": 0},
@@ -90,6 +110,35 @@ DEFAULT_LOOKUPS = [
     ("workflow_stage", "in_freight", "در باربری", 5, {"color": "#f97316"}),
     ("workflow_stage", "completed", "تکمیل شده", 6, {"color": "#10b981"}),
 ]
+
+REFERENCE_ROWS = {
+    PaymentMethod: [
+        ("cash", "نقدی"), ("card", "کارت‌خوان"), ("check", "چک"),
+    ],
+    PaymentStatus: [("paid", "پرداخت‌شده"), ("unpaid", "پرداخت‌نشده"), ("installment", "قسطی")],
+    OrderKind: [("normal", "فروش عادی"), ("pre_invoice", "پیش‌فاکتور"), ("deposit", "بیعانیه")],
+    OrderStatus: [("confirmed", "تایید شده"), ("pending", "در انتظار"), ("cancelled", "لغو شده")],
+    AccountingMode: [("automatic", "حسابداری خودکار"), ("manual", "حسابداری دستی")],
+    InstallmentStatus: [("pending", "در انتظار"), ("paid", "پرداخت‌شده"), ("cancelled", "لغوشده")],
+    AttendanceStatus: [("present", "حاضر"), ("absent", "غایب")],
+    ApprovalStatus: [("pending", "در انتظار تایید"), ("approved", "تایید شده"), ("rejected", "رد شده")],
+    MaterialStatus: [("pending", "در انتظار تایید اداری"), ("approved", "تایید شده"), ("rejected", "رد شده")],
+    SmsStatus: [
+        ("pending", "در صف"), ("sent", "ارسال شد"), ("failed", "ناموفق"),
+        ("mock_sent", "شبیه‌سازی"), ("pending_provider_config", "در انتظار تنظیم درگاه"),
+    ],
+    SmsType: [
+        ("manual", "دستی"), ("welcome", "خوش‌آمدگویی"), ("level_up", "ارتقای سطح"),
+        ("promotion", "تبلیغاتی"), ("birthday", "تبریک تولد"), ("order_placed", "ثبت سفارش"),
+        ("discount", "تخفیف ویژه"), ("reminder", "یادآوری باشگاه"),
+    ],
+    JournalEntryType: [
+        ("manual", "دستی"), ("sale", "فروش"), ("receivable", "دریافتنی"),
+        ("payment", "دریافت / پرداخت"), ("refund", "برگشت"),
+        ("adjustment", "تعدیل"), ("other", "سایر"),
+    ],
+    JournalEntryStatus: [("draft", "پیش‌نویس"), ("posted", "ثبت قطعی"), ("void", "باطل")],
+}
 
 ORG_BUILTIN_ROLES = [
     {
@@ -256,6 +305,17 @@ def seed_lookups():
         return
 
 
+def seed_reference_tables():
+    for model, rows in REFERENCE_ROWS.items():
+        if not _table_exists(model):
+            continue
+        for sort_order, (code, label) in enumerate(rows):
+            model.objects.update_or_create(
+                code=code,
+                defaults={"label": label, "sort_order": sort_order, "is_active": True},
+            )
+
+
 def seed_menu_sections():
     if not _table_exists(MenuSection):
         return
@@ -274,10 +334,22 @@ def seed_menu_sections():
                     "page_key": sec["page_key"],
                     "sort_order": existing_sort if existing_sort is not None else 0,
                     "system_admin": bool(sec.get("system_admin")),
-                    "menu_permission_codes": list(sec.get("menu_permissions", [])),
-                    "section_permission_codes": sorted(set(sec.get("section_permissions", []))),
                 },
             )
+            menu_permissions = [
+                Permission.objects.get_or_create(
+                    code=code, defaults={"label": PERMISSION_LABELS.get(code, code)}
+                )[0]
+                for code in sec.get("menu_permissions", [])
+            ]
+            section_permissions = [
+                Permission.objects.get_or_create(
+                    code=code, defaults={"label": PERMISSION_LABELS.get(code, code)}
+                )[0]
+                for code in sorted(set(sec.get("section_permissions", [])))
+            ]
+            menu_sec.menu_permissions.set(menu_permissions)
+            menu_sec.section_permissions.set(section_permissions)
             if created:
                 menu_sec.is_active = True
                 menu_sec.save(update_fields=["is_active"])
@@ -293,7 +365,8 @@ def seed_org_ranks():
     for name, color, sort_order in ORG_RANKS:
         OrgRank.objects.update_or_create(
             name=name,
-            defaults={"color": color, "sort_order": sort_order, "is_active": True, "branch": ""},
+            branch=None,
+            defaults={"color": color, "sort_order": sort_order, "is_active": True},
         )
 
 
@@ -310,7 +383,6 @@ def _role_defaults(spec, perms, parent):
     data = {
         "label": spec["label"],
         "description": spec.get("description") or "",
-        "permissions": perms,
         "is_builtin": True,
         "needs_branch": bool(spec.get("needs_branch")),
         "color": spec.get("color") or "#6366f1",
@@ -358,6 +430,14 @@ def seed_org_roles():
             slug=slug,
             defaults=_role_defaults(spec, perms, parent),
         )
+        rd.permission_set.set(
+            [
+                Permission.objects.get_or_create(
+                    code=code, defaults={"label": PERMISSION_LABELS.get(code, code)}
+                )[0]
+                for code in perms
+            ]
+        )
         slug_to_parent[slug] = rd
         sync_group_for_role(slug)
 
@@ -366,13 +446,17 @@ def seed_org_roles():
         if parent_slug:
             parent = RoleDefinition.objects.filter(slug=parent_slug).first()
             if parent:
-                RoleDefinition.objects.filter(slug=spec["slug"]).update(parent=parent)
+                child = RoleDefinition.objects.filter(slug=spec["slug"]).first()
+                if child and child.parent_id != parent.id:
+                    child.parent = parent
+                    child.save(update_fields=["parent"])
 
 
 def seed_config_defaults():
     """همه تنظیمات داینامیک — idempotent."""
     seed_branches()
     seed_lookups()
+    seed_reference_tables()
     seed_menu_sections()
     seed_org_ranks()
     seed_org_roles()

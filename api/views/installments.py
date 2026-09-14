@@ -29,8 +29,11 @@ def installment_list(request):
     if request.method == "GET":
         if not has_permission(request.user, VIEW_INSTALLMENTS):
             return fail("Permission denied", status=403)
+        from logic.pagination import paginate
+
         qs = list_installments(request.GET, parse_date)
-        return success({"results": [installment_to_dict(i, user=request.user) for i in qs]})
+        page, meta = paginate(qs, request.GET)
+        return success({"results": [installment_to_dict(i, user=request.user) for i in page], **meta})
 
     if not has_permission(request.user, MANAGE_INSTALLMENTS):
         return fail("Permission denied", status=403)
@@ -142,7 +145,7 @@ def installments_export_excel(request):
     except ImportError:
         return fail("openpyxl نصب نیست.", status=500)
 
-    qs = list_installments(request.GET, parse_date).filter(payment_method="check")
+    qs = list_installments(request.GET, parse_date).filter(payment_method_ref_id="check")
     sale_id = request.GET.get("sale_id")
     if sale_id:
         qs = qs.filter(sale_id=sale_id)

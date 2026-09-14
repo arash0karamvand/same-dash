@@ -73,7 +73,16 @@ def sale_list(request):
         workflow = (request.GET.get("workflow_stage") or "").strip()
         if workflow:
             qs = qs.filter(workflow_stage=workflow)
-        return success({"results": _serialize_sales(request.user, qs), "summary": aggregate_sales(qs)})
+        from logic.pagination import paginate
+
+        page, meta = paginate(qs, request.GET)
+        return success(
+            {
+                "results": _serialize_sales(request.user, page),
+                "summary": aggregate_sales(qs),
+                **meta,
+            }
+        )
 
     if not has_permission(request.user, CREATE_SALE):
         return fail("Permission denied", status=403)
@@ -439,9 +448,7 @@ def sale_approve_accounting(request, pk):
     if not has_permission(request.user, APPROVE_SALE_ACCOUNTING):
         return fail("Permission denied", status=403)
     try:
-        order = OfficeOrder.objects.select_related("customer", "source_sale").get(
-            source_sale_id=pk, status=OfficeOrder.STATUS_PENDING
-        )
+        order = OfficeOrder.objects.select_related("customer").get(pk=pk)
     except OfficeOrder.DoesNotExist:
         return fail("سفارش اداری یافت نشد — ابتدا سرپرست شعبه باید تایید کند.", status=404)
     try:
@@ -460,7 +467,7 @@ def _factory_action_by_sale(request, pk, permission, action, log_label):
     if not has_permission(request.user, permission):
         return fail("Permission denied", status=403)
     try:
-        order = FactoryOrder.objects.select_related("source_sale").get(source_sale_id=pk)
+        order = FactoryOrder.objects.get(pk=pk)
     except FactoryOrder.DoesNotExist:
         return fail("سفارش کارخانه یافت نشد — ابتدا اداری باید تایید کند.", status=404)
     try:

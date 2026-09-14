@@ -166,26 +166,48 @@ export default function Settings() {
                   <Button onClick={() => { setSelectedBranch(null); setBranchForm(EMPTY_BRANCH); setBranchModal(true) }}>+ شعبه</Button>
                 </div>
                 {branches.length === 0 ? <EmptyState message="شعبه‌ای ثبت نشده" /> : (
-                  <table className="table">
-                    <thead><tr><th>کد</th><th>نام</th><th>ترتیب</th><th>وضعیت</th><th>عملیات</th></tr></thead>
-                    <tbody>
+                  <>
+                    <div className="table-wrap settings-table-desktop">
+                      <table className="table">
+                        <thead><tr><th>کد</th><th>نام</th><th>ترتیب</th><th>وضعیت</th><th>عملیات</th></tr></thead>
+                        <tbody>
+                          {branches.map((b) => (
+                            <tr key={b.id}>
+                              <td className="ltr">{b.code}</td>
+                              <td><Badge color={b.color}>{b.label}</Badge></td>
+                              <td>{b.sort_order}</td>
+                              <td>{b.is_active ? 'فعال' : 'غیرفعال'}</td>
+                              <td>
+                                <button type="button" className="link" onClick={() => { setSelectedBranch(b); setBranchForm({ code: b.code, label: b.label, color: b.color, sort_order: b.sort_order }); setBranchModal(true) }}>ویرایش</button>
+                                {' · '}
+                                <button type="button" className="link" onClick={() => toggleBranch(b)}>
+                                  {b.is_active ? 'غیرفعال' : 'فعال'}
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="settings-cards-mobile">
                       {branches.map((b) => (
-                        <tr key={b.id}>
-                          <td className="ltr">{b.code}</td>
-                          <td><Badge color={b.color}>{b.label}</Badge></td>
-                          <td>{b.sort_order}</td>
-                          <td>{b.is_active ? 'فعال' : 'غیرفعال'}</td>
-                          <td>
+                        <div key={b.id} className="m-card">
+                          <div className="m-card-head">
+                            <Badge color={b.color}>{b.label}</Badge>
+                            <span className="muted">{b.is_active ? 'فعال' : 'غیرفعال'}</span>
+                          </div>
+                          <div className="m-card-grid">
+                            <div><span className="muted">کد</span><span className="ltr">{b.code}</span></div>
+                            <div><span className="muted">ترتیب</span>{b.sort_order}</div>
+                          </div>
+                          <div className="m-card-actions">
                             <button type="button" className="link" onClick={() => { setSelectedBranch(b); setBranchForm({ code: b.code, label: b.label, color: b.color, sort_order: b.sort_order }); setBranchModal(true) }}>ویرایش</button>
-                            {' · '}
-                            <button type="button" className="link" onClick={() => toggleBranch(b)}>
-                              {b.is_active ? 'غیرفعال' : 'فعال'}
-                            </button>
-                          </td>
-                        </tr>
+                            <button type="button" className="link" onClick={() => toggleBranch(b)}>{b.is_active ? 'غیرفعال' : 'فعال'}</button>
+                          </div>
+                        </div>
                       ))}
-                    </tbody>
-                  </table>
+                    </div>
+                  </>
                 )}
               </>
             )}
@@ -198,23 +220,42 @@ export default function Settings() {
                   ))}
                 </div>
                 <Button onClick={() => { setLookupForm({ ...EMPTY_LOOKUP, category: lookupCategory }); setLookupModal(true) }}>+ گزینه</Button>
-                <table className="table" style={{ marginTop: 12 }}>
-                  <thead><tr><th>کد</th><th>عنوان</th><th>ترتیب</th><th>عملیات</th></tr></thead>
-                  <tbody>
-                    {filteredLookups.map((l) => (
-                      <tr key={l.id}>
-                        <td className="ltr">{l.code}</td>
-                        <td>{l.label}</td>
-                        <td>{l.sort_order}</td>
-                        <td>
-                          <button type="button" className="link" onClick={() => toggleLookup(l)}>
-                            {l.is_active ? 'غیرفعال' : 'فعال'}
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div className="table-wrap settings-table-desktop" style={{ marginTop: 12 }}>
+                  <table className="table">
+                    <thead><tr><th>کد</th><th>عنوان</th><th>ترتیب</th><th>عملیات</th></tr></thead>
+                    <tbody>
+                      {filteredLookups.map((l) => (
+                        <tr key={l.id}>
+                          <td className="ltr">{l.code}</td>
+                          <td>{l.label}</td>
+                          <td>{l.sort_order}</td>
+                          <td>
+                            <button type="button" className="link" onClick={() => toggleLookup(l)}>
+                              {l.is_active ? 'غیرفعال' : 'فعال'}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="settings-cards-mobile" style={{ marginTop: 12 }}>
+                  {filteredLookups.map((l) => (
+                    <div key={l.id} className="m-card">
+                      <div className="m-card-head">
+                        <strong>{l.label}</strong>
+                        <span className="muted">{l.is_active ? 'فعال' : 'غیرفعال'}</span>
+                      </div>
+                      <div className="m-card-grid">
+                        <div><span className="muted">کد</span><span className="ltr">{l.code}</span></div>
+                        <div><span className="muted">ترتیب</span>{l.sort_order}</div>
+                      </div>
+                      <div className="m-card-actions">
+                        <button type="button" className="link" onClick={() => toggleLookup(l)}>{l.is_active ? 'غیرفعال' : 'فعال'}</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </>
             )}
 
@@ -240,23 +281,42 @@ export default function Settings() {
                     ))}
                   </div>
                 )}
-              <table className="table">
-                <thead><tr><th>بخش</th><th>صفحه</th><th>ترتیب</th><th>عملیات</th></tr></thead>
-                <tbody>
-                  {menuSections.map((m) => (
-                    <tr key={m.pk}>
-                      <td>{m.icon} {m.label}</td>
-                      <td className="ltr">{m.page_key}</td>
-                      <td>{m.sort_order}</td>
-                      <td>
-                        <button type="button" className="link" onClick={() => toggleMenu(m)}>
-                          {m.is_active !== false ? 'مخفی' : 'نمایش'}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div className="table-wrap settings-table-desktop">
+                <table className="table">
+                  <thead><tr><th>بخش</th><th>صفحه</th><th>ترتیب</th><th>عملیات</th></tr></thead>
+                  <tbody>
+                    {menuSections.map((m) => (
+                      <tr key={m.pk}>
+                        <td>{m.icon} {m.label}</td>
+                        <td className="ltr">{m.page_key}</td>
+                        <td>{m.sort_order}</td>
+                        <td>
+                          <button type="button" className="link" onClick={() => toggleMenu(m)}>
+                            {m.is_active !== false ? 'مخفی' : 'نمایش'}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="settings-cards-mobile">
+                {menuSections.map((m) => (
+                  <div key={m.pk} className="m-card">
+                    <div className="m-card-head">
+                      <strong>{m.icon} {m.label}</strong>
+                      <span className="muted">{m.is_active !== false ? 'نمایش' : 'مخفی'}</span>
+                    </div>
+                    <div className="m-card-grid">
+                      <div><span className="muted">صفحه</span><span className="ltr">{m.page_key}</span></div>
+                      <div><span className="muted">ترتیب</span>{m.sort_order}</div>
+                    </div>
+                    <div className="m-card-actions">
+                      <button type="button" className="link" onClick={() => toggleMenu(m)}>{m.is_active !== false ? 'مخفی' : 'نمایش'}</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
               </>
             )}
           </>

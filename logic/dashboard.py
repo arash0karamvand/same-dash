@@ -57,7 +57,7 @@ def build_dashboard_summary(user):
                 "customer_name": s.customer.full_name,
                 "amount": int(s.final_amount),
                 "seller_name": s.seller.full_name if s.seller_id else None,
-                "branch": s.branch,
+                "branch": s.branch_id,
                 "created_at": s.sold_at.isoformat(),
             }
             for s in recent_sales

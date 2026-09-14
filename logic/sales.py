@@ -5,8 +5,8 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from django.db import transaction
 
-from backend.models import AccountingEntry, Sale
-from logic.accounting import create_accounting_entry
+from backend.models import JournalEntry, JournalLine, Sale
+from logic.accounting import create_accounting_entry, create_journal
 from logic.levels import update_customer_level
 
 
@@ -170,19 +170,16 @@ def _apply_purchase_to_customer(customer, amount, sold_at, reason, user=None):
     amount = Decimal(amount)
     if amount <= 0:
         return
-    customer.total_purchases += amount
     customer.last_purchase_at = sold_at
-    customer.save(update_fields=["total_purchases", "last_purchase_at"])
+    customer.save(update_fields=["last_purchase_at"])
     update_customer_level(customer, reason=reason, user=user)
 
 
 def _reverse_purchase_from_customer(customer, amount):
-    """کاهش مجموع خرید مشتری — معکوس ثبت فروش/پرداخت."""
+    """Purchases are derived from Sale rows; no stored counter is mutated."""
     amount = Decimal(amount)
     if amount <= 0:
         return
-    customer.total_purchases = max(Decimal(0), customer.total_purchases - amount)
-    customer.save(update_fields=["total_purchases"])
 
 
 def _refresh_customer_last_purchase(customer, exclude_sale_id=None):
@@ -195,11 +192,13 @@ def _refresh_customer_last_purchase(customer, exclude_sale_id=None):
     customer.save(update_fields=["last_purchase_at"])
 
 
-def _create_sale_accounting(sale, outstanding, *, is_approved=True):
+def _create_sale_accounting(sale, outstanding, *, is_approved=True, force=False):
     """سند فروش — بستانکار درآمد (7240) + بدهکار مطالبات (1310) و/یا بانک (1210)."""
     if is_pre_invoice_pending(sale):
         return
-    if AccountingEntry.objects.filter(sale=sale, entry_type="sale").exists():
+    if not force and JournalEntry.objects.filter(
+        order_links__order=sale, entry_type_ref_id="sale"
+    ).exclude(status_ref_id=JournalEntry.STATUS_VOID).exists():
         return
 
     from logic.accounting import generate_document_code, next_document_number
@@ -211,42 +210,20 @@ def _create_sale_accounting(sale, outstanding, *, is_approved=True):
     final_amount = Decimal(sale.final_amount or 0)
     outstanding = Decimal(outstanding or 0)
 
-    create_accounting_entry(
-        entry_type="sale",
-        credit=final_amount,
-        amount=final_amount,
-        description=f"درآمد فروش فاکتور {sale.invoice_number or sale.pk}",
-        sale=sale,
-        is_approved=is_approved,
-        document_code=doc_code,
-        document_number=doc_num,
-        entry_date=sale.sold_at,
+    from logic.posting import build_journal_lines
+
+    desc = f"فروش فاکتور {sale.invoice_number or sale.pk}"
+    lines = build_journal_lines(
+        "sale",
+        amounts={"final_amount": final_amount, "outstanding": outstanding, "paid": paid},
+        accounts={"payment_account": payment_account_for_sale(sale)},
+        description=desc,
     )
-    if outstanding > 0:
-        create_accounting_entry(
-            entry_type="receivable",
-            debit=outstanding,
-            amount=outstanding,
-            description=f"مطالبات مشتری فاکتور {sale.invoice_number or sale.pk}",
-            sale=sale,
-            is_approved=is_approved,
-            document_code=doc_code,
-            document_number=doc_num,
-            entry_date=sale.sold_at,
-        )
-    if paid > 0:
-        create_accounting_entry(
-            entry_type="payment",
-            account=payment_account_for_sale(sale),
-            debit=paid,
-            amount=paid,
-            description=f"دریافت وجه فاکتور {sale.invoice_number or sale.pk}",
-            sale=sale,
-            is_approved=is_approved,
-            document_code=doc_code,
-            document_number=doc_num,
-            entry_date=sale.sold_at,
-        )
+    create_journal(
+        lines=lines, entry_type="sale", description=desc,
+        sale=sale, is_approved=is_approved, document_code=doc_code,
+        document_number=doc_num, entry_date=sale.sold_at,
+    )
 
 
 def ensure_draft_sale_accounting(sale):
@@ -255,9 +232,10 @@ def ensure_draft_sale_accounting(sale):
 
     if sale.accounting_mode != Sale.ACCOUNTING_MODE_AUTOMATIC:
         return
+    # The normalized journal phase may not yet expose the legacy reverse link.
     if is_pre_invoice_pending(sale):
         return
-    if sale.accounting_entries.exists():
+    if sale.journal_links.exists():
         return
     _create_sale_accounting(sale, balance_due(sale), is_approved=False)
 
@@ -274,31 +252,10 @@ def _create_pre_invoice_deposit_accounting(sale, paid_amount, recorded_by=None):
 
 
 def _sync_receivable_entry(sale):
-    """به‌روزرسانی سند مطالبات بر اساس مانده فعلی."""
+    """Payments are separate journals; the original sale journal remains immutable."""
     if is_pre_invoice_pending(sale) or is_order_cancelled(sale):
         return
-    outstanding = balance_due(sale)
-    from logic.accounting_money import to_rial
-
-    outstanding_rial = to_rial(outstanding)
-    receivable = AccountingEntry.objects.filter(sale=sale, entry_type="receivable").first()
-    if outstanding <= 0:
-        if receivable:
-            receivable.delete()
-        return
-    if receivable:
-        receivable.debit = outstanding_rial
-        receivable.amount = outstanding_rial
-        receivable.save(update_fields=["debit", "amount"])
-    else:
-        create_accounting_entry(
-            entry_type="receivable",
-            debit=outstanding,
-            amount=outstanding,
-            description=f"مطالبات مشتری فاکتور {sale.invoice_number or sale.pk}",
-            sale=sale,
-            is_approved=True,
-        )
+    return
 
 
 def _create_deposit_installment(sale, delivery_date, payment_method="cash"):
@@ -427,22 +384,29 @@ def record_sale(
         "invoice_number": invoice_number,
         "description": description,
         "recorded_by": recorded_by,
-        "branch": branch or "",
+        "branch_id": branch or "branch_1",
         "seller": seller,
         "order_kind": order_kind,
         "order_status": order_status,
-        "workflow_stage": workflow_stage,
+        "workflow_stage_id": workflow_stage,
         "delivery_date": delivery_date,
         "office_released_at": None,
         "factory_released_at": None,
-        "transferred_to_office_at": None,
     }
     if sold_at is not None:
         sale_kwargs["sold_at"] = sold_at
     sale = Sale.objects.create(**sale_kwargs)
+    from backend.models import OrderTransition, WorkflowStage
+
+    OrderTransition.objects.create(
+        order=sale,
+        from_stage=None,
+        to_stage=WorkflowStage.objects.get(code=workflow_stage),
+        actor=recorded_by,
+        note="ثبت سفارش",
+    )
 
     if discount_type == "wallet" and discount > 0:
-        customer.refresh_from_db(fields=["wallet_balance"])
         _apply_wallet_discount(customer, discount, sale, user=recorded_by)
 
     if resolved_items:
@@ -474,15 +438,19 @@ def record_sale(
     elif order_kind == Sale.ORDER_KIND_DEPOSIT:
         if not defer_accounting:
             _create_sale_accounting(sale, outstanding)
-            if resolved_paid > 0:
-                _record_deposit_payment(
-                    sale,
-                    resolved_paid,
-                    description=f"بیعانه — فاکتور {sale.invoice_number or sale.pk}",
-                    recorded_by=recorded_by,
-                )
+        elif resolved_accounting_mode == Sale.ACCOUNTING_MODE_AUTOMATIC:
+            _create_sale_accounting(sale, outstanding, is_approved=False)
     elif not defer_accounting:
         _create_sale_accounting(sale, outstanding)
+        _apply_purchase_to_customer(
+            customer,
+            resolved_paid,
+            sale.sold_at,
+            reason="ثبت فروش (مبلغ پرداخت‌شده)",
+            user=recorded_by,
+        )
+    elif resolved_accounting_mode == Sale.ACCOUNTING_MODE_AUTOMATIC:
+        _create_sale_accounting(sale, outstanding, is_approved=False)
         _apply_purchase_to_customer(
             customer,
             resolved_paid,
@@ -564,15 +532,17 @@ def record_payment(sale, amount, description="", recorded_by=None, account=None)
         return sale
 
     from logic.accounting_accounts import payment_account_for_sale
+    from logic.posting import build_journal_lines
 
-    create_accounting_entry(
-        entry_type="payment",
-        account=account or payment_account_for_sale(sale),
-        debit=amount,
-        amount=amount,
-        description=description or f"دریافت پرداخت فاکتور {sale.invoice_number or sale.pk}",
-        sale=sale,
-        is_approved=True,
+    desc = description or f"دریافت پرداخت فاکتور {sale.invoice_number or sale.pk}"
+    lines = build_journal_lines(
+        "payment",
+        amounts={"amount": amount},
+        accounts={"payment_account": account or payment_account_for_sale(sale)},
+        description=desc,
+    )
+    create_journal(
+        lines=lines, entry_type="payment", description=description, sale=sale, is_approved=True,
     )
     _sync_receivable_entry(sale)
     _apply_purchase_to_customer(
@@ -583,9 +553,6 @@ def record_payment(sale, amount, description="", recorded_by=None, account=None)
         user=recorded_by,
     )
 
-    from logic.order_queues import sync_workflow_orders_from_sale
-
-    sync_workflow_orders_from_sale(sale)
     return sale
 
 
@@ -614,9 +581,6 @@ def reverse_payment(sale, amount, user=None):
         send_level_up_sms=False,
     )
 
-    from logic.order_queues import sync_workflow_orders_from_sale
-
-    sync_workflow_orders_from_sale(sale)
     return sale
 
 
@@ -664,15 +628,17 @@ def cancel_order(sale, recorded_by=None):
             sale=sale,
         )
         _reverse_purchase_from_customer(customer, paid)
-        AccountingEntry.objects.filter(sale=sale, entry_type="payment").delete()
+        JournalEntry.objects.filter(
+            order_links__order=sale, entry_type_ref_id="payment"
+        ).delete()
 
     if sale.order_kind == Sale.ORDER_KIND_PRE_INVOICE:
-        AccountingEntry.objects.filter(
-            sale=sale, entry_type__in=("sale", "receivable")
+        JournalEntry.objects.filter(
+            order_links__order=sale, entry_type_ref_id__in=("sale", "receivable")
         ).delete()
     elif sale.order_kind == Sale.ORDER_KIND_DEPOSIT:
-        AccountingEntry.objects.filter(
-            sale=sale, entry_type__in=("sale", "receivable")
+        JournalEntry.objects.filter(
+            order_links__order=sale, entry_type_ref_id__in=("sale", "receivable")
         ).delete()
 
     sale.order_status = Sale.ORDER_STATUS_CANCELLED
@@ -774,7 +740,6 @@ def update_sale(
         sale.amount, sale.discount_type, sale.discount_value, customer=customer
     )
     if sale.discount_type == "wallet" and sale.discount > 0:
-        customer.refresh_from_db(fields=["wallet_balance"])
         _apply_wallet_discount(customer, sale.discount, sale)
 
     if sale.amount <= 0:
@@ -810,26 +775,46 @@ def update_sale(
 
     _replace_sale_installments(sale, installments)
 
-    sale_entry = AccountingEntry.objects.filter(sale=sale, entry_type="sale").first()
-    if sale_entry:
-        sale_entry.credit = sale.final_amount
-        sale_entry.amount = sale.final_amount
-        sale_entry.save(update_fields=["credit", "amount"])
-
-    _sync_receivable_entry(sale)
+    sale_journal = JournalEntry.objects.filter(
+        order_links__order=sale, entry_type_ref_id="sale"
+    ).exclude(status_ref_id=JournalEntry.STATUS_VOID).order_by("-id").first()
+    if sale_journal:
+        if sale_journal.status == JournalEntry.STATUS_POSTED:
+            create_journal(
+                lines=[
+                    {
+                        "account": line.account,
+                        "debit": line.credit,
+                        "credit": line.debit,
+                        "description": f"برگشت سند {sale_journal.document_code}",
+                    }
+                    for line in sale_journal.lines.select_related("account")
+                ],
+                entry_type="adjustment",
+                description=f"برگشت اصلاحی فروش {sale.invoice_number or sale.pk}",
+                sale=sale,
+                is_approved=True,
+            )
+            _create_sale_accounting(sale, balance_due(sale), is_approved=True, force=True)
+        else:
+            sale_journal.delete()
+            _create_sale_accounting(sale, balance_due(sale), is_approved=False, force=True)
 
     paid_delta = sale.paid_amount - old_paid
-    if paid_delta != 0:
+    if paid_delta > 0:
         _apply_purchase_to_customer(
             sale.customer,
             paid_delta,
             sale.sold_at,
             reason="اصلاح مبلغ پرداخت‌شده فاکتور",
         )
+    elif paid_delta < 0:
+        update_customer_level(
+            sale.customer,
+            reason="کاهش مبلغ پرداخت‌شده فاکتور",
+            send_level_up_sms=False,
+        )
 
-    from logic.order_queues import sync_workflow_orders_from_sale
-
-    sync_workflow_orders_from_sale(sale)
     return sale
 
 

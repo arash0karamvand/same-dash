@@ -69,8 +69,10 @@ def material_list(request):
             approved_only=approved_only,
             approval_status=approval_status or None,
         )
-        limit = min(int(request.GET.get("limit") or 100), 500)
-        return success({"results": [material_to_dict(m) for m in qs[:limit]]})
+        from logic.pagination import paginate
+
+        page, meta = paginate(qs, request.GET)
+        return success({"results": [material_to_dict(m) for m in page], **meta})
 
     if not _can_create(request.user):
         return fail("Permission denied", status=403)

@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { materialsApi, productsApi } from '../api/client'
 import MoneyInput from '../components/MoneyInput'
 import Select from '../components/Select'
-import { Badge, Button, Card, EmptyState, Field, FilterBar, Modal } from '../components/ui'
+import { Badge, Button, Card, EmptyState, Field, FilterBar, LoadMoreButton, Modal } from '../components/ui'
+import { PAGE_SIZE, PICKER_LIMIT } from '../config/pagination'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmContext'
 import { formatMoney } from '../utils/format'
@@ -80,6 +81,10 @@ export default function Products() {
 
   const [search, setSearch] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
+  const [activeFilter, setActiveFilter] = useState('')
+  const [total, setTotal] = useState(0)
+  const [offset, setOffset] = useState(0)
+  const [loadingMore, setLoadingMore] = useState(false)
 
   const [productModal, setProductModal] = useState(false)
   const [categoryModal, setCategoryModal] = useState(false)
@@ -91,31 +96,46 @@ export default function Products() {
   const [topSelling, setTopSelling] = useState([])
   const [materialCatalog, setMaterialCatalog] = useState([])
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async ({ append = false, offset: nextOffset = 0 } = {}) => {
+    if (append) setLoadingMore(true)
+    else setLoading(true)
     try {
+      const productReq = productsApi.list({
+        search: search.trim(),
+        category_id: categoryFilter || undefined,
+        offset: nextOffset,
+        limit: PAGE_SIZE,
+        include_inactive: canManage,
+        is_active: canManage ? (activeFilter || undefined) : undefined,
+      })
+      if (append) {
+        const data = await productReq
+        setProducts((prev) => [...prev, ...(data.results || [])])
+        setTotal(data.total || 0)
+        setOffset(data.offset ?? nextOffset)
+        setError('')
+        return
+      }
       const loadTopSelling = mode === 'sales' && hasPermission(user, 'view_products')
       const loadMaterials = showCosts || canEditMaterials
       const requests = [
         productsApi.categories({ active: canManage ? undefined : true }),
-        productsApi.list({
-          search: search.trim(),
-          category_id: categoryFilter || undefined,
-          limit: 100,
-          include_inactive: canManage,
-        }),
+        productReq,
       ]
       if (loadTopSelling) {
         requests.push(productsApi.topSelling(20).catch(() => ({ results: [] })))
       }
       if (loadMaterials) {
-        requests.push(materialsApi.list({ limit: 200, approved_only: true }).catch(() => ({ results: [] })))
+        requests.push(materialsApi.list({ limit: PICKER_LIMIT, approved_only: true }).catch(() => ({ results: [] })))
       }
       const results = await Promise.all(requests)
       let i = 0
       setCategories(results[i].results || [])
       i += 1
-      setProducts(results[i].results || [])
+      const productData = results[i]
+      setProducts(productData.results || [])
+      setTotal(productData.total || 0)
+      setOffset(productData.offset ?? 0)
       i += 1
       if (loadTopSelling) {
         setTopSelling(results[i]?.results || [])
@@ -131,8 +151,9 @@ export default function Products() {
       setError(e.message)
     } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
-  }, [search, categoryFilter, canManage, mode, showCosts, canEditMaterials, user])
+  }, [search, categoryFilter, activeFilter, canManage, mode, showCosts, canEditMaterials, user])
 
   useEffect(() => { load() }, [load])
 
@@ -371,34 +392,52 @@ export default function Products() {
 
       {topSelling.length > 0 && (
         <Card title="پرفروش‌ترین کالاها" className="analytics-card">
-          <div className="table-wrap">
-            <table className="table table-compact">
-              <thead>
-                <tr>
-                  <th>#</th>
-                  <th>محصول</th>
-                  <th>مدل</th>
-                  <th>پارچه</th>
-                  <th>تعداد فروش</th>
-                  <th>تعداد فاکتور</th>
-                  <th>مجموع درآمد</th>
-                </tr>
-              </thead>
-              <tbody>
-                {topSelling.map((item, idx) => (
-                  <tr key={`${item.product_id || item.product_name}-${idx}`}>
-                    <td>{idx + 1}</td>
-                    <td>{item.product_name}</td>
-                    <td>{item.product_model || '—'}</td>
-                    <td>{item.fabric || '—'}</td>
-                    <td><strong>{item.total_quantity}</strong></td>
-                    <td>{item.sales_count}</td>
-                    <td>{formatMoney(item.total_revenue)}</td>
+          <>
+            <div className="table-wrap top-selling-table-desktop">
+              <table className="table table-compact">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>محصول</th>
+                    <th>مدل</th>
+                    <th>پارچه</th>
+                    <th>تعداد فروش</th>
+                    <th>تعداد فاکتور</th>
+                    <th>مجموع درآمد</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {topSelling.map((item, idx) => (
+                    <tr key={`${item.product_id || item.product_name}-${idx}`}>
+                      <td>{idx + 1}</td>
+                      <td>{item.product_name}</td>
+                      <td>{item.product_model || '—'}</td>
+                      <td>{item.fabric || '—'}</td>
+                      <td><strong>{item.total_quantity}</strong></td>
+                      <td>{item.sales_count}</td>
+                      <td>{formatMoney(item.total_revenue)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="top-selling-cards-mobile">
+              {topSelling.map((item, idx) => (
+                <div key={`${item.product_id || item.product_name}-${idx}`} className="m-card">
+                  <div className="m-card-head">
+                    <strong>{idx + 1}. {item.product_name}</strong>
+                    <span>{formatMoney(item.total_revenue)}</span>
+                  </div>
+                  <div className="m-card-grid">
+                    <div><span className="muted">مدل</span>{item.product_model || '—'}</div>
+                    <div><span className="muted">پارچه</span>{item.fabric || '—'}</div>
+                    <div><span className="muted">تعداد فروش</span><strong>{item.total_quantity}</strong></div>
+                    <div><span className="muted">فاکتور</span>{item.sales_count}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </>
         </Card>
       )}
 
@@ -437,6 +476,20 @@ export default function Products() {
           <Field label="دسته">
             <Select value={categoryFilter} onChange={setCategoryFilter} options={categoryOptions} placeholder="همه" />
           </Field>
+          {canManage && (
+            <Field label="وضعیت">
+              <Select
+                value={activeFilter}
+                onChange={setActiveFilter}
+                options={[
+                  { value: '', label: 'همه' },
+                  { value: '1', label: 'فعال' },
+                  { value: '0', label: 'غیرفعال' },
+                ]}
+                placeholder="همه"
+              />
+            </Field>
+          )}
         </FilterBar>
 
         {loading ? (
@@ -444,6 +497,7 @@ export default function Products() {
         ) : products.length === 0 ? (
           <EmptyState text="محصولی یافت نشد." />
         ) : (
+          <>
           <div className="product-catalog-grid">
             {products.map((p) => (
               <article key={p.id} className={`product-card${p.is_active ? '' : ' inactive'}`}>
@@ -521,6 +575,12 @@ export default function Products() {
               </article>
             ))}
           </div>
+          <LoadMoreButton
+            hasMore={products.length < total}
+            loading={loadingMore}
+            onClick={() => load({ append: true, offset: offset + PAGE_SIZE })}
+          />
+          </>
         )}
       </Card>
 

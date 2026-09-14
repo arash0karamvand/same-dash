@@ -4,7 +4,8 @@ import { useCallback, useEffect, useState } from 'react'
 import { salesApi } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import { useConfig } from '../context/ConfigContext'
-import { Badge, Button, Card, EmptyState } from '../components/ui'
+import { Badge, Button, Card, EmptyState, Field, FilterBar, LoadMoreButton } from '../components/ui'
+import { PAGE_SIZE, withPageParams } from '../config/pagination'
 import { formatDate, formatMoney } from '../utils/format'
 import { hasPermission } from '../utils/permissions'
 
@@ -44,7 +45,11 @@ export default function WorkflowOrdersPage({
   const { choices } = useConfig()
   const stageChoices = choices('workflow_stage')
   const [orders, setOrders] = useState([])
+  const [total, setTotal] = useState(0)
+  const [offset, setOffset] = useState(0)
+  const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState('')
   const [busyId, setBusyId] = useState(null)
 
@@ -53,8 +58,9 @@ export default function WorkflowOrdersPage({
     return fromDb || WORKFLOW_COLORS[stage] || 'var(--accent)'
   }
 
-  const load = useCallback(async () => {
-    setLoading(true)
+  const load = useCallback(async ({ append = false, offset: nextOffset = 0 } = {}) => {
+    if (append) setLoadingMore(true)
+    else setLoading(true)
     setError('')
     try {
       const params = new URLSearchParams()
@@ -66,18 +72,22 @@ export default function WorkflowOrdersPage({
         const extra = new URLSearchParams(filterQuery)
         extra.forEach((value, key) => params.set(key, value))
       }
-      const data = await listApi(params.toString())
-      setOrders(data.results || [])
+      if (search.trim()) params.set('search', search.trim())
+      const data = await listApi(withPageParams(params, { offset: nextOffset, limit: PAGE_SIZE }))
+      setOrders((prev) => (append ? [...prev, ...(data.results || [])] : (data.results || [])))
+      setTotal(data.total || 0)
+      setOffset(data.offset ?? nextOffset)
     } catch (e) {
       setError(e.message)
-      setOrders([])
+      if (!append) setOrders([])
     } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
-  }, [workflowFilter, listApi, filterQuery, JSON.stringify(extraParams)])
+  }, [workflowFilter, listApi, filterQuery, search, JSON.stringify(extraParams)])
 
   useEffect(() => {
-    load()
+    load({ offset: 0 })
   }, [load])
 
   const runAction = async (order, fn) => {
@@ -181,6 +191,16 @@ export default function WorkflowOrdersPage({
 
   const listContent = (
     <>
+      <FilterBar>
+        <Field label="جستجو">
+          <input
+            className="search-input"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="مشتری، فاکتور یا توضیحات…"
+          />
+        </Field>
+      </FilterBar>
       {loading ? (
         <p className="muted loading">در حال بارگذاری…</p>
       ) : orders.length === 0 ? (
@@ -323,6 +343,11 @@ export default function WorkflowOrdersPage({
               </div>
             ))}
           </div>
+          <LoadMoreButton
+            hasMore={orders.length < total}
+            loading={loadingMore}
+            onClick={() => load({ append: true, offset: offset + PAGE_SIZE })}
+          />
           </>
         )}
     </>
@@ -332,7 +357,7 @@ export default function WorkflowOrdersPage({
     return (
       <div className="workflow-orders-embedded">
         <div className="office-section-list-toolbar">
-          <Button type="button" variant="ghost" onClick={load}>بروزرسانی لیست</Button>
+          <Button type="button" variant="ghost" onClick={() => load({ offset: 0 })}>بروزرسانی لیست</Button>
         </div>
         {error && <div className="alert alert-error">{error}</div>}
         {listContent}
@@ -347,7 +372,7 @@ export default function WorkflowOrdersPage({
           <h1>{title}</h1>
           {subtitle && <p className="muted">{subtitle}</p>}
         </div>
-        <Button type="button" variant="ghost" onClick={load}>بروزرسانی</Button>
+        <Button type="button" variant="ghost" onClick={() => load({ offset: 0 })}>بروزرسانی</Button>
       </div>
 
       {filters}

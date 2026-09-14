@@ -6,7 +6,8 @@ import MoneyInput from '../components/MoneyInput'
 
 import UnitSelect, { resolveUnitValue, splitUnitValue } from '../components/UnitSelect'
 
-import { Badge, Button, Card, EmptyState, Field, FilterBar, Modal } from '../components/ui'
+import { Badge, Button, Card, EmptyState, Field, FilterBar, LoadMoreButton, Modal } from '../components/ui'
+import { PAGE_SIZE } from '../config/pagination'
 
 import { useAuth } from '../context/AuthContext'
 
@@ -117,6 +118,12 @@ export default function Materials() {
 
   const [statusFilter, setStatusFilter] = useState(isOffice ? 'pending' : 'all')
 
+  const [total, setTotal] = useState(0)
+
+  const [offset, setOffset] = useState(0)
+
+  const [loadingMore, setLoadingMore] = useState(false)
+
   const [modal, setModal] = useState(false)
 
   const [directApprove, setDirectApprove] = useState(false)
@@ -134,9 +141,11 @@ export default function Materials() {
     return Math.round(stock * unitCost)
   }, [form.stock, form.unit_cost])
 
-  const load = useCallback(async () => {
+  const load = useCallback(async ({ append = false, offset: nextOffset = 0 } = {}) => {
 
-    setLoading(true)
+    if (append) setLoadingMore(true)
+
+    else setLoading(true)
 
     try {
 
@@ -144,7 +153,9 @@ export default function Materials() {
 
         search: search.trim(),
 
-        limit: 200,
+        offset: nextOffset,
+
+        limit: PAGE_SIZE,
 
         include_pending: !isOffice || statusFilter !== 'approved',
 
@@ -154,7 +165,11 @@ export default function Materials() {
 
       })
 
-      setMaterials(data.results || [])
+      setMaterials((prev) => (append ? [...prev, ...(data.results || [])] : (data.results || [])))
+
+      setTotal(data.total || 0)
+
+      setOffset(data.offset ?? nextOffset)
 
       setError('')
 
@@ -165,6 +180,8 @@ export default function Materials() {
     } finally {
 
       setLoading(false)
+
+      setLoadingMore(false)
 
     }
 
@@ -477,7 +494,8 @@ export default function Materials() {
 
         ) : (
 
-          <div className="table-wrap">
+          <>
+          <div className="table-wrap materials-table-desktop">
 
             <table className="table">
 
@@ -614,6 +632,59 @@ export default function Materials() {
             </table>
 
           </div>
+          <div className="materials-cards-mobile">
+            {materials.map((m) => (
+              <div key={m.id} className="m-card">
+                <div className="m-card-head">
+                  <div>
+                    <strong>{m.name}</strong>
+                    {m.sku && <div className="muted small ltr">SKU: {m.sku}</div>}
+                  </div>
+                  <Badge color={APPROVAL_COLORS[m.approval_status] || '#94a3b8'}>
+                    {m.approval_status_display || m.approval_status}
+                  </Badge>
+                </div>
+                <div className="m-card-grid">
+                  <div>
+                    <span className="muted">رنگ</span>
+                    {m.color_name ? (
+                      <span className="material-color-cell">
+                        <span className="color-swatch inline" style={{ background: m.color_hex, borderColor: m.color_hex === '#f8fafc' ? '#cbd5e1' : m.color_hex }} />
+                        {m.color_name}
+                      </span>
+                    ) : '—'}
+                  </div>
+                  <div><span className="muted">واحد</span>{m.unit}</div>
+                  <div><span className="muted">قیمت واحد</span>{formatMoney(m.unit_cost)}</div>
+                  <div><span className="muted">موجودی</span>{m.stock != null ? m.stock : '—'}</div>
+                  <div><span className="muted">ارزش موجودی</span>{m.inventory_value != null ? formatMoney(m.inventory_value) : '—'}</div>
+                </div>
+                {m.rejection_reason && <p className="muted small">{m.rejection_reason}</p>}
+                {showActions && (
+                  <div className="m-card-actions">
+                    {canApprove && m.approval_status === 'pending' && (
+                      <>
+                        <button type="button" className="link link-success" onClick={() => approveMaterial(m)}>تایید</button>
+                        <button type="button" className="link danger" onClick={() => rejectMaterial(m)}>رد</button>
+                      </>
+                    )}
+                    {canApprove && (
+                      <>
+                        <button type="button" className="link" onClick={() => openEdit(m)}>ویرایش</button>
+                        <button type="button" className="link danger" onClick={() => removeMaterial(m)}>حذف</button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          <LoadMoreButton
+            hasMore={materials.length < total}
+            loading={loadingMore}
+            onClick={() => load({ append: true, offset: offset + PAGE_SIZE })}
+          />
+          </>
 
         )}
 

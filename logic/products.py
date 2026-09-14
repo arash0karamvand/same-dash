@@ -5,7 +5,7 @@ from decimal import Decimal, InvalidOperation
 from django.db import transaction
 from django.db.models import Q
 
-from backend.models import Material, Product, ProductCategory, ProductVariant
+from backend.models import InventoryTransaction, Material, Product, ProductCategory, ProductVariant
 from logic.materials import compute_product_material_cost, product_material_to_dict, sync_product_materials
 
 
@@ -73,7 +73,7 @@ def product_to_dict(p, include_variants=True, *, audience="sales"):
             for pm in p.product_materials.select_related("material").filter(
                 material__is_deleted=False,
                 material__is_active=True,
-                material__approval_status=Material.APPROVAL_APPROVED,
+                material__approval_status_ref_id=Material.APPROVAL_APPROVED,
             ).order_by("sort_order", "id")
         ]
         material_cost = compute_product_material_cost(p)
@@ -127,12 +127,21 @@ def _sync_variants(product, variants_data):
         variant.color_hex = item["color_hex"]
         variant.sku = item.get("sku") or ""
         variant.price = Decimal(0)
-        variant.stock = item.get("stock")
         variant.is_active = item.get("is_active", True)
         variant.sort_order = item.get("sort_order", 0)
         variant.save()
+        requested_stock = item.get("stock")
+        if requested_stock is not None:
+            stock_delta = Decimal(requested_stock) - Decimal(variant.stock)
+            if stock_delta:
+                InventoryTransaction.objects.create(
+                    variant=variant,
+                    quantity=stock_delta,
+                    reason="catalog_stock_adjustment",
+                    reference=f"product:{product.pk}",
+                )
         keep_ids.append(variant.id)
-    product.variants.exclude(pk__in=keep_ids).delete()
+    product.variants.exclude(pk__in=keep_ids).update(is_active=False)
 
 
 @transaction.atomic

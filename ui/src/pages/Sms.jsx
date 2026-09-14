@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { customersApi, levelsApi, smsApi } from '../api/client'
+import PersianDateInput from '../components/PersianDateInput'
 import ReminderCampaigns from '../components/ReminderCampaigns'
 import MoneyInput from '../components/MoneyInput'
 import Select from '../components/Select'
-import { Badge, Button, Card, EmptyState, Field, Modal } from '../components/ui'
+import { Badge, Button, Card, EmptyState, Field, FilterBar, LoadMoreButton, Modal } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmContext'
 import { formatDate } from '../utils/format'
@@ -13,6 +14,7 @@ import { CURRENCY_UNIT, PERCENT_UNIT } from '../config/money'
 import { formatJalali, toPersianDigits } from '../utils/jalali'
 import { hasPermission } from '../utils/permissions'
 import { PAGE_GUIDE_DEFAULTS } from '../config/pageGuideDefaults'
+import { PAGE_SIZE, PICKER_LIMIT } from '../config/pagination'
 import { useRegisterPageGuide } from '../context/PageGuideContext'
 
 const STATUS_COLORS = {
@@ -49,6 +51,14 @@ export default function Sms() {
   const [customers, setCustomers] = useState([])
   const [levels, setLevels] = useState([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [logTotal, setLogTotal] = useState(0)
+  const [logOffset, setLogOffset] = useState(0)
+  const [logStatus, setLogStatus] = useState('')
+  const [logType, setLogType] = useState('')
+  const [logSearch, setLogSearch] = useState('')
+  const [logDateFrom, setLogDateFrom] = useState('')
+  const [logDateTo, setLogDateTo] = useState('')
   const [error, setError] = useState('')
   const [info, setInfo] = useState('')
 
@@ -90,12 +100,25 @@ export default function Sms() {
   const [discountPreview, setDiscountPreview] = useState('')
   const [discountSending, setDiscountSending] = useState(false)
 
-  const loadLogs = async () => {
+  const loadLogs = async ({ append = false, offset: nextOffset = 0 } = {}) => {
+    if (append) setLoadingMore(true)
     try {
-      const msgData = await smsApi.list()
-      setMessages(msgData.results)
+      const msgData = await smsApi.list({
+        status: logStatus || undefined,
+        sms_type: logType || undefined,
+        search: logSearch.trim() || undefined,
+        date_from: logDateFrom || undefined,
+        date_to: logDateTo || undefined,
+        offset: nextOffset,
+        limit: PAGE_SIZE,
+      })
+      setMessages((prev) => (append ? [...prev, ...(msgData.results || [])] : (msgData.results || [])))
+      setLogTotal(msgData.total || 0)
+      setLogOffset(msgData.offset ?? nextOffset)
     } catch (e) {
       setError(e.message)
+    } finally {
+      setLoadingMore(false)
     }
   }
 
@@ -158,7 +181,7 @@ export default function Sms() {
       if (canViewLogs) tasks.push(loadLogs())
       if (canSend) {
         tasks.push(
-          customersApi.list().then((d) => setCustomers(d.results)),
+          customersApi.list({ limit: PICKER_LIMIT }).then((d) => setCustomers(d.results)),
           levelsApi.list().then((d) => setLevels(d.results)),
         )
       }
@@ -761,6 +784,69 @@ export default function Sms() {
           <p className="muted">
             درگاه پیش‌فرض شبیه‌سازی است. بدون SMS_API_KEY، وضعیت mock_sent ثبت می‌شود.
           </p>
+          <FilterBar>
+            <Field label="وضعیت">
+              <Select
+                value={logStatus}
+                onChange={setLogStatus}
+                options={[
+                  { value: '', label: 'همه' },
+                  { value: 'sent', label: 'ارسال شد' },
+                  { value: 'pending', label: 'در صف' },
+                  { value: 'failed', label: 'ناموفق' },
+                  { value: 'mock_sent', label: 'شبیه‌سازی' },
+                ]}
+                placeholder="همه"
+              />
+            </Field>
+            <Field label="نوع پیامک">
+              <Select
+                value={logType}
+                onChange={setLogType}
+                options={[
+                  { value: '', label: 'همه' },
+                  { value: 'manual', label: 'دستی' },
+                  { value: 'welcome', label: 'خوش‌آمدگویی' },
+                  { value: 'birthday', label: 'تبریک تولد' },
+                  { value: 'order_placed', label: 'ثبت سفارش' },
+                  { value: 'discount', label: 'تخفیف' },
+                  { value: 'reminder', label: 'یادآوری' },
+                  { value: 'level_up', label: 'ارتقای سطح' },
+                ]}
+                placeholder="همه"
+              />
+            </Field>
+            <Field label="از تاریخ">
+              <PersianDateInput
+                value={logDateFrom}
+                onChange={setLogDateFrom}
+                placeholder="از تاریخ"
+                onClear={() => setLogDateFrom('')}
+                clearLabel="پاک"
+              />
+            </Field>
+            <Field label="تا تاریخ">
+              <PersianDateInput
+                value={logDateTo}
+                onChange={setLogDateTo}
+                placeholder="تا تاریخ"
+                onClear={() => setLogDateTo('')}
+                clearLabel="پاک"
+              />
+            </Field>
+            <Field label="جستجو">
+              <input
+                className="search-input"
+                value={logSearch}
+                onChange={(e) => setLogSearch(e.target.value)}
+                placeholder="موبایل، نام یا متن…"
+                onKeyDown={(e) => e.key === 'Enter' && loadLogs()}
+              />
+            </Field>
+            <div className="page-filters-actions">
+              <Button type="button" variant="ghost" onClick={() => loadLogs()}>اعمال فیلتر</Button>
+            </div>
+          </FilterBar>
           {loading ? (
             <div className="loading">در حال بارگذاری…</div>
           ) : messages.length === 0 ? (
@@ -813,6 +899,11 @@ export default function Sms() {
                   </div>
                 ))}
               </div>
+              <LoadMoreButton
+                hasMore={messages.length < logTotal}
+                loading={loadingMore}
+                onClick={() => loadLogs({ append: true, offset: logOffset + PAGE_SIZE })}
+              />
             </>
           )}
         </Card>

@@ -1,15 +1,16 @@
 // صفحه مدیریت مشتریان: فهرست، جستجو، کیف پول، افزودن/ویرایش و تاریخچه.
 
 import { useEffect, useState } from 'react'
-import { customersApi } from '../api/client'
+import { customersApi, levelsApi } from '../api/client'
 import PersianDateInput from '../components/PersianDateInput'
 import MoneyInput from '../components/MoneyInput'
 import Select from '../components/Select'
 import OfficeSectionCard from '../components/OfficeSectionCard'
 import { OFFICE_CUSTOMERS_FILTER } from '../config/recordFilterSections'
 import { PAGE_GUIDE_DEFAULTS } from '../config/pageGuideDefaults'
+import { PAGE_SIZE } from '../config/pagination'
 import { useRegisterPageGuide } from '../context/PageGuideContext'
-import { Badge, Button, Card, EmptyState, Field, FilterBar, Modal } from '../components/ui'
+import { Badge, Button, Card, EmptyState, Field, FilterBar, LoadMoreButton, Modal } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmContext'
 import { formatDate, formatMoney } from '../utils/format'
@@ -26,7 +27,13 @@ export default function Customers({ portal }) {
 
   const [customers, setCustomers] = useState([])
   const [search, setSearch] = useState('')
+  const [levelFilter, setLevelFilter] = useState('')
+  const [activeFilter, setActiveFilter] = useState('')
+  const [levels, setLevels] = useState([])
+  const [total, setTotal] = useState(0)
+  const [offset, setOffset] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState('')
   const [walletInfo, setWalletInfo] = useState('')
 
@@ -48,21 +55,32 @@ export default function Customers({ portal }) {
     PAGE_GUIDE_DEFAULTS.customers_shop || '',
   )
 
-  const load = async (searchValue = '') => {
-    setLoading(true)
+  const load = async ({ append = false, offset: nextOffset = 0 } = {}) => {
+    if (append) setLoadingMore(true)
+    else setLoading(true)
     try {
-      const data = await customersApi.list(searchValue)
-      setCustomers(data.results)
+      const data = await customersApi.list({
+        search: search.trim(),
+        level_id: levelFilter || undefined,
+        is_active: activeFilter,
+        offset: nextOffset,
+        limit: PAGE_SIZE,
+      })
+      setCustomers((prev) => (append ? [...prev, ...(data.results || [])] : (data.results || [])))
+      setTotal(data.total || 0)
+      setOffset(data.offset ?? nextOffset)
       setError('')
     } catch (e) {
       setError(e.message)
     } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
   }
 
   useEffect(() => {
     load()
+    levelsApi.list().then((d) => setLevels(d.results || [])).catch(() => setLevels([]))
     customersApi.topBuyers(20, { minPurchases: 2, days: 365 }).then(setTopBuyers).catch(() => setTopBuyers(null))
   }, [])
 
@@ -96,7 +114,7 @@ export default function Customers({ portal }) {
         await customersApi.create(form)
       }
       setModalOpen(false)
-      load(search)
+      load()
     } catch (err) {
       setError(err.message)
     }
@@ -110,7 +128,7 @@ export default function Customers({ portal }) {
       variant: 'danger',
     })) return
     await customersApi.remove(customer.id)
-    load(search)
+    load()
   }
 
   const openHistory = async (customer) => {
@@ -149,7 +167,7 @@ export default function Customers({ portal }) {
       setWalletData(data)
       setWalletForm(EMPTY_WALLET_FORM)
       setWalletInfo('تراکنش با موفقیت ثبت شد.')
-      load(search)
+      load()
     } catch (err) {
       setError(err.message)
     } finally {
@@ -222,14 +240,37 @@ export default function Customers({ portal }) {
           <Field label="جستجو">
             <input
               className="search-input"
-              placeholder="جستجو بر اساس نام یا موبایل…"
+              placeholder="جستجو بر اساس نام، موبایل یا کد باشگاه…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && load(search)}
+              onKeyDown={(e) => e.key === 'Enter' && load()}
+            />
+          </Field>
+          <Field label="سطح باشگاه">
+            <Select
+              value={levelFilter}
+              onChange={setLevelFilter}
+              options={[
+                { value: '', label: 'همه سطوح' },
+                ...levels.map((lv) => ({ value: String(lv.id), label: lv.name })),
+              ]}
+              placeholder="همه سطوح"
+            />
+          </Field>
+          <Field label="وضعیت">
+            <Select
+              value={activeFilter}
+              onChange={setActiveFilter}
+              options={[
+                { value: '', label: 'همه' },
+                { value: '1', label: 'فعال' },
+                { value: '0', label: 'غیرفعال' },
+              ]}
+              placeholder="همه"
             />
           </Field>
           <div className="page-filters-actions">
-            <Button variant="ghost" type="button" onClick={() => load(search)}>جستجو</Button>
+            <Button variant="ghost" type="button" onClick={() => load()}>اعمال فیلتر</Button>
           </div>
         </FilterBar>
         {error && <div className="alert-error">{error}</div>}
@@ -312,6 +353,11 @@ export default function Customers({ portal }) {
                 </div>
               ))}
             </div>
+            <LoadMoreButton
+              hasMore={customers.length < total}
+              loading={loadingMore}
+              onClick={() => load({ append: true, offset: offset + PAGE_SIZE })}
+            />
           </>
         )}
       </Card>

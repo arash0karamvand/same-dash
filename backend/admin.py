@@ -8,11 +8,11 @@ from django.contrib import admin
 
 from .models import (
     Account,
-    AccountingEntry,
     AuditLog,
     Customer,
     CustomerLevelHistory,
-    DetailedAccount,
+    JournalEntry,
+    JournalLine,
     LoyaltyLevel,
     Product,
     Sale,
@@ -22,7 +22,6 @@ from .models import (
     SMSLog,
     StaffAttendance,
     StaffProfile,
-    SubsidiaryAccount,
 )
 
 
@@ -54,7 +53,7 @@ class SaleAdmin(admin.ModelAdmin):
         "payment_status",
         "sold_at",
     )
-    list_filter = ("payment_status", "payment_method", "sold_at")
+    list_filter = ("payment_status_ref", "payment_method_ref", "sold_at")
     search_fields = ("invoice_number", "customer__full_name", "customer__phone")
     readonly_fields = ("recorded_by", "created_at")
 
@@ -67,25 +66,18 @@ class AccountAdmin(admin.ModelAdmin):
     ordering = ("sort_order", "name")
 
 
-@admin.register(SubsidiaryAccount)
-class SubsidiaryAccountAdmin(admin.ModelAdmin):
-    list_display = ("code", "name", "account", "is_active")
-    list_filter = ("account__account_class", "is_active")
-    search_fields = ("name", "code", "account__name")
+@admin.register(JournalEntry)
+class JournalEntryAdmin(admin.ModelAdmin):
+    list_display = ("document_number", "document_code", "ledger", "entry_type", "status", "entry_date")
+    list_filter = ("ledger", "entry_type_ref", "status_ref")
+    search_fields = ("document_code", "description")
 
 
-@admin.register(DetailedAccount)
-class DetailedAccountAdmin(admin.ModelAdmin):
-    list_display = ("code", "name", "subsidiary", "is_active")
-    search_fields = ("name", "code", "subsidiary__name")
-
-
-@admin.register(AccountingEntry)
-class AccountingEntryAdmin(admin.ModelAdmin):
-    list_display = ("document_number", "entry_type", "account", "debit", "credit", "entry_date", "is_approved")
-    list_filter = ("entry_type", "account__account_class", "is_approved")
-    search_fields = ("description",)
-    list_editable = ("is_approved",)
+@admin.register(JournalLine)
+class JournalLineAdmin(admin.ModelAdmin):
+    list_display = ("journal", "line_number", "account", "debit", "credit")
+    list_filter = ("account__ledger", "account__account_class")
+    search_fields = ("journal__document_code", "description", "account__name")
 
 
 @admin.register(CustomerLevelHistory)
@@ -98,7 +90,7 @@ class CustomerLevelHistoryAdmin(admin.ModelAdmin):
 @admin.register(SMSLog)
 class SMSLogAdmin(admin.ModelAdmin):
     list_display = ("phone_number", "customer", "sms_type", "status", "created_by", "created_at", "sent_at")
-    list_filter = ("status", "sms_type")
+    list_filter = ("status_ref", "sms_type_ref")
     search_fields = ("phone_number", "message")
     readonly_fields = ("created_at", "sent_at", "provider_response", "error_message")
 
@@ -106,7 +98,7 @@ class SMSLogAdmin(admin.ModelAdmin):
 @admin.register(SaleInstallment)
 class SaleInstallmentAdmin(admin.ModelAdmin):
     list_display = ("sale", "amount", "due_date", "payment_method", "status", "check_number")
-    list_filter = ("status", "payment_method")
+    list_filter = ("status_ref", "payment_method_ref")
 
 
 @admin.register(Seller)
@@ -129,7 +121,7 @@ class StaffProfileAdmin(admin.ModelAdmin):
 @admin.register(StaffAttendance)
 class StaffAttendanceAdmin(admin.ModelAdmin):
     list_display = ("seller", "date", "status", "approval_status", "recorded_by")
-    list_filter = ("status", "approval_status", "date")
+    list_filter = ("status_ref", "approval_status_ref", "date")
 
 
 @admin.register(AuditLog)

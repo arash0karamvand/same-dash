@@ -1,205 +1,99 @@
-"""طرح حساب‌ها (دفتر کل) — seed و کمک‌تابع‌های حساب."""
+"""Chart of accounts CRUD and seed — definitions live in chart_of_accounts.py."""
 
-from backend.models import Account, DetailedAccount, SubsidiaryAccount
-from logic.ledger import OFFICE_LEDGER, LedgerConfig
+from django.db.models import Max
 
-ACCOUNT_CLASS_LABELS = {
-    "asset": "دارایی",
-    "liability": "بدهی",
-    "equity": "سرمایه",
-    "revenue": "درآمد",
-    "expense": "هزینه",
-}
+from backend.models import Account, AccountClosure
+from logic.chart_of_accounts import (
+    ACCOUNT_CLASS_LABELS,
+    CHART_OF_ACCOUNTS,
+    ENTRY_TYPE_TO_SLUG,
+    PAYMENT_METHOD_TO_SLUG,
+)
+from logic.ledger import OFFICE_LEDGER
 
-CHART_OF_ACCOUNTS = [
-    {"slug": "cash_documents", "code": "1120", "name": "اسناد نزد صندوق", "account_class": "asset", "normal_balance": "debit", "sort_order": 10, "legacy_entry_type": "payment"},
-    {"slug": "petty_cash", "code": "1130", "name": "تنخواه گردان", "account_class": "asset", "normal_balance": "debit", "sort_order": 20},
-    {"slug": "bank", "code": "1210", "name": "بانک", "account_class": "asset", "normal_balance": "debit", "sort_order": 30, "legacy_entry_type": "payment"},
-    {"slug": "collection_at_bank", "code": "1220", "name": "اسناد در جریان وصول نزد بانک", "account_class": "asset", "normal_balance": "debit", "sort_order": 40},
-    {"slug": "receivables", "code": "1310", "name": "حساب‌ها و اسناد (دریافتی)", "account_class": "asset", "normal_balance": "debit", "sort_order": 50, "legacy_entry_type": "receivable"},
-    {"slug": "other_receivables", "code": "1320", "name": "سایر حساب‌ها (دریافتی)", "account_class": "asset", "normal_balance": "debit", "sort_order": 60},
-    {"slug": "raw_materials_inventory", "code": "1510", "name": "موجودی مواد اولیه", "account_class": "asset", "normal_balance": "debit", "sort_order": 70},
-    {"slug": "wip_inventory", "code": "1520", "name": "موجودی کالای در جریان ساخت", "account_class": "asset", "normal_balance": "debit", "sort_order": 80},
-    {"slug": "semi_finished_inventory", "code": "1530", "name": "موجودی کالای نیمه‌ساخت", "account_class": "asset", "normal_balance": "debit", "sort_order": 90},
-    {"slug": "finished_goods_inventory", "code": "1540", "name": "موجودی محصول", "account_class": "asset", "normal_balance": "debit", "sort_order": 100},
-    {"slug": "prepayments", "code": "1710", "name": "پیش‌پرداخت‌ها و سپرده‌ها", "account_class": "asset", "normal_balance": "debit", "sort_order": 110},
-    {"slug": "investment_projects", "code": "1740", "name": "سرمایه‌گذاری و پروژه", "account_class": "asset", "normal_balance": "debit", "sort_order": 120},
-    {"slug": "deposits_sureties", "code": "1750", "name": "ودایع و سپرده‌ها", "account_class": "asset", "normal_balance": "debit", "sort_order": 130},
-    {"slug": "bank_payables", "code": "4110", "name": "اسناد پرداختنی بانک", "account_class": "liability", "normal_balance": "credit", "sort_order": 210},
-    {"slug": "accounts_payable", "code": "4311", "name": "حساب‌ها و اسناد (پرداختنی)", "account_class": "liability", "normal_balance": "credit", "sort_order": 220},
-    {"slug": "other_payables", "code": "4321", "name": "سایر حساب‌های پرداختنی", "account_class": "liability", "normal_balance": "credit", "sort_order": 230},
-    {"slug": "long_term_loans", "code": "5110", "name": "وام‌های پرداختنی بلندمدت", "account_class": "liability", "normal_balance": "credit", "sort_order": 240},
-    {"slug": "retained_earnings", "code": "6320", "name": "سود و (زیان) انباشته", "account_class": "equity", "normal_balance": "credit", "sort_order": 310},
-    {"slug": "raw_materials_sales", "code": "7210", "name": "فروش موجودی مواد اولیه", "account_class": "revenue", "normal_balance": "credit", "sort_order": 410},
-    {"slug": "semi_finished_sales", "code": "7230", "name": "فروش موجودی کالای نیمه‌ساخته", "account_class": "revenue", "normal_balance": "credit", "sort_order": 420},
-    {"slug": "product_sales", "code": "7240", "name": "فروش موجودی محصول", "account_class": "revenue", "normal_balance": "credit", "sort_order": 430, "legacy_entry_type": "sale"},
-    {"slug": "other_revenue", "code": "7510", "name": "سایر درآمدها", "account_class": "revenue", "normal_balance": "credit", "sort_order": 440, "legacy_entry_type": "other"},
-    {"slug": "purchase_discount", "code": "7520", "name": "تخفیف از خرید", "account_class": "revenue", "normal_balance": "credit", "sort_order": 450},
-    {"slug": "production_payroll", "code": "8110", "name": "هزینه‌های حقوق و دستمزد تولید", "account_class": "expense", "normal_balance": "debit", "sort_order": 510},
-    {"slug": "production_overhead", "code": "8111", "name": "هزینه‌های سربار تولید", "account_class": "expense", "normal_balance": "debit", "sort_order": 520},
-    {"slug": "admin_payroll", "code": "8210", "name": "هزینه‌های حقوق و دستمزد اداری", "account_class": "expense", "normal_balance": "debit", "sort_order": 530},
-    {"slug": "admin_overhead", "code": "8211", "name": "هزینه‌های سربار اداری", "account_class": "expense", "normal_balance": "debit", "sort_order": 540, "legacy_entry_type": "adjustment"},
-    {"slug": "distribution_sales_expense", "code": "8220", "name": "هزینه‌های توزیع و فروش", "account_class": "expense", "normal_balance": "debit", "sort_order": 550},
-    {"slug": "financial_expense", "code": "8310", "name": "هزینه‌های مالی", "account_class": "expense", "normal_balance": "debit", "sort_order": 560},
-    {"slug": "raw_materials_purchase_return", "code": "9430", "name": "برگشت از خرید موجودی مواد اولیه", "account_class": "expense", "normal_balance": "debit", "sort_order": 570, "legacy_entry_type": "refund"},
-    {"slug": "memorandum_accounts", "code": "9710", "name": "حساب‌های انتظامی", "account_class": "asset", "normal_balance": "debit", "sort_order": 580},
-    {"slug": "memorandum_counterpart", "code": "9720", "name": "طرف حساب‌های انتظامی", "account_class": "liability", "normal_balance": "credit", "sort_order": 590},
-    {
-        "slug": "raw_materials_purchase_return_cogs",
-        "code": "9930",
-        "name": "بهای تمام‌شده برگشت از خرید موجودی مواد اولیه",
-        "account_class": "expense",
-        "normal_balance": "debit",
-        "sort_order": 600,
-    },
-]
+# Backward-compatible aliases
+ENTRY_TYPE_ACCOUNT_SLUGS = ENTRY_TYPE_TO_SLUG
+PAYMENT_METHOD_ACCOUNT_SLUGS = PAYMENT_METHOD_TO_SLUG
 
-ENTRY_TYPE_ACCOUNT_SLUGS = {
-    "sale": "product_sales",
-    "receivable": "receivables",
-    "payment": "bank",
-    "refund": "raw_materials_purchase_return",
-    "adjustment": "admin_overhead",
-    "other": "other_revenue",
-}
 
-PAYMENT_METHOD_ACCOUNT_SLUGS = {
-    "cash": "cash_documents",
-    "check": "collection_at_bank",
-    "card": "bank",
-    "transfer": "bank",
-}
+def _accounts(ledger=OFFICE_LEDGER):
+    return Account.objects.filter(ledger__code=ledger.id)
+
+
+def _depth(depth, ledger=OFFICE_LEDGER):
+    qs = _accounts(ledger)
+    if depth == 0:
+        return qs.filter(parent__isnull=True)
+    if depth == 1:
+        return qs.filter(parent__isnull=False, parent__parent__isnull=True)
+    if depth == 2:
+        return qs.filter(
+            parent__isnull=False,
+            parent__parent__isnull=False,
+            parent__parent__parent__isnull=True,
+        )
+    return qs.none()
+
+
+def seed_accounts(*, ledger=OFFICE_LEDGER):
+    ledger_row = ledger.model
+    for row in CHART_OF_ACCOUNTS:
+        Account.objects.update_or_create(
+            ledger=ledger_row,
+            slug=row["slug"],
+            defaults={**row, "is_active": True, "parent": None},
+        )
+
+
+def get_account(slug, *, required=True, ledger=OFFICE_LEDGER):
+    account = _accounts(ledger).filter(slug=slug, is_active=True).first()
+    if not account:
+        seed_accounts(ledger=ledger)
+        account = _accounts(ledger).filter(slug=slug, is_active=True).first()
+    if not account and required:
+        raise ValueError(f"حساب «{slug}» یافت نشد.")
+    return account
+
+
+def resolve_account_for_entry(*, account_id=None, account_slug=None, entry_type=None, ledger=OFFICE_LEDGER):
+    qs = _accounts(ledger).filter(is_active=True)
+    if account_id:
+        return qs.get(pk=account_id)
+    if account_slug:
+        return get_account(account_slug, ledger=ledger)
+    slug = ENTRY_TYPE_TO_SLUG.get(entry_type)
+    if slug:
+        return get_account(slug, ledger=ledger)
+    raise ValueError("حساب سند مشخص نشده است.")
+
+
+def payment_account_for_sale(sale, *, ledger=OFFICE_LEDGER):
+    return get_account(
+        PAYMENT_METHOD_TO_SLUG.get(sale.payment_method or "cash", "bank"),
+        ledger=ledger,
+    )
 
 
 def resolve_sale_accounting_mode(requested, payment_method):
-    """حالت خودکار فقط وقتی روش پرداخت به حساب معین وصل است."""
     from backend.models import Sale
 
     mode = (requested or Sale.ACCOUNTING_MODE_AUTOMATIC).strip()
     if mode not in (Sale.ACCOUNTING_MODE_AUTOMATIC, Sale.ACCOUNTING_MODE_MANUAL):
         raise ValueError("نوع ثبت حسابداری نامعتبر است.")
-    if mode == Sale.ACCOUNTING_MODE_AUTOMATIC:
-        method = (payment_method or "cash").strip()
-        if method not in PAYMENT_METHOD_ACCOUNT_SLUGS:
-            return Sale.ACCOUNTING_MODE_MANUAL
-    return mode
+    return mode if mode == Sale.ACCOUNTING_MODE_MANUAL or payment_method in PAYMENT_METHOD_TO_SLUG else Sale.ACCOUNTING_MODE_MANUAL
 
 
 def payment_account_label_for_sale(sale):
     account = payment_account_for_sale(sale)
-    code = getattr(account, "code", "") or ""
-    name = account.name if account else "—"
-    return f"{code} — {name}".strip(" —") if code or name else "—"
-
-
-def seed_accounts(*, ledger=OFFICE_LEDGER):
-    """ایجاد یا به‌روزرسانی حساب‌های طرح حساب."""
-    AccountModel = ledger.Account
-    has_code = any(f.name == "code" for f in AccountModel._meta.get_fields())
-    for row in CHART_OF_ACCOUNTS:
-        defaults = {
-            "name": row["name"],
-            "account_class": row["account_class"],
-            "normal_balance": row["normal_balance"],
-            "sort_order": row["sort_order"],
-            "legacy_entry_type": row.get("legacy_entry_type", ""),
-            "is_active": True,
-        }
-        if has_code:
-            defaults["code"] = row.get("code", "")
-        AccountModel.objects.update_or_create(
-            slug=row["slug"],
-            defaults=defaults,
-        )
-
-
-def get_account(slug, *, required=True, ledger=OFFICE_LEDGER):
-    AccountModel = ledger.Account
-    account = AccountModel.objects.filter(slug=slug, is_active=True).first()
-    if account:
-        return account
-    if not AccountModel.objects.exists():
-        seed_accounts(ledger=ledger)
-        account = AccountModel.objects.filter(slug=slug, is_active=True).first()
-    if account or not required:
-        return account
-    raise ValueError(f"حساب «{slug}» یافت نشد.")
-
-
-def resolve_account_for_entry(*, account_id=None, account_slug=None, entry_type=None, ledger=OFFICE_LEDGER):
-    AccountModel = ledger.Account
-    if account_id:
-        return AccountModel.objects.get(pk=account_id, is_active=True)
-    if account_slug:
-        return get_account(account_slug, ledger=ledger)
-    if entry_type == "manual":
-        return get_account("other_revenue", ledger=ledger)
-    if entry_type:
-        account = AccountModel.objects.filter(legacy_entry_type=entry_type, is_active=True).first()
-        if account:
-            return account
-        slug = ENTRY_TYPE_ACCOUNT_SLUGS.get(entry_type)
-        if slug:
-            return get_account(slug, ledger=ledger)
-    raise ValueError("حساب سند مشخص نشده است.")
-
-
-def payment_account_for_sale(sale, *, ledger=OFFICE_LEDGER):
-    method = getattr(sale, "payment_method", None) or "cash"
-    slug = PAYMENT_METHOD_ACCOUNT_SLUGS.get(method, "bank")
-    return get_account(slug, ledger=ledger)
-
-
-def subsidiary_to_dict(sub):
-    return {
-        "id": sub.id,
-        "account_id": sub.account_id,
-        "code": sub.code,
-        "full_code": sub.full_code,
-        "name": sub.name,
-        "is_active": sub.is_active,
-        "general_code": sub.account.code or "",
-        "general_name": sub.account.name,
-    }
-
-
-def detailed_to_dict(detail):
-    return {
-        "id": detail.id,
-        "subsidiary_id": detail.subsidiary_id,
-        "account_id": detail.subsidiary.account_id,
-        "code": detail.code,
-        "full_code": detail.full_code,
-        "name": detail.name,
-        "is_active": detail.is_active,
-        "subsidiary_code": detail.subsidiary.full_code,
-        "subsidiary_name": detail.subsidiary.name,
-        "general_code": detail.subsidiary.account.code or "",
-        "general_name": detail.subsidiary.account.name,
-    }
-
-
-def accounts_grouped(*, ledger=OFFICE_LEDGER):
-    seed_accounts(ledger=ledger)
-    AccountModel = ledger.Account
-    groups = []
-    for class_key, class_label in ACCOUNT_CLASS_LABELS.items():
-        accounts = AccountModel.objects.filter(account_class=class_key, is_active=True).order_by("sort_order", "name")
-        groups.append(
-            {
-                "class": class_key,
-                "class_label": class_label,
-                "accounts": [account_to_dict(a) for a in accounts],
-            }
-        )
-    return groups
+    return f"{account.code} — {account.name}".strip(" —")
 
 
 def account_to_dict(account):
     return {
         "id": account.id,
         "slug": account.slug,
-        "code": account.code or "",
+        "code": account.code,
+        "full_code": account.full_code,
         "name": account.name,
         "account_class": account.account_class,
         "account_class_label": account.get_account_class_display(),
@@ -207,185 +101,149 @@ def account_to_dict(account):
         "sort_order": account.sort_order,
         "legacy_entry_type": account.legacy_entry_type or None,
         "is_active": account.is_active,
+        "parent_id": account.parent_id,
     }
+
+
+def subsidiary_to_dict(sub):
+    parent = sub.parent
+    return {
+        "id": sub.id,
+        "account_id": parent.id,
+        "code": sub.code,
+        "full_code": sub.full_code,
+        "name": sub.name,
+        "is_active": sub.is_active,
+        "general_code": parent.code,
+        "general_name": parent.name,
+    }
+
+
+def detailed_to_dict(detail):
+    sub, general = detail.parent, detail.parent.parent
+    return {
+        "id": detail.id,
+        "subsidiary_id": sub.id,
+        "account_id": general.id,
+        "code": detail.code,
+        "full_code": detail.full_code,
+        "name": detail.name,
+        "is_active": detail.is_active,
+        "subsidiary_code": sub.full_code,
+        "subsidiary_name": sub.name,
+        "general_code": general.code,
+        "general_name": general.name,
+    }
+
+
+def accounts_grouped(*, ledger=OFFICE_LEDGER):
+    seed_accounts(ledger=ledger)
+    groups = []
+    for key, label in ACCOUNT_CLASS_LABELS.items():
+        qs = _depth(0, ledger).filter(account_class=key, is_active=True).order_by("sort_order", "name")
+        groups.append({"class": key, "class_label": label, "accounts": [account_to_dict(a) for a in qs]})
+    return groups
 
 
 def resolve_line_accounts(*, account_id=None, subsidiary_id=None, detailed_id=None, ledger=OFFICE_LEDGER):
-    """حل حساب کل/معین/تفصیلی برای یک ردیف سند."""
-    DetailedModel = ledger.DetailedAccount
-    SubsidiaryModel = ledger.SubsidiaryAccount
-    AccountModel = ledger.Account
-    detailed = subsidiary = account = None
-    if detailed_id:
-        detailed = DetailedModel.objects.select_related("subsidiary", "subsidiary__account").get(
-            pk=detailed_id, is_active=True
-        )
-        subsidiary = detailed.subsidiary
-        account = subsidiary.account
-    elif subsidiary_id:
-        subsidiary = SubsidiaryModel.objects.select_related("account").get(pk=subsidiary_id, is_active=True)
-        account = subsidiary.account
-    elif account_id:
-        account = AccountModel.objects.get(pk=account_id, is_active=True)
-    else:
-        raise ValueError("حداقل حساب کل باید مشخص شود.")
-    return account, subsidiary, detailed
+    qs = _accounts(ledger).filter(is_active=True)
+    selected = None
+    expected_depth = None
+    try:
+        if detailed_id:
+            selected, expected_depth = qs.get(pk=detailed_id), 2
+        elif subsidiary_id:
+            selected, expected_depth = qs.get(pk=subsidiary_id), 1
+        elif account_id:
+            selected, expected_depth = qs.get(pk=account_id), 0
+        else:
+            raise ValueError("حداقل حساب کل باید مشخص شود.")
+    except Account.DoesNotExist as exc:
+        raise ValueError("حساب انتخاب‌شده متعلق به این دفتر نیست.") from exc
+    depth = selected.ancestor_paths.aggregate(value=Max("depth"))["value"]
+    if depth != expected_depth:
+        raise ValueError("سطح حساب انتخاب‌شده نامعتبر است.")
+    if expected_depth == 2:
+        return selected, selected.parent, selected
+    if expected_depth == 1:
+        return selected, selected, None
+    return selected, None, None
 
 
 def list_document_models(params, *, ledger=OFFICE_LEDGER):
-    """مدل‌های سند (حساب‌های دفتر کل) به همراه تعداد اسناد."""
-    from django.db.models import Count, Q
-
-    from logic.accounting_entries import apply_entry_filters
-
-    seed_accounts(ledger=ledger)
-    AccountModel = ledger.Account
-    EntryModel = ledger.AccountingEntry
-    accounts = AccountModel.objects.filter(is_active=True).order_by("sort_order", "name")
-    account_class = (params.get("account_class") or "").strip()
-    if account_class:
-        accounts = accounts.filter(account_class=account_class)
-
-    entry_qs = apply_entry_filters(
-        EntryModel.objects.filter(account__isnull=False),
-        params,
-        ledger=ledger,
-    )
-    if ledger.syncs_sales:
-        entry_qs = entry_qs.filter(Q(sale__isnull=True) | Q(sale__is_deleted=False))
-
-    counts = {
-        row["account_id"]: row["count"]
-        for row in entry_qs.values("account_id").annotate(count=Count("id"))
-    }
-
+    accounts = _depth(0, ledger).filter(is_active=True).order_by("sort_order", "name")
     models = []
     for account in accounts:
         info = account_to_dict(account)
-        info["account_code"] = account.code or str(account.sort_order).zfill(4)
-        info["entry_count"] = counts.get(account.id, 0)
+        info["account_code"] = account.code
+        info["entry_count"] = account.journal_lines.filter(journal__ledger__code=ledger.id).count()
         models.append(info)
-
     return {"models": models, "accounts": accounts_grouped(ledger=ledger)}
 
 
 def list_subsidiary_accounts(params, *, ledger=OFFICE_LEDGER):
-    account_id = (params.get("account_id") or "").strip()
-    qs = ledger.SubsidiaryAccount.objects.filter(is_active=True).select_related("account").order_by(
-        "account__sort_order", "code"
-    )
-    if account_id.isdigit():
-        qs = qs.filter(account_id=int(account_id))
-    return [subsidiary_to_dict(s) for s in qs]
-
-
-def create_subsidiary_account(*, account_id, code, name, ledger=OFFICE_LEDGER):
-    code = (code or "").strip()
-    name = (name or "").strip()
-    if not account_id or not code or not name:
-        raise ValueError("حساب کل، کد و عنوان معین الزامی است.")
-    AccountModel = ledger.Account
-    SubsidiaryModel = ledger.SubsidiaryAccount
-    try:
-        account = AccountModel.objects.get(pk=account_id, is_active=True)
-    except AccountModel.DoesNotExist as exc:
-        raise LookupError("حساب کل یافت نشد.") from exc
-    if SubsidiaryModel.objects.filter(account=account, code=code).exists():
-        raise ValueError("این کد معین قبلاً ثبت شده است.")
-    return SubsidiaryModel.objects.create(account=account, code=code, name=name)
+    qs = _depth(1, ledger).filter(is_active=True).select_related("parent")
+    if str(params.get("account_id") or "").isdigit():
+        qs = qs.filter(parent_id=int(params["account_id"]))
+    return [subsidiary_to_dict(a) for a in qs.order_by("parent__sort_order", "code")]
 
 
 def list_detailed_accounts(params, *, ledger=OFFICE_LEDGER):
-    subsidiary_id = (params.get("subsidiary_id") or "").strip()
-    account_id = (params.get("account_id") or "").strip()
-    qs = ledger.DetailedAccount.objects.filter(is_active=True).select_related(
-        "subsidiary", "subsidiary__account"
-    ).order_by("subsidiary__account__sort_order", "subsidiary__code", "code")
-    if subsidiary_id.isdigit():
-        qs = qs.filter(subsidiary_id=int(subsidiary_id))
-    elif account_id.isdigit():
-        qs = qs.filter(subsidiary__account_id=int(account_id))
-    return [detailed_to_dict(d) for d in qs]
+    qs = _depth(2, ledger).filter(is_active=True).select_related("parent", "parent__parent")
+    if str(params.get("subsidiary_id") or "").isdigit():
+        qs = qs.filter(parent_id=int(params["subsidiary_id"]))
+    elif str(params.get("account_id") or "").isdigit():
+        qs = qs.filter(parent__parent_id=int(params["account_id"]))
+    return [detailed_to_dict(a) for a in qs.order_by("parent__parent__sort_order", "parent__code", "code")]
+
+
+def _create_child(parent, code, name):
+    code, name = (code or "").strip(), (name or "").strip()
+    if not code or not name:
+        raise ValueError("کد و عنوان حساب الزامی است.")
+    if Account.objects.filter(ledger=parent.ledger, code=code).exists():
+        raise ValueError("این کد حساب قبلاً ثبت شده است.")
+    return Account.objects.create(
+        ledger=parent.ledger,
+        parent=parent,
+        slug=f"{parent.slug}-{code}",
+        code=code,
+        name=name,
+        account_class=parent.account_class,
+        normal_balance=parent.normal_balance,
+    )
+
+
+def create_subsidiary_account(*, account_id, code, name, ledger=OFFICE_LEDGER):
+    parent = _depth(0, ledger).get(pk=account_id, is_active=True)
+    return _create_child(parent, code, name)
 
 
 def create_detailed_account(*, subsidiary_id, code, name, ledger=OFFICE_LEDGER):
-    code = (code or "").strip()
-    name = (name or "").strip()
-    if not subsidiary_id or not code or not name:
-        raise ValueError("حساب معین، کد و عنوان تفصیلی الزامی است.")
-    SubsidiaryModel = ledger.SubsidiaryAccount
-    DetailedModel = ledger.DetailedAccount
-    try:
-        subsidiary = SubsidiaryModel.objects.select_related("account").get(
-            pk=subsidiary_id, is_active=True
-        )
-    except SubsidiaryModel.DoesNotExist as exc:
-        raise LookupError("حساب معین یافت نشد.") from exc
-    if DetailedModel.objects.filter(subsidiary=subsidiary, code=code).exists():
-        raise ValueError("این کد تفصیلی قبلاً ثبت شده است.")
-    return DetailedModel.objects.create(subsidiary=subsidiary, code=code, name=name)
+    parent = _depth(1, ledger).get(pk=subsidiary_id, is_active=True)
+    return _create_child(parent, code, name)
 
 
-def update_general_account(*, account_id, name=None, is_active=None, ledger=OFFICE_LEDGER):
-    AccountModel = ledger.Account
-    try:
-        account = AccountModel.objects.get(pk=account_id)
-    except AccountModel.DoesNotExist as exc:
-        raise LookupError("حساب کل یافت نشد.") from exc
+def _update(account, code=None, name=None, is_active=None):
+    if code is not None:
+        account.code = (code or "").strip()
     if name is not None:
-        name = (name or "").strip()
-        if not name:
-            raise ValueError("عنوان حساب کل الزامی است.")
-        account.name = name
+        account.name = (name or "").strip()
     if is_active is not None:
         account.is_active = bool(is_active)
+    if not account.code or not account.name:
+        raise ValueError("کد و عنوان حساب الزامی است.")
     account.save()
     return account
 
 
+def update_general_account(*, account_id, name=None, is_active=None, ledger=OFFICE_LEDGER):
+    return _update(_depth(0, ledger).get(pk=account_id), name=name, is_active=is_active)
+
+
 def update_subsidiary_account(*, sub_id, code=None, name=None, is_active=None, ledger=OFFICE_LEDGER):
-    SubsidiaryModel = ledger.SubsidiaryAccount
-    try:
-        sub = SubsidiaryModel.objects.select_related("account").get(pk=sub_id)
-    except SubsidiaryModel.DoesNotExist as exc:
-        raise LookupError("حساب معین یافت نشد.") from exc
-    if code is not None:
-        code = (code or "").strip()
-        if not code:
-            raise ValueError("کد معین الزامی است.")
-        if SubsidiaryModel.objects.filter(account=sub.account, code=code).exclude(pk=sub.pk).exists():
-            raise ValueError("این کد معین قبلاً ثبت شده است.")
-        sub.code = code
-    if name is not None:
-        name = (name or "").strip()
-        if not name:
-            raise ValueError("عنوان حساب معین الزامی است.")
-        sub.name = name
-    if is_active is not None:
-        sub.is_active = bool(is_active)
-    sub.save()
-    return sub
+    return _update(_depth(1, ledger).get(pk=sub_id), code, name, is_active)
 
 
 def update_detailed_account(*, detail_id, code=None, name=None, is_active=None, ledger=OFFICE_LEDGER):
-    DetailedModel = ledger.DetailedAccount
-    try:
-        detail = DetailedModel.objects.select_related("subsidiary", "subsidiary__account").get(pk=detail_id)
-    except DetailedModel.DoesNotExist as exc:
-        raise LookupError("حساب تفصیلی یافت نشد.") from exc
-    if code is not None:
-        code = (code or "").strip()
-        if not code:
-            raise ValueError("کد تفصیلی الزامی است.")
-        if DetailedModel.objects.filter(subsidiary=detail.subsidiary, code=code).exclude(pk=detail.pk).exists():
-            raise ValueError("این کد تفصیلی قبلاً ثبت شده است.")
-        detail.code = code
-    if name is not None:
-        name = (name or "").strip()
-        if not name:
-            raise ValueError("عنوان حساب تفصیلی الزامی است.")
-        detail.name = name
-    if is_active is not None:
-        detail.is_active = bool(is_active)
-    detail.save()
-    return detail
+    return _update(_depth(2, ledger).get(pk=detail_id), code, name, is_active)

@@ -1,0 +1,313 @@
+/* Global responsive overrides — loaded last so they win over page CSS */
+
+html,
+body,
+#root,
+.layout,
+.main,
+.page {
+  max-width: 100%;
+}
+
+.layout,
+.main {
+  width: 100%;
+}
+
+.content {
+  max-width: min(100%, calc(var(--content-max) + var(--content-pad-start) + var(--content-pad-end)));
+}
+
+.main,
+.content,
+.page,
+.card,
+.card-body,
+.form,
+.table-wrap {
+  min-width: 0;
+}
+
+/* ---------------------------------------------------------------- Compact laptop / tablet (≤1440) */
+@media (max-width: 1440px) {
+  :root {
+    --content-pad-start: 16px;
+    --content-pad-end: 16px;
+  }
+
+  .content {
+    max-width: none;
+  }
+
+  .btn {
+    min-height: 44px;
+  }
+
+  .topbar .btn-sm {
+    min-height: 36px;
+  }
+
+  .page-head {
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .page-head .btn {
+    width: auto;
+  }
+
+  .card-head {
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .card-head .btn,
+  .card-actions .btn {
+    width: auto;
+  }
+
+  .products-page-header {
+    align-items: center;
+  }
+
+  .products-header-actions .btn {
+    min-height: 44px;
+  }
+
+  .form-grid,
+  .form-grid-2,
+  .form-grid-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .page-filters {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    padding: 14px 16px;
+  }
+
+  .search-input {
+    max-width: none;
+  }
+
+  .toolbar {
+    flex-wrap: wrap;
+  }
+
+  .site-footer-guide {
+    flex-wrap: wrap;
+    margin-top: 20px;
+    padding: 12px 14px;
+  }
+
+  .modal-wide {
+    max-width: min(920px, calc(100vw - 32px));
+  }
+
+  .invoice-preview-frame {
+    min-height: 56vh;
+  }
+}
+
+@media (max-width: 1100px) {
+  .stats-grid,
+  .stats-grid--4,
+  .stat-grid,
+  .sales-stats-grid,
+  .shop-stats-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .grid-2 {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-hero {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  .form-grid,
+  .form-grid-2,
+  .form-grid-3,
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .page-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .card-body {
+    padding: 16px 16px 18px;
+  }
+
+  .card-head {
+    padding: 14px 16px;
+  }
+}
+
+/* ---------------------------------------------------------------- Phone */
+@media (max-width: 767px) {
+  :root {
+    --content-pad-start: 14px;
+    --content-pad-end: 14px;
+    --text-2xl: 1.35rem;
+    --text-3xl: 1.5rem;
+  }
+
+  .page-head,
+  .card-head,
+  .products-page-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .page-head .btn,
+  .card-head .btn,
+  .card-actions .btn,
+  .products-header-actions .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .products-header-actions,
+  .card-actions,
+  .form-actions,
+  .toolbar {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .form-actions .btn,
+  .toolbar .btn,
+  .toolbar .search-input {
+    width: 100%;
+    max-width: none;
+  }
+
+  .page-filters {
+    grid-template-columns: 1fr;
+    padding: 12px 14px;
+  }
+
+  .page-filters-actions {
+    width: 100%;
+  }
+
+  .page-filters-actions .btn {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .stats-grid,
+  .stats-grid--4,
+  .stat-grid,
+  .sales-stats-grid,
+  .shop-stats-row,
+  .grid-2,
+  .form-grid,
+  .form-grid-2,
+  .form-grid-3,
+  .form-row,
+  .users-stats,
+  .m-card-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .inline-stats {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .row-actions {
+    flex-wrap: wrap;
+  }
+
+  .link {
+    min-height: 40px;
+    padding: 8px 10px;
+  }
+
+  .table {
+    min-width: 460px;
+  }
+
+  .auth-screen {
+    padding: 16px;
+    padding-top: max(16px, env(safe-area-inset-top));
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+    align-items: flex-start;
+  }
+
+  .auth-card {
+    padding: 28px 20px;
+    margin-top: 24px;
+  }
+
+  .site-footer-guide {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .acct-v2-header,
+  .acct-v2-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .acct-v2-toolbar .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .acct-v2-mobile-nav {
+    margin: 0 -14px;
+    padding: 0 14px 6px;
+  }
+
+  .invoice-modal-toolbar {
+    flex-direction: column;
+  }
+
+  .invoice-modal-toolbar .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .invoice-preview-frame {
+    min-height: 48vh;
+  }
+
+  .product-picker-grid {
+    max-height: min(52vh, 380px);
+  }
+
+  .portal-module-head {
+    flex-wrap: wrap;
+  }
+
+  .settings-section {
+    padding: 16px;
+  }
+
+  .logo-settings-body {
+    min-width: 0;
+  }
+
+  .danger-zone {
+    padding: 16px;
+  }
+}
+
+@media (max-width: 560px) {
+  .stat-value {
+    font-size: var(--text-xl);
+  }
+
+  .empty-state {
+    padding: 28px 16px;
+  }
+}

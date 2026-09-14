@@ -1,6 +1,6 @@
 """دسترسی و فیلتر صف کارخانه / باربری."""
 
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 
@@ -60,12 +60,11 @@ def has_factory_oversight(user):
 
 def base_factory_queryset():
     return (
-        FactoryOrder.objects.select_related("customer", "source_sale")
+        FactoryOrder.objects.select_related("customer")
         .prefetch_related(
             "line_items",
             "line_items__product__product_materials__material",
         )
-        .filter(source_sale__is_deleted=False)
     )
 
 
@@ -81,7 +80,7 @@ def apply_section_filters(qs, user, params):
     stage = (params.get("workflow_stage") or "").strip()
 
     if stage:
-        qs = qs.filter(workflow_stage=stage)
+        qs = qs.filter(workflow_stage_id=stage)
 
     if has_factory_oversight(user):
         if section == SECTION_BUILT:
@@ -97,9 +96,9 @@ def apply_section_filters(qs, user, params):
         else:
             qs = qs.filter(workflow_stage__in=PRODUCTION_STAGES)
             if queue == QUEUE_NEEDS_BUILD:
-                qs = qs.filter(workflow_stage=FactoryOrder.WORKFLOW_STAGE_ACCOUNTING_APPROVED)
+                qs = qs.filter(workflow_stage_id=FactoryOrder.WORKFLOW_STAGE_ACCOUNTING_APPROVED)
             elif queue == QUEUE_IN_PRODUCTION:
-                qs = qs.filter(workflow_stage=FactoryOrder.WORKFLOW_STAGE_IN_PRODUCTION)
+                qs = qs.filter(workflow_stage_id=FactoryOrder.WORKFLOW_STAGE_IN_PRODUCTION)
         return qs.order_by("-created_at")
 
     if is_factory_user(user) and not is_freight_user(user):
@@ -113,9 +112,9 @@ def apply_section_filters(qs, user, params):
         else:
             qs = qs.filter(workflow_stage__in=PRODUCTION_STAGES)
             if queue == QUEUE_NEEDS_BUILD:
-                qs = qs.filter(workflow_stage=FactoryOrder.WORKFLOW_STAGE_ACCOUNTING_APPROVED)
+                qs = qs.filter(workflow_stage_id=FactoryOrder.WORKFLOW_STAGE_ACCOUNTING_APPROVED)
             elif queue == QUEUE_IN_PRODUCTION:
-                qs = qs.filter(workflow_stage=FactoryOrder.WORKFLOW_STAGE_IN_PRODUCTION)
+                qs = qs.filter(workflow_stage_id=FactoryOrder.WORKFLOW_STAGE_IN_PRODUCTION)
         return qs.order_by("-created_at")
 
     if is_freight_user(user) and not is_factory_user(user):
@@ -139,23 +138,35 @@ def apply_section_filters(qs, user, params):
         else:
             qs = qs.filter(workflow_stage__in=PRODUCTION_STAGES)
             if queue == QUEUE_NEEDS_BUILD:
-                qs = qs.filter(workflow_stage=FactoryOrder.WORKFLOW_STAGE_ACCOUNTING_APPROVED)
+                qs = qs.filter(workflow_stage_id=FactoryOrder.WORKFLOW_STAGE_ACCOUNTING_APPROVED)
             elif queue == QUEUE_IN_PRODUCTION:
-                qs = qs.filter(workflow_stage=FactoryOrder.WORKFLOW_STAGE_IN_PRODUCTION)
+                qs = qs.filter(workflow_stage_id=FactoryOrder.WORKFLOW_STAGE_IN_PRODUCTION)
         return qs.order_by("-created_at")
 
     return qs.none()
 
 
+def apply_factory_search(qs, params):
+    search = (params.get("search") or params.get("name") or "").strip()
+    if not search:
+        return qs
+    return qs.filter(
+        Q(customer__full_name__icontains=search)
+        | Q(customer__phone__icontains=search)
+        | Q(invoice_number__icontains=search)
+        | Q(description__icontains=search)
+    )
+
+
 def factory_queryset_for_user(user, params=None):
     params = params or {}
-    return apply_section_filters(base_factory_queryset(), user, params)
+    return apply_factory_search(apply_section_filters(base_factory_queryset(), user, params), params)
 
 
 def get_factory_order(pk):
     try:
         return (
-            FactoryOrder.objects.select_related("customer", "source_sale")
+            FactoryOrder.objects.select_related("customer")
             .prefetch_related("line_items")
             .get(pk=pk)
         )
@@ -169,9 +180,9 @@ def can_view_factory_order(user, order):
     ):
         return True
     if is_factory_user(user):
-        return order.workflow_stage in PRODUCTION_STAGES | BUILT_STAGES
+        return order.workflow_stage_id in PRODUCTION_STAGES | BUILT_STAGES
     if is_freight_user(user):
-        return order.workflow_stage in FREIGHT_STAGES
+        return order.workflow_stage_id in FREIGHT_STAGES
     return False
 
 

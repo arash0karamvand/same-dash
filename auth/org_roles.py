@@ -72,7 +72,7 @@ def should_mask_customer_for_sale(user, sale):
     """سرپرست شعبه پس از تایید/اصلاح، اطلاعات مشتری را نمی‌بیند."""
     if not is_branch_supervisor(user):
         return False
-    return sale.workflow_stage in BRANCH_MASK_STAGES
+    return sale.workflow_stage_id in BRANCH_MASK_STAGES
 
 
 def should_mask_prices_for_user(user):

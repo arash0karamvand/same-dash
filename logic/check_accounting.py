@@ -6,10 +6,10 @@ from django.db import transaction
 from django.utils import timezone
 
 from backend.models import Account, Sale, SaleInstallment, UserAccountingPreference
-from logic.accounting import create_accounting_entry, generate_document_code, next_document_number
+from logic.accounting import create_journal
 from logic.accounting_accounts import get_account
-
-CHECK_ACCOUNT_SLUGS = ("collection_at_bank", "bank", "cash_documents", "petty_cash")
+from logic.chart_of_accounts import ACCOUNT_SLUGS, CHECK_ACCOUNT_SLUGS, code_for_slug
+from logic.posting import build_journal_lines
 
 
 def list_check_accounts():
@@ -58,8 +58,8 @@ def get_user_accounting_preference(user):
 
 def resolve_default_check_accounts(user):
     """حساب‌های پیش‌فرض ثبت/واریز — از preference کاربر یا slug سیستمی."""
-    reg = get_account("collection_at_bank", required=False)
-    dep = get_account("bank", required=False)
+    reg = get_account(ACCOUNT_SLUGS.COLLECTION_AT_BANK, required=False)
+    dep = get_account(ACCOUNT_SLUGS.BANK, required=False)
     if user and getattr(user, "is_authenticated", False):
         pref = UserAccountingPreference.objects.filter(user=user).first()
         if pref:
@@ -142,12 +142,11 @@ def register_sale_checks(sale, registration_account, deposit_account, user=None)
     if sale.order_status == Sale.ORDER_STATUS_CANCELLED:
         raise ValueError("سفارش لغو شده است.")
 
-    receivables = get_account("receivables", required=False)
+    receivables = get_account(ACCOUNT_SLUGS.RECEIVABLES, required=False)
     if not receivables:
-        raise ValueError("حساب مطالبات (1310) یافت نشد.")
+        rc = code_for_slug(ACCOUNT_SLUGS.RECEIVABLES) or "1310"
+        raise ValueError(f"حساب مطالبات ({rc}) یافت نشد.")
 
-    doc_num = next_document_number(entry_date=sale.sold_at)
-    doc_code = generate_document_code(entry_date=sale.sold_at)
     now = timezone.now()
     registered = []
 
@@ -156,34 +155,24 @@ def register_sale_checks(sale, registration_account, deposit_account, user=None)
         if amount <= 0:
             continue
         desc = _check_description(inst, sale)
-        debit_entry = create_accounting_entry(
-            entry_type="payment",
-            account=registration_account,
-            debit=amount,
-            amount=amount,
+        lines = build_journal_lines(
+            "check_register",
+            amounts={"amount": amount},
+            accounts={"registration_account": registration_account},
             description=desc,
-            sale=sale,
-            is_approved=True,
-            document_code=doc_code,
-            document_number=doc_num,
-            entry_date=sale.sold_at,
         )
-        create_accounting_entry(
-            entry_type="receivable",
-            account=receivables,
-            credit=amount,
-            amount=amount,
+        journal = create_journal(
+            lines=lines,
+            entry_type="payment",
             description=desc,
             sale=sale,
             is_approved=True,
-            document_code=doc_code,
-            document_number=doc_num,
             entry_date=sale.sold_at,
         )
         inst.registration_account = registration_account
         inst.deposit_account = deposit_account
         inst.accounting_registered_at = now
-        inst.accounting_entry = debit_entry
+        inst.accounting_entry = journal
         inst.save(
             update_fields=[
                 "registration_account",
@@ -220,33 +209,25 @@ def clear_registered_check(installment, recorded_by=None):
     if amount <= 0:
         raise ValueError("مبلغ چک نامعتبر است.")
 
-    reg_account = installment.registration_account or get_account("collection_at_bank")
-    dep_account = installment.deposit_account or get_account("bank")
+    reg_account = installment.registration_account or get_account(ACCOUNT_SLUGS.COLLECTION_AT_BANK)
+    dep_account = installment.deposit_account or get_account(ACCOUNT_SLUGS.BANK)
     desc = _check_description(installment, sale).replace("ثبت چک", "وصول چک")
 
-    doc_num = next_document_number()
-    doc_code = generate_document_code()
-    create_accounting_entry(
-        entry_type="payment",
-        account=dep_account,
-        debit=amount,
-        amount=amount,
+    lines = build_journal_lines(
+        "check_clear",
+        amounts={"amount": amount},
+        accounts={
+            "deposit_account": dep_account,
+            "registration_account": reg_account,
+        },
         description=desc,
-        sale=sale,
-        is_approved=True,
-        document_code=doc_code,
-        document_number=doc_num,
     )
-    create_accounting_entry(
+    create_journal(
+        lines=lines,
         entry_type="payment",
-        account=reg_account,
-        credit=amount,
-        amount=amount,
         description=desc,
         sale=sale,
         is_approved=True,
-        document_code=doc_code,
-        document_number=doc_num,
     )
 
     sale.paid_amount += amount
@@ -268,7 +249,4 @@ def clear_registered_check(installment, recorded_by=None):
     installment.paid_at = timezone.now()
     installment.save(update_fields=["status", "paid_at"])
 
-    from logic.order_queues import sync_workflow_orders_from_sale
-
-    sync_workflow_orders_from_sale(sale)
     return installment

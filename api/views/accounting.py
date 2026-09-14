@@ -74,6 +74,16 @@ def make_view(name, *, ledger=OFFICE_LEDGER, perms=None):
     """ساخت view با دفتر و مجوزهای مشخص — برای اداری و کارخانه."""
     perms = perms or DEFAULT_PERMS
 
+    if name == "meta":
+
+        @api_view("GET", permission=perms["view"])
+        def view(request):
+            from logic.chart_of_accounts import accounting_meta
+
+            return success(accounting_meta())
+
+        return view
+
     if name == "account_list":
 
         @api_view("GET", permission=perms["view"])
@@ -109,14 +119,17 @@ def make_view(name, *, ledger=OFFICE_LEDGER, perms=None):
             totals = ledger_totals(rows)
 
             try:
-                limit = min(max(1, int(request.GET.get("limit") or 20)), 500)
+                from logic.pagination import parse_page
+
+                offset, limit = parse_page(request.GET)
             except (TypeError, ValueError):
-                limit = 20
+                offset, limit = 0, 10
 
             return success(
                 {
-                    "results": rows[:limit],
+                    "results": rows[offset : offset + limit],
                     "total": len(rows),
+                    "offset": offset,
                     "limit": limit,
                     "totals": totals,
                 }
@@ -380,9 +393,10 @@ def make_view(name, *, ledger=OFFICE_LEDGER, perms=None):
 
         @api_view("GET", "PUT")
         def view(request, pk):
-            AccountModel = ledger.Account
+            from backend.models import Account
+            AccountModel = Account
             try:
-                account = AccountModel.objects.get(pk=pk)
+                account = AccountModel.objects.get(pk=pk, ledger__code=ledger.id, parent__isnull=True)
             except AccountModel.DoesNotExist:
                 return fail("حساب کل یافت نشد.", status=404)
 
@@ -414,9 +428,13 @@ def make_view(name, *, ledger=OFFICE_LEDGER, perms=None):
 
         @api_view("GET", "PUT")
         def view(request, pk):
-            SubsidiaryModel = ledger.SubsidiaryAccount
+            from backend.models import Account
+            SubsidiaryModel = Account
             try:
-                sub = SubsidiaryModel.objects.select_related("account").get(pk=pk)
+                sub = SubsidiaryModel.objects.select_related("parent").get(
+                    pk=pk, ledger__code=ledger.id, parent__isnull=False,
+                    parent__parent__isnull=True,
+                )
             except SubsidiaryModel.DoesNotExist:
                 return fail("حساب معین یافت نشد.", status=404)
 
@@ -449,9 +467,13 @@ def make_view(name, *, ledger=OFFICE_LEDGER, perms=None):
 
         @api_view("GET", "PUT")
         def view(request, pk):
-            DetailedModel = ledger.DetailedAccount
+            from backend.models import Account
+            DetailedModel = Account
             try:
-                detail = DetailedModel.objects.select_related("subsidiary", "subsidiary__account").get(pk=pk)
+                detail = DetailedModel.objects.select_related("parent", "parent__parent").get(
+                    pk=pk, ledger__code=ledger.id, parent__parent__isnull=False,
+                    parent__parent__parent__isnull=True,
+                )
             except DetailedModel.DoesNotExist:
                 return fail("حساب تفصیلی یافت نشد.", status=404)
 
@@ -773,6 +795,7 @@ def make_view(name, *, ledger=OFFICE_LEDGER, perms=None):
 
 
 # --- Office endpoints (default ledger) ---
+meta = make_view("meta")
 account_list = make_view("account_list")
 document_models = make_view("document_models")
 ledger = make_view("ledger")

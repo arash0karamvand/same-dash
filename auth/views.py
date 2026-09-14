@@ -1,5 +1,7 @@
 """Viewهای احراز هویت — session-based، بدون JWT."""
 
+import logging
+
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth import login as django_login
 from django.contrib.auth import logout as django_logout
@@ -26,6 +28,7 @@ from backend.models import OrgRank, Seller, StaffProfile, UserAccessProfile
 from logic.audit import log_action
 
 User = get_user_model()
+logger = logging.getLogger(__name__)
 
 
 def role_needs_branch(role):
@@ -45,10 +48,10 @@ def user_to_dict(user):
         profile = user.staff_profile
     except StaffProfile.DoesNotExist:
         pass
-    branch = profile.branch if profile else None
+    branch = profile.branch_id if profile else None
     if not branch:
         seller = Seller.objects.filter(user=user, is_active=True).first()
-        branch = seller.branch if seller else None
+        branch = seller.branch_id if seller else None
     manager = profile.manager if profile and profile.manager_id else None
     from backend.models import RoleDefinition
 
@@ -100,10 +103,10 @@ def user_to_dict(user):
 def ensure_staff_profile(user, branch=None):
     profile, _ = StaffProfile.objects.get_or_create(
         user=user,
-        defaults={"branch": branch or DEFAULT_BRANCH},
+        defaults={"branch_id": branch or DEFAULT_BRANCH},
     )
-    if branch and profile.branch != branch:
-        profile.branch = branch
+    if branch and profile.branch_id != branch:
+        profile.branch_id = branch
         profile.save(update_fields=["branch"])
     return profile
 
@@ -118,8 +121,13 @@ def set_user_extra_permissions(user, permissions):
         return []
     profile = ensure_user_access_profile(user)
     cleaned = sanitize_user_extra_permissions(permissions)
-    profile.extra_permissions = cleaned
-    profile.save(update_fields=["extra_permissions"])
+    from backend.models import Permission
+
+    permission_rows = [
+        Permission.objects.get_or_create(code=code, defaults={"label": code})[0]
+        for code in cleaned
+    ]
+    profile.permission_set.set(permission_rows)
     return cleaned
 
 
@@ -190,7 +198,10 @@ def login(request):
         return fail("حساب کاربری غیرفعال است.", status=403)
 
     django_login(request, user)
-    log_action(user, "login", f"ورود {user.get_full_name() or user.username}")
+    try:
+        log_action(user, "login", f"ورود {user.get_full_name() or user.username}")
+    except Exception:
+        logger.exception("Failed to write login audit log")
     return success(user_to_dict(user))
 
 
@@ -214,15 +225,18 @@ def me(request):
 @api_view("GET", "POST", permission=MANAGE_USERS)
 def user_list(request):
     if request.method == "GET":
+        from logic.pagination import paginate
+
         users = _users_queryset(request)
-        results = [user_to_dict(u) for u in users]
+        page, meta = paginate(users, request.GET)
+        results = [user_to_dict(u) for u in page]
         all_qs = User.objects.all()
         stats = {
             "total": all_qs.count(),
             "active": all_qs.filter(is_active=True).count(),
             "pending": all_qs.filter(groups__name=roles.PENDING).count(),
         }
-        return success({"results": results, "stats": stats})
+        return success({"results": results, "stats": stats, **meta})
     return _create_user(request)
 
 
@@ -344,7 +358,7 @@ def user_detail(request, pk):
             return fail("فقط مدیر سیستم می‌تواند نقش مدیر سیستم بدهد.", status=403)
         if role_needs_branch(role) and not branch:
             profile = getattr(target, "staff_profile", None)
-            branch = profile.branch if profile else DEFAULT_BRANCH
+            branch = profile.branch_id if profile else DEFAULT_BRANCH
         try:
             apply_user_access(
                 target,
@@ -363,7 +377,7 @@ def user_detail(request, pk):
         if role_needs_branch(current_role) or current_role == roles.ADMIN:
             profile = ensure_staff_profile(
                 target,
-                getattr(getattr(target, "staff_profile", None), "branch", None) or DEFAULT_BRANCH,
+                getattr(getattr(target, "staff_profile", None), "branch_id", None) or DEFAULT_BRANCH,
             )
             if "job_title" in data:
                 profile.job_title = (data.get("job_title") or "").strip()[:100]

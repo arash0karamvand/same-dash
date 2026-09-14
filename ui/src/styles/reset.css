@@ -85,7 +85,9 @@ a {
   touch-action: manipulation;
 }
 
-body.nav-open {
+body.nav-open,
+body.sheet-open,
+body.modal-open {
   overflow: hidden;
   position: fixed;
   width: 100%;

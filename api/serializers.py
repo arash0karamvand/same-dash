@@ -106,15 +106,15 @@ def sale_to_dict(sale, include_installments=False, include_lines=False, user=Non
         "accounting_mode": sale.accounting_mode,
         "accounting_mode_display": sale.get_accounting_mode_display(),
         "recorded_by": sale.recorded_by.username if sale.recorded_by else None,
-        "branch": sale.branch or "",
-        "branch_label": BRANCH_LABELS.get(sale.branch, "—"),
+        "branch": sale.branch_id or "",
+        "branch_label": BRANCH_LABELS.get(sale.branch_id, "—"),
         "seller_name": sale.seller.full_name if sale.seller_id else None,
         "order_kind": sale.order_kind,
         "order_kind_display": sale.get_order_kind_display(),
         "order_status": sale.order_status,
         "order_status_display": sale.get_order_status_display(),
-        "workflow_stage": sale.workflow_stage,
-        "workflow_stage_display": WORKFLOW_STAGE_LABELS.get(sale.workflow_stage, sale.workflow_stage),
+        "workflow_stage": sale.workflow_stage_id,
+        "workflow_stage_display": WORKFLOW_STAGE_LABELS.get(sale.workflow_stage_id, sale.workflow_stage_id),
         "delivery_date": sale.delivery_date.isoformat() if sale.delivery_date else None,
         "is_deleted": getattr(sale, "is_deleted", False),
     }
@@ -188,8 +188,8 @@ def office_order_to_dict(order, include_installments=False, include_lines=False,
         "order_status": order.order_status,
         "status": order.status,
         "status_display": order.get_status_display(),
-        "branch": order.branch or "",
-        "branch_label": BRANCH_LABELS.get(order.branch, "—"),
+        "branch": order.branch_id or "",
+        "branch_label": BRANCH_LABELS.get(order.branch_id, "—"),
         "seller_name": order.seller.full_name if order.seller_id else None,
         "recorded_by": order.recorded_by.username if order.recorded_by else None,
         "sold_at": order.sold_at.isoformat(),
@@ -278,12 +278,12 @@ def factory_order_to_dict(order, include_lines=False, user=None):
         "customer_masked": True,
         "invoice_number": order.invoice_number,
         "description": order.description,
-        "branch": order.branch or "",
-        "branch_label": BRANCH_LABELS.get(order.branch, "—"),
+        "branch": order.branch_id or "",
+        "branch_label": BRANCH_LABELS.get(order.branch_id, "—"),
         "order_kind": order.order_kind,
         "delivery_date": order.delivery_date.isoformat() if order.delivery_date else None,
-        "workflow_stage": order.workflow_stage,
-        "workflow_stage_display": WORKFLOW_STAGE_LABELS.get(order.workflow_stage, order.workflow_stage),
+        "workflow_stage": order.workflow_stage_id,
+        "workflow_stage_display": WORKFLOW_STAGE_LABELS.get(order.workflow_stage_id, order.workflow_stage_id),
         "production_done_at": order.production_done_at.isoformat() if order.production_done_at else None,
         "amounts_masked": True,
         "final_amount": None,
@@ -374,19 +374,22 @@ def accounting_to_dict(entry, user=None, *, ledger=None):
     from logic.ledger import FACTORY_LEDGER, OFFICE_LEDGER
 
     ledger = ledger or OFFICE_LEDGER
-    sale = entry.sale if getattr(entry, "sale_id", None) else None
-    factory_order = entry.factory_order if getattr(entry, "factory_order_id", None) else None
+    sale_link = entry.journal.order_links.select_related("order", "order__customer").filter(
+        relation_type="sale"
+    ).first()
+    factory_link = entry.journal.order_links.select_related("order").filter(
+        relation_type="factory_order"
+    ).first()
+    sale = sale_link.order if sale_link else None
+    factory_order = factory_link.order if factory_link else None
     is_system = is_system_entry(entry, ledger=ledger)
     perms = entry_permissions(entry, user=user, ledger=ledger)
     account = entry.account if getattr(entry, "account_id", None) else None
-    general, subsidiary, detailed = resolve_entry_accounts(
-        account,
-        general=entry.general_account,
-        subsidiary=entry.subsidiary_account,
-        detailed=entry.detailed_account,
-    )
-    subsidiary_ref = entry.subsidiary if getattr(entry, "subsidiary_id", None) else None
-    detailed_ref = entry.detailed if getattr(entry, "detailed_id", None) else None
+    ancestors = [p.ancestor for p in account.ancestor_paths.select_related("ancestor").order_by("-depth")]
+    general_ref = ancestors[0] if ancestors else account
+    subsidiary_ref = ancestors[1] if len(ancestors) > 1 else None
+    detailed_ref = account if len(ancestors) > 2 else None
+    general, subsidiary, detailed = resolve_entry_accounts(account)
     transferred_at = getattr(entry, "transferred_to_office_at", None)
     office_doc_code = getattr(entry, "office_document_code", "") or ""
     can_transfer = (
@@ -399,10 +402,10 @@ def accounting_to_dict(entry, user=None, *, ledger=None):
         "id": entry.id,
         "entry_type": entry.entry_type,
         "entry_type_display": entry.get_entry_type_display(),
-        "account_id": account.id if account else None,
-        "account_code": account.code if account else "",
-        "account_slug": account.slug if account else None,
-        "account_name": account.name if account else entry.get_entry_type_display(),
+        "account_id": general_ref.id if general_ref else None,
+        "account_code": general_ref.code if general_ref else "",
+        "account_slug": general_ref.slug if general_ref else None,
+        "account_name": general_ref.name if general_ref else entry.get_entry_type_display(),
         "account_class": account.account_class if account else None,
         "account_class_label": account.get_account_class_display() if account else None,
         "subsidiary_id": subsidiary_ref.id if subsidiary_ref else None,
@@ -411,23 +414,23 @@ def accounting_to_dict(entry, user=None, *, ledger=None):
         "detailed_code": detailed_ref.full_code if detailed_ref else "",
         "document_code": entry.document_code or "",
         "document_number": entry.document_number,
-        "attach_code": entry.attach_code or "",
+        "attach_code": "",
         "general_account": general,
         "subsidiary_account": subsidiary,
         "detailed_account": detailed,
-        "opening_debit": int(entry.opening_debit),
-        "opening_credit": int(entry.opening_credit),
+        "opening_debit": 0,
+        "opening_credit": 0,
         "turnover_debit": int(entry.debit),
         "turnover_credit": int(entry.credit),
-        "balance_debit": int(entry.balance_debit),
-        "balance_credit": int(entry.balance_credit),
+        "balance_debit": 0,
+        "balance_credit": 0,
         "debit": int(entry.debit),
         "credit": int(entry.credit),
         "amount": int(entry.amount),
         "entry_date": entry.entry_date.isoformat(),
         "description": entry.description,
-        "sale_id": getattr(entry, "sale_id", None),
-        "factory_order_id": getattr(entry, "factory_order_id", None),
+        "sale_id": sale.id if sale else None,
+        "factory_order_id": factory_order.id if factory_order else None,
         "invoice_number": (
             sale.invoice_number if sale else (factory_order.invoice_number if factory_order else "")
         ),

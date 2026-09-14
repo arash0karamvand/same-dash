@@ -30,8 +30,11 @@ def customer_list(request):
     if request.method == "GET":
         if not has_permission(request.user, VIEW_CUSTOMERS):
             return fail("Permission denied", status=403)
+        from logic.pagination import paginate
+
         qs = list_customers(request.GET)
-        return success({"results": [customer_to_dict(c) for c in qs]})
+        page, meta = paginate(qs, request.GET)
+        return success({"results": [customer_to_dict(c) for c in page], **meta})
 
     if not has_permission(request.user, CREATE_CUSTOMER):
         return fail("Permission denied", status=403)

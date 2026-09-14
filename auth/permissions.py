@@ -573,8 +573,7 @@ def can_edit_sale(user, sale):
     ):
         return (
             has_permission(user, EDIT_SALE)
-            and sale.workflow_stage == STAGE_PENDING_BRANCH
-            and not sale.transferred_to_office_at
+            and sale.workflow_stage_id == STAGE_PENDING_BRANCH
         )
 
     if is_accounting_finance(user) or (
@@ -586,7 +585,7 @@ def can_edit_sale(user, sale):
 
     if not has_permission(user, EDIT_SALE):
         return False
-    if sale.workflow_stage not in {STAGE_PENDING_BRANCH, sale.WORKFLOW_STAGE_COMPLETED}:
+    if sale.workflow_stage_id not in {STAGE_PENDING_BRANCH, sale.WORKFLOW_STAGE_COMPLETED}:
         return False
     if sale.order_status == sale.ORDER_STATUS_CONFIRMED:
         return False
@@ -652,11 +651,10 @@ def can_view_sale(user, sale):
 
     if is_branch_supervisor(user) or has_permission(user, APPROVE_SALE_BRANCH):
         branch = get_user_branch(user) or effective_sale_branch(user)
-        if not branch or sale.branch != branch:
+        if not branch or sale.branch_id != branch:
             return False
         return (
-            sale.workflow_stage == STAGE_PENDING_BRANCH
-            and not sale.transferred_to_office_at
+            sale.workflow_stage_id == STAGE_PENDING_BRANCH
         )
 
     return False

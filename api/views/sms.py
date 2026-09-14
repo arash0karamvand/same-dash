@@ -1,9 +1,13 @@
 """endpointهای پیامک — /api/sms/."""
 
+from django.db.models import Q
+
+from api.filters import parse_date
 from api.helpers import api_view, fail, parse_json, success
 from api.serializers import sms_result_to_dict, sms_to_dict
 from auth.permissions import SEND_SMS, VIEW_SMS_LOGS, has_permission
 from backend.models import SMSLog
+from logic.pagination import paginate
 from logic.sms import (
     send_sms,
     send_sms_to_all_active_customers,
@@ -17,8 +21,28 @@ from logic.audit import log_action
 def sms_logs(request):
     if not has_permission(request.user, VIEW_SMS_LOGS):
         return fail("Permission denied", status=403)
-    logs = SMSLog.objects.select_related("customer", "created_by").all()
-    return success({"results": [sms_to_dict(m) for m in logs]})
+    qs = SMSLog.objects.select_related("customer", "created_by").all()
+    status = (request.GET.get("status") or "").strip()
+    if status:
+        qs = qs.filter(status=status)
+    sms_type = (request.GET.get("sms_type") or "").strip()
+    if sms_type:
+        qs = qs.filter(sms_type=sms_type)
+    search = (request.GET.get("search") or "").strip()
+    if search:
+        qs = qs.filter(
+            Q(phone_number__icontains=search)
+            | Q(message__icontains=search)
+            | Q(customer__full_name__icontains=search)
+        )
+    date_from = parse_date(request.GET.get("date_from"))
+    date_to = parse_date(request.GET.get("date_to"))
+    if date_from:
+        qs = qs.filter(created_at__date__gte=date_from)
+    if date_to:
+        qs = qs.filter(created_at__date__lte=date_to)
+    page, meta = paginate(qs, request.GET)
+    return success({"results": [sms_to_dict(m) for m in page], **meta})
 
 
 @api_view("POST")
