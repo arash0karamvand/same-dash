@@ -1,2 +1,105 @@
-@import './styles/index.css';
-@import './styles/pages/legacy-glass.css';
+@import "tailwindcss";
+@import "./styles/fonts.css";
+@import "./styles/tokens.css";
+@import "./styles/effects.css";
+
+@theme inline {
+  --font-display: "Estedad", "Vazirmatn", sans-serif;
+  --font-sans: "Vazirmatn", "Segoe UI", Tahoma, sans-serif;
+  --font-mono: "IBM Plex Mono", "Vazirmatn", ui-monospace, monospace;
+
+  --color-bg: var(--bg);
+  --color-layer-0: var(--layer-0);
+  --color-layer-1: var(--layer-1);
+  --color-layer-2: var(--layer-2);
+  --color-layer-3: var(--layer-3);
+  --color-layer-4: var(--layer-4);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-elevated: var(--surface-elevated);
+  --color-border: var(--border);
+  --color-border-subtle: var(--border-subtle);
+  --color-text: var(--text);
+  --color-text-secondary: var(--text-secondary);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-dark: var(--accent-dark);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-glow: var(--accent-glow);
+  --color-primary: var(--primary);
+  --color-primary-dark: var(--primary-dark);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-sidebar: var(--sidebar-bg);
+  --color-sidebar-text: var(--sidebar-text);
+  --color-sidebar-muted: var(--sidebar-muted);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-jelly-rim: var(--jelly-rim);
+  --color-jelly-rim-strong: var(--jelly-rim-strong);
+  --color-jelly-gloss-top: var(--jelly-gloss-top);
+  --color-jelly-gloss-mid: var(--jelly-gloss-mid);
+  --color-jelly-shade: var(--jelly-shade-bottom);
+  --color-jelly-hover: var(--jelly-bg-hover);
+  --color-jelly-active: var(--jelly-bg-active);
+
+  --radius-capsule: 999px;
+  --radius-pill: 26px;
+  --radius-lg: 30px;
+  --radius-md: 20px;
+  --radius-sm: 14px;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.9375rem;
+  --text-lg: 1.0625rem;
+  --text-xl: 1.25rem;
+  --text-2xl: 1.75rem;
+  --text-3xl: 2rem;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.65;
+  --leading-relaxed: 1.75;
+
+  --tracking-tight: -0.02em;
+  --tracking-normal: 0.01em;
+  --tracking-wide: 0.06em;
+
+  --shadow-jelly: inset 0 1px 0 var(--jelly-gloss-top), var(--jelly-drop-soft);
+  --shadow-jelly-deep: inset 0 1px 0 var(--jelly-gloss-top), inset 0 -16px 28px -16px var(--jelly-shade-bottom), var(--jelly-drop-soft);
+  --shadow-jelly-btn: inset 0 1px 0 var(--jelly-gloss-top), inset 0 -10px 18px -10px var(--jelly-shade-bottom), var(--jelly-drop-soft);
+  --shadow-jelly-hover: inset 0 1px 0 var(--jelly-gloss-top), inset 0 -12px 22px -12px var(--jelly-shade-bottom), var(--jelly-drop);
+  --shadow-jelly-raised: inset 0 1px 0 var(--jelly-gloss-top), var(--jelly-drop);
+  --shadow-sunken: inset 0 2px 5px var(--jelly-shade-bottom), inset 0 -1px 0 var(--jelly-gloss-mid);
+  --shadow-sunken-lg: inset 0 2px 6px var(--jelly-shade-bottom);
+  --shadow-focus: inset 0 2px 5px var(--jelly-shade-bottom), 0 0 0 3px var(--accent-glow);
+  --shadow-pressed: inset 0 3px 8px var(--jelly-shade-bottom), inset 0 1px 0 var(--jelly-gloss-mid);
+
+  --breakpoint-md: 768px;
+  --breakpoint-compact: 1441px;
+  --breakpoint-bp1100: 1101px;
+  --breakpoint-bp900: 901px;
+  --breakpoint-bp560: 561px;
+  --breakpoint-bp480: 481px;
+  --breakpoint-bp380: 381px;
+}
+
+@utility content-pad-x {
+  padding-inline-start: var(--content-pad-start);
+  padding-inline-end: var(--content-pad-end);
+}
+
+/* Page-specific layouts that remain as custom CSS */
+@import "./styles/components/pickers.css";
+@import "./styles/pages/dashboard.css";
+@import "./styles/pages/sales.css";
+@import "./styles/pages/accounting.css";
+@import "./styles/pages/admin.css";
+@import "./styles/pages/legacy.css";
+@import "./styles/pages/legacy-glass.css";
+@import "./styles/responsive.css";

@@ -5,7 +5,7 @@ const ICON_NAMES = new Set([
   'users', 'user', 'trophy', 'calendar', 'medal', 'envelope', 'scroll', 'search',
   'store', 'package', 'receipt', 'coins', 'fabric', 'wrench', 'truck', 'check',
   'menu', 'prohibit', 'hourglass', 'x', 'plus', 'minus', 'pencil', 'trash', 'eye',
-  'filter', 'factory', 'warning', 'info', 'sun', 'moon',
+  'filter', 'chevron-down', 'chevron-up', 'factory', 'warning', 'info', 'sun', 'moon',
 ])
 
 export const PORTAL_ICONS = {
@@ -34,6 +34,10 @@ export const PAGE_ICONS = {
   users: 'shield',
   roles: 'lock',
   settings: 'gear',
+  cycle: 'clipboard',
+  'cycle-watch': 'eye',
+  warehouse: 'package',
+  pickup: 'store',
   orgchart: 'building',
   managers: 'users',
   sellers: 'user',
@@ -70,6 +74,8 @@ const EMOJI_MAP = {
   '✅': 'check',
   '🚚': 'truck',
   '🏭': 'factory',
+  '🔁': 'clipboard',
+  '👁️': 'eye',
   '◆': 'diamond',
   '🚫': 'prohibit',
   '⏳': 'hourglass',

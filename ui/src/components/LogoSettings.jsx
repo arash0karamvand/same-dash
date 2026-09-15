@@ -5,6 +5,7 @@ import { configApi } from '../api/client'
 import { Button } from './ui'
 import { useConfig } from '../context/ConfigContext'
 import { fileToLogoDataUrl } from '../utils/branding'
+import { fromLegacy } from '../styles/tw.js'
 
 export default function LogoSettings({ onError, onInfo }) {
   const { logoUrl, branding, applyBranding } = useConfig()
@@ -45,24 +46,24 @@ export default function LogoSettings({ onError, onInfo }) {
   }
 
   return (
-    <div className="logo-settings">
-      <div className="logo-settings-preview">
+    <div className={fromLegacy("logo-settings")}>
+      <div className={fromLegacy("logo-settings-preview")}>
         <img src={logoUrl} alt="لوگوی فعلی سایت" />
       </div>
 
-      <div className="logo-settings-body">
+      <div className={fromLegacy("logo-settings-body")}>
         <h4>لوگوی سایت</h4>
-        <p className="muted">
+        <p className={fromLegacy("muted")}>
           این لوگو در سایدبار، صفحه ورود و فاکتور چاپی نمایش داده می‌شود. تصویر با پس‌زمینه شفاف
           (PNG یا SVG) بهترین نتیجه را می‌دهد و به‌صورت خودکار تا ۵۱۲ پیکسل کوچک می‌شود.
         </p>
 
-        <div className="logo-settings-meta">
+        <div className={fromLegacy("logo-settings-meta")}>
           <span>وضعیت: {branding?.logo_is_custom ? 'لوگوی سفارشی' : 'لوگوی پیش‌فرض پروژه'}</span>
           {branding?.logo_name && <span>فایل: {branding.logo_name}</span>}
         </div>
 
-        <div className="logo-settings-actions">
+        <div className={fromLegacy("logo-settings-actions")}>
           <input
             ref={inputRef}
             type="file"

@@ -61,6 +61,16 @@ export function canSeeNavItem(user, item) {
   if (!item) return false
   if (item.executiveOnly) return isExecutiveUser(user)
   if (item.systemAdmin || item.system_admin) return isSystemAdmin(user)
+  if (item.cycleWatch || item.cycle_watch) {
+    return Boolean(
+      isSystemAdmin(user)
+      || isExecutiveUser(user)
+      || user?.cycle?.can_watch_cycle
+      || user?.cycle?.is_shop_crm_monitor
+      || user?.cycle?.is_fulfillment_supervisor
+      || hasPermission(user, 'view_cycle_watch'),
+    )
+  }
   if (item.anyPermission?.length) return hasAnyPermission(user, item.anyPermission)
   if (item.permission) return hasPermission(user, item.permission)
   if (item.menu_permission_codes?.length) {

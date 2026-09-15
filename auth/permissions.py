@@ -27,6 +27,11 @@ VIEW_FACTORY_ORDERS = "view_factory_orders"
 MANAGE_FACTORY_ORDERS = "manage_factory_orders"
 VIEW_FREIGHT_ORDERS = "view_freight_orders"
 MANAGE_FREIGHT_ORDERS = "manage_freight_orders"
+VIEW_WAREHOUSE_ORDERS = "view_warehouse_orders"
+MANAGE_WAREHOUSE_ORDERS = "manage_warehouse_orders"
+VIEW_PICKUP_ORDERS = "view_pickup_orders"
+MANAGE_PICKUP_ORDERS = "manage_pickup_orders"
+VIEW_CYCLE_WATCH = "view_cycle_watch"
 
 VIEW_ACCOUNTING = "view_accounting"
 CREATE_ACCOUNTING = "create_accounting"
@@ -92,11 +97,16 @@ PERMISSION_LABELS = {
     EDIT_SALE: "ویرایش فروش",
     VIEW_SALES_SUMMARY: "فقط جمع فروش ماهانه",
     APPROVE_SALE_BRANCH: "ارسال به اداری (سرپرست شعبه)",
-    APPROVE_SALE_ACCOUNTING: "تایید اداری و ارسال به کارخانه",
+    APPROVE_SALE_ACCOUNTING: "تایید اداری و انتخاب مسیر ارسال",
     VIEW_FACTORY_ORDERS: "مشاهده سفارش‌های کارخانه",
     MANAGE_FACTORY_ORDERS: "مدیریت ساخت کارخانه",
     VIEW_FREIGHT_ORDERS: "مشاهده سفارش‌های باربری",
     MANAGE_FREIGHT_ORDERS: "مدیریت باربری",
+    VIEW_WAREHOUSE_ORDERS: "مشاهده سفارش‌های انبار",
+    MANAGE_WAREHOUSE_ORDERS: "تکمیل ارسال انبار",
+    VIEW_PICKUP_ORDERS: "مشاهده تحویل حضوری",
+    MANAGE_PICKUP_ORDERS: "تحویل حضوری به مشتری",
+    VIEW_CYCLE_WATCH: "نظارت چرخه سفارش",
     DELETE_SALE: "حذف فروش",
     VIEW_ACCOUNTING: "مشاهده حسابداری",
     CREATE_ACCOUNTING: "ثبت سند حسابداری",
@@ -165,6 +175,11 @@ ALL_PERMISSIONS = {
     MANAGE_FACTORY_ORDERS,
     VIEW_FREIGHT_ORDERS,
     MANAGE_FREIGHT_ORDERS,
+    VIEW_WAREHOUSE_ORDERS,
+    MANAGE_WAREHOUSE_ORDERS,
+    VIEW_PICKUP_ORDERS,
+    MANAGE_PICKUP_ORDERS,
+    VIEW_CYCLE_WATCH,
     VIEW_ACCOUNTING,
     CREATE_ACCOUNTING,
     EDIT_ACCOUNTING,
@@ -251,6 +266,11 @@ PERMISSION_GROUPS = [
             APPROVE_SALE_ACCOUNTING,
             VIEW_FACTORY_ORDERS,
             MANAGE_FACTORY_ORDERS,
+            VIEW_WAREHOUSE_ORDERS,
+            MANAGE_WAREHOUSE_ORDERS,
+            VIEW_PICKUP_ORDERS,
+            MANAGE_PICKUP_ORDERS,
+            VIEW_CYCLE_WATCH,
         ],
     },
     {
@@ -547,7 +567,14 @@ def get_effective_user_permissions(user):
         base = set()
     else:
         base = set(get_role_permissions(role))
-    return base | get_user_extra_permissions(user)
+    extra = get_user_extra_permissions(user)
+    try:
+        from logic.order_cycle import extra_permissions_from_cycle
+
+        extra = extra | extra_permissions_from_cycle(user)
+    except Exception:
+        pass
+    return base | extra
 
 
 def has_permission(user, permission):

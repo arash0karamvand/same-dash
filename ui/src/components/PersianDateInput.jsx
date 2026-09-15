@@ -12,6 +12,7 @@ import {
   jalaliToIso,
   toPersianDigits,
 } from '../utils/jalali'
+import { fromLegacy } from '../styles/tw.js'
 
 function clampJalaliToIsoRange(y, m, d, minIso, maxIso) {
   const len = jalaliMonthLength(y, m)
@@ -140,18 +141,18 @@ export default function PersianDateInput({
   const display = value ? formatJalali(value) : placeholder
 
   return (
-    <div className="jcal-wrap" ref={wrapRef}>
+    <div className={fromLegacy("jcal-wrap")} ref={wrapRef}>
       <input type="hidden" name={uid} value={value || ''} required={required && !value} readOnly />
       <button
         type="button"
-        className={`jcal-trigger ${!value ? 'placeholder' : ''}`}
+        className={fromLegacy(`jcal-trigger ${!value ? 'placeholder' : ''}`)}
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-haspopup="dialog"
       >
-        <span className="jcal-trigger-icon" aria-hidden>📅</span>
+        <span className={fromLegacy("jcal-trigger-icon")} aria-hidden>📅</span>
         <span>{display}</span>
-        <span className="jcal-trigger-chevron" aria-hidden>{open ? '▲' : '▼'}</span>
+        <span className={fromLegacy("jcal-trigger-chevron")} aria-hidden>{open ? '▲' : '▼'}</span>
       </button>
 
       <JcalPanel
@@ -161,34 +162,34 @@ export default function PersianDateInput({
         variant="date"
         ariaLabel="انتخاب تاریخ شمسی"
       >
-        <div className="jcal-panel-head">
-          <span className="jcal-panel-title">
+        <div className={fromLegacy("jcal-panel-head")}>
+          <span className={fromLegacy("jcal-panel-title")}>
             {value ? formatJalali(value) : 'تاریخ را انتخاب کنید'}
           </span>
-          <button type="button" className="link jcal-today-btn" onClick={goToday}>
+          <button type="button" className={fromLegacy("link jcal-today-btn")} onClick={goToday}>
             امروز
           </button>
         </div>
 
-        <div className="jcal-wheels">
+        <div className={fromLegacy("jcal-wheels")}>
           <JalaliScrollColumn label="روز" items={dayItems} value={jd} onSelect={setDay} />
           <JalaliScrollColumn label="ماه" items={monthItems} value={jm} onSelect={setMonth} />
           <JalaliScrollColumn label="سال" items={yearItems} value={jy} onSelect={setYear} />
         </div>
 
-        <div className="jcal-panel-foot">
+        <div className={fromLegacy("jcal-panel-foot")}>
           {onClear ? (
-            <button type="button" className="link jcal-clear-btn" onClick={clearValue}>
+            <button type="button" className={fromLegacy("link jcal-clear-btn")} onClick={clearValue}>
               {clearLabel}
             </button>
           ) : (
-            <span className="muted">
+            <span className={fromLegacy("muted")}>
               {minIso ? formatJalali(minIso) : toPersianDigits(minY)}
               {' — '}
               {maxIso ? formatJalali(maxIso) : toPersianDigits(maxY)}
             </span>
           )}
-          <button type="button" className="btn btn-primary jcal-done" onClick={() => setOpen(false)}>
+          <button type="button" className={fromLegacy("btn btn-primary jcal-done")} onClick={() => setOpen(false)}>
             تأیید
           </button>
         </div>

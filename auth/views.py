@@ -74,6 +74,23 @@ def user_to_dict(user):
         extra_permissions = sorted(get_user_extra_permissions(user))
         permissions = sorted(set(role_permissions) | set(extra_permissions))
 
+    cycle_payload = {
+        "is_shop_crm_monitor": False,
+        "is_fulfillment_supervisor": False,
+        "can_watch_cycle": False,
+        "can_manage_warehouse": False,
+        "can_manage_pickup": False,
+        "enabled_routes": ["factory", "warehouse", "customer_pickup", "merchant"],
+    }
+    try:
+        from logic.order_cycle import cycle_flags_for_user, extra_permissions_from_cycle
+
+        cycle_payload = cycle_flags_for_user(user)
+        if not has_full_access(user):
+            permissions = sorted(set(permissions) | extra_permissions_from_cycle(user))
+    except Exception:
+        pass
+
     return {
         "id": user.id,
         "username": user.username,
@@ -97,6 +114,7 @@ def user_to_dict(user):
         "is_superuser": user.is_superuser,
         "date_joined": user.date_joined.isoformat() if user.date_joined else None,
         "last_login": user.last_login.isoformat() if user.last_login else None,
+        "cycle": cycle_payload,
     }
 
 

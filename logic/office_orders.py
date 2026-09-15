@@ -11,9 +11,12 @@ def accounting_office_queryset(qs):
     """صف اداری + سفارش‌های ارسال‌شده به کارخانه که هنوز تکمیل نشده‌اند."""
     active_factory_stages = {
         FactoryOrder.WORKFLOW_STAGE_ACCOUNTING_APPROVED,
+        Sale.WORKFLOW_STAGE_MERCHANT_ASSIGNED,
         FactoryOrder.WORKFLOW_STAGE_IN_PRODUCTION,
         FactoryOrder.WORKFLOW_STAGE_PRODUCTION_DONE,
         FactoryOrder.WORKFLOW_STAGE_IN_FREIGHT,
+        Sale.WORKFLOW_STAGE_IN_WAREHOUSE,
+        Sale.WORKFLOW_STAGE_READY_FOR_PICKUP,
     }
     return qs.filter(
         workflow_stage_id__in={Sale.WORKFLOW_STAGE_BRANCH_APPROVED, *active_factory_stages}
@@ -26,9 +29,12 @@ def office_base_queryset():
         workflow_stage_id__in={
             Sale.WORKFLOW_STAGE_BRANCH_APPROVED,
             Sale.WORKFLOW_STAGE_ACCOUNTING_APPROVED,
+            Sale.WORKFLOW_STAGE_MERCHANT_ASSIGNED,
             Sale.WORKFLOW_STAGE_IN_PRODUCTION,
             Sale.WORKFLOW_STAGE_PRODUCTION_DONE,
             Sale.WORKFLOW_STAGE_IN_FREIGHT,
+            Sale.WORKFLOW_STAGE_IN_WAREHOUSE,
+            Sale.WORKFLOW_STAGE_READY_FOR_PICKUP,
             Sale.WORKFLOW_STAGE_COMPLETED,
         },
     ).select_related(
@@ -38,6 +44,9 @@ def office_base_queryset():
         "accounting_approved_by",
         "factory_received_by",
         "freight_received_by",
+        "fulfillment_warehouse",
+        "fulfillment_source_branch",
+        "merchant_user",
     ).prefetch_related("line_items", "installments")
 
 

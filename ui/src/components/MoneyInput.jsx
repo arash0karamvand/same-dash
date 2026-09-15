@@ -3,6 +3,7 @@
 import { useLayoutEffect, useRef } from 'react'
 import { CURRENCY_UNIT } from '../config/money'
 import { digitsOnly, formatGroupedDigits, getAmountWords } from '../utils/format'
+import { fromLegacy } from '../styles/tw.js'
 
 export default function MoneyInput({
   value,
@@ -57,7 +58,7 @@ export default function MoneyInput({
   }, [display])
 
   return (
-    <div className="money-input-wrap">
+    <div className={fromLegacy("money-input-wrap")}>
       <input
         ref={inputRef}
         className={className}
@@ -76,7 +77,7 @@ export default function MoneyInput({
         onChange={handleChange}
         onWheel={(event) => event.currentTarget.blur()}
       />
-      {words ? <span className="money-input-hint" aria-live="polite">{words}</span> : null}
+      {words ? <span className={fromLegacy("money-input-hint")} aria-live="polite">{words}</span> : null}
     </div>
   )
 }

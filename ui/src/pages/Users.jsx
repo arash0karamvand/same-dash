@@ -10,6 +10,7 @@ import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmContext'
 import { formatDate } from '../utils/format'
 import { toggleExtraOnlyPermissions, toggleExtraOnlyPortalPermissions } from '../utils/permissions'
+import { fromLegacy } from '../styles/tw.js'
 
 const ROLE_COLORS = {
   admin: '#7c3aed',
@@ -42,7 +43,7 @@ function Flash({ type, message, onClose }) {
   return (
     <div className={type === 'error' ? 'alert-error' : 'alert-info'} style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
       <span>{message}</span>
-      <button type="button" className="link" onClick={onClose}>✕</button>
+      <button type="button" className={fromLegacy("link")} onClick={onClose}>✕</button>
     </div>
   )
 }
@@ -287,8 +288,8 @@ export default function Users() {
   }
 
   return (
-    <div className="page users-page">
-      <div className="stat-grid users-stats">
+    <div className={fromLegacy("page users-page")}>
+      <div className={fromLegacy("stat-grid users-stats")}>
         <StatCard label="کل کاربران" value={stats.total} accent="var(--accent)" />
         <StatCard label="فعال" value={stats.active} accent="var(--success)" />
         <StatCard label="در انتظار نقش" value={stats.pending} accent="var(--warning)" />
@@ -303,7 +304,7 @@ export default function Users() {
         <FilterBar>
           <Field label="جستجو">
             <input
-              className="search-input"
+              className={fromLegacy("search-input")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="نام کاربری، نام یا ایمیل…"
@@ -332,43 +333,43 @@ export default function Users() {
         </FilterBar>
 
         {loading ? (
-          <div className="loading">در حال بارگذاری…</div>
+          <div className={fromLegacy("loading")}>در حال بارگذاری…</div>
         ) : users.length === 0 ? (
           <EmptyState text="کاربری با این فیلتر یافت نشد." />
         ) : (
           <>
-            <div className="user-cards">
+            <div className={fromLegacy("user-cards")}>
               {users.map((u) => (
-                <article key={u.id} className={`user-card ${!u.is_active ? 'user-card-inactive' : ''}`}>
-                  <div className="user-card-head">
+                <article key={u.id} className={fromLegacy(`user-card ${!u.is_active ? 'user-card-inactive' : ''}`)}>
+                  <div className={fromLegacy("user-card-head")}>
                     <div>
-                      <strong className="user-card-name">{u.full_name}</strong>
-                      <span className="ltr muted user-card-username">@{u.username}</span>
+                      <strong className={fromLegacy("user-card-name")}>{u.full_name}</strong>
+                      <span className={fromLegacy("ltr muted user-card-username")}>@{u.username}</span>
                     </div>
                     <Badge color={roleColor(u.role)}>{u.role_label}</Badge>
                   </div>
-                  <ul className="user-card-meta">
+                  <ul className={fromLegacy("user-card-meta")}>
                     <li><span>شعبه</span><span>{u.branch_label}</span></li>
-                    <li><span>ایمیل</span><span className="ltr">{u.email || '—'}</span></li>
+                    <li><span>ایمیل</span><span className={fromLegacy("ltr")}>{u.email || '—'}</span></li>
                     <li><span>آخرین ورود</span><span>{u.last_login ? formatDate(u.last_login) : '—'}</span></li>
                     <li>
                       <span>وضعیت</span>
                       <span>{u.is_active ? 'فعال' : 'غیرفعال'}{u.is_superuser ? ' · superuser' : ''}</span>
                     </li>
                   </ul>
-                  <div className="user-card-actions">
+                  <div className={fromLegacy("user-card-actions")}>
                     <Button variant="ghost" type="button" onClick={() => openEdit(u)}>ویرایش</Button>
                     {u.id !== currentUser?.id && u.is_active && !u.is_superuser && (
-                      <button type="button" className="link danger" onClick={() => deactivate(u)}>غیرفعال</button>
+                      <button type="button" className={fromLegacy("link danger")} onClick={() => deactivate(u)}>غیرفعال</button>
                     )}
-                    {u.id === currentUser?.id && <span className="muted">حساب شما</span>}
+                    {u.id === currentUser?.id && <span className={fromLegacy("muted")}>حساب شما</span>}
                   </div>
                 </article>
               ))}
             </div>
 
-            <div className="users-table-wrap">
-              <table className="table users-table">
+            <div className={fromLegacy("users-table-wrap")}>
+              <table className={fromLegacy("table users-table")}>
                 <thead>
                   <tr>
                     <th>کاربر</th>
@@ -383,17 +384,17 @@ export default function Users() {
                   {users.map((u) => (
                     <tr key={u.id} className={!u.is_active ? 'row-inactive' : ''}>
                       <td>
-                        <div className="user-cell-name">{u.full_name}</div>
-                        <div className="ltr muted user-cell-sub">@{u.username}</div>
+                        <div className={fromLegacy("user-cell-name")}>{u.full_name}</div>
+                        <div className={fromLegacy("ltr muted user-cell-sub")}>@{u.username}</div>
                       </td>
                       <td><Badge color={roleColor(u.role)}>{u.role_label}</Badge></td>
                       <td>{u.branch_label}</td>
                       <td>{u.is_active ? 'فعال' : 'غیرفعال'}</td>
                       <td>{u.last_login ? formatDate(u.last_login) : '—'}</td>
-                      <td className="row-actions">
-                        <button type="button" className="link" onClick={() => openEdit(u)}>ویرایش</button>
+                      <td className={fromLegacy("row-actions")}>
+                        <button type="button" className={fromLegacy("link")} onClick={() => openEdit(u)}>ویرایش</button>
                         {u.id !== currentUser?.id && u.is_active && !u.is_superuser && (
-                          <button type="button" className="link danger" onClick={() => deactivate(u)}>غیرفعال</button>
+                          <button type="button" className={fromLegacy("link danger")} onClick={() => deactivate(u)}>غیرفعال</button>
                         )}
                       </td>
                     </tr>
@@ -412,7 +413,7 @@ export default function Users() {
 
       {isSystemAdmin && (
         <Card title="منطقه خطر">
-          <div className="danger-zone">
+          <div className={fromLegacy("danger-zone")}>
             <h3>پاک‌سازی کامل داده‌ها</h3>
             <p>
               همه اطلاعات سیستم (مشتریان، فروش‌ها، حسابداری، پیامک‌ها، حضور و غیاب، محصولات،
@@ -432,20 +433,20 @@ export default function Users() {
         onClose={() => { if (!resetting) { setResetOpen(false); setResetConfirm('') } }}
       >
         <form onSubmit={handleResetData}>
-          <p className="muted" style={{ marginBottom: 16, lineHeight: 1.7 }}>
+          <p className={fromLegacy("muted")} style={{ marginBottom: 16, lineHeight: 1.7 }}>
             با این کار تمام اطلاعات به‌صورت دائمی از دیتابیس پاک می‌شود (نه حذف نرم).
             فقط حساب مدیر سیستم باقی می‌ماند. برای ادامه، عبارت <strong>پاکسازی</strong> را بنویسید.
           </p>
           <Field label="تأیید">
             <input
-              className="ltr"
+              className={fromLegacy("ltr")}
               value={resetConfirm}
               onChange={(e) => setResetConfirm(e.target.value)}
               placeholder="پاکسازی"
               autoComplete="off"
             />
           </Field>
-          <div className="form-actions">
+          <div className={fromLegacy("form-actions")}>
             <Button
               type="button"
               variant="ghost"
@@ -466,10 +467,10 @@ export default function Users() {
       </Modal>
 
       <Modal title="کاربر جدید" open={createOpen} onClose={() => setCreateOpen(false)}>
-        <form onSubmit={createUser} className="form">
+        <form onSubmit={createUser} className={fromLegacy("form")}>
           <Field label="نام کاربری">
             <input
-              className="ltr"
+              className={fromLegacy("ltr")}
               value={createForm.username}
               onChange={(e) => setCreateForm({ ...createForm, username: e.target.value.trim() })}
               required
@@ -479,7 +480,7 @@ export default function Users() {
           </Field>
           <Field label="رمز عبور">
             <input
-              className="ltr"
+              className={fromLegacy("ltr")}
               type="password"
               value={createForm.password}
               onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
@@ -487,7 +488,7 @@ export default function Users() {
               minLength={8}
               autoComplete="new-password"
             />
-            <span className="muted">حداقل ۸ کاراکتر</span>
+            <span className={fromLegacy("muted")}>حداقل ۸ کاراکتر</span>
           </Field>
           <Field label="نام کامل">
             <input
@@ -497,7 +498,7 @@ export default function Users() {
           </Field>
           <Field label="ایمیل (اختیاری)">
             <input
-              className="ltr"
+              className={fromLegacy("ltr")}
               type="email"
               value={createForm.email}
               onChange={(e) => setCreateForm({ ...createForm, email: e.target.value })}
@@ -510,7 +511,7 @@ export default function Users() {
               options={roles}
             />
             {selectedRoleMeta?.description && (
-              <span className="role-hint muted">{selectedRoleMeta.description}</span>
+              <span className={fromLegacy("role-hint muted")}>{selectedRoleMeta.description}</span>
             )}
           </Field>
           {needsBranch(createForm.role, roles) && (
@@ -522,7 +523,7 @@ export default function Users() {
               />
             </Field>
           )}
-          <div className="form-actions">
+          <div className={fromLegacy("form-actions")}>
             <Button type="button" variant="ghost" onClick={() => setCreateOpen(false)}>انصراف</Button>
             <Button type="submit" disabled={creating}>{creating ? 'در حال ساخت…' : 'ساخت کاربر'}</Button>
           </div>
@@ -531,7 +532,7 @@ export default function Users() {
 
       <Modal title={editUser ? `ویرایش — ${editUser.username}` : ''} open={Boolean(editUser)} onClose={closeEdit}>
         {editForm && (
-          <form onSubmit={saveEdit} className="form">
+          <form onSubmit={saveEdit} className={fromLegacy("form")}>
             <Field label="نام کامل">
               <input
                 value={editForm.full_name}
@@ -540,7 +541,7 @@ export default function Users() {
             </Field>
             <Field label="ایمیل">
               <input
-                className="ltr"
+                className={fromLegacy("ltr")}
                 type="email"
                 value={editForm.email}
                 onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
@@ -557,7 +558,7 @@ export default function Users() {
                     disabled={editUser?.is_superuser}
                   />
                   {roles.find((r) => r.value === editForm.role)?.description && (
-                    <span className="role-hint muted">
+                    <span className={fromLegacy("role-hint muted")}>
                       {roles.find((r) => r.value === editForm.role).description}
                     </span>
                   )}
@@ -600,7 +601,7 @@ export default function Users() {
                   />
                 </Field>
                 <Field label="وضعیت حساب">
-                  <label className="checkbox-row">
+                  <label className={fromLegacy("checkbox-row")}>
                     <input
                       type="checkbox"
                       checked={editForm.is_active}
@@ -611,12 +612,12 @@ export default function Users() {
                 </Field>
 
                 {canEditExtraPermissions && portalModules.length > 0 && (
-                  <div className="menu-section-matrix user-access-matrix">
-                    <div className="user-access-matrix-head">
+                  <div className={fromLegacy("menu-section-matrix user-access-matrix")}>
+                    <div className={fromLegacy("user-access-matrix-head")}>
                       <h4>دسترسی ماژولار</h4>
                       <Badge color={roleColor(editForm.role)}>{editRoleLabel}</Badge>
                     </div>
-                    <p className="muted small" style={{ marginBottom: 12 }}>
+                    <p className={fromLegacy("muted small")} style={{ marginBottom: 12 }}>
                       ماژول‌های تیک‌خورده از نقش «{editRoleLabel}» می‌آیند و قابل حذف نیستند.
                       {' '}بقیه را می‌توانید فقط برای این کاربر اضافه کنید.
                     </p>
@@ -633,13 +634,13 @@ export default function Users() {
             )}
 
             {isSelf && (
-              <p className="muted">نقش و وضعیت حساب خودتان از اینجا قابل تغییر نیست.</p>
+              <p className={fromLegacy("muted")}>نقش و وضعیت حساب خودتان از اینجا قابل تغییر نیست.</p>
             )}
 
             {!isSelf && (
               <Field label="رمز عبور جدید (اختیاری)">
                 <input
-                  className="ltr"
+                  className={fromLegacy("ltr")}
                   type="password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
@@ -650,7 +651,7 @@ export default function Users() {
               </Field>
             )}
 
-            <div className="form-actions">
+            <div className={fromLegacy("form-actions")}>
               <Button type="button" variant="ghost" onClick={closeEdit}>انصراف</Button>
               <Button type="submit" disabled={saving}>{saving ? 'در حال ذخیره…' : 'ذخیره تغییرات'}</Button>
             </div>

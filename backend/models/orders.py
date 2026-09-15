@@ -16,6 +16,7 @@ from .config import (
     PaymentStatus,
 )
 from .people import Customer, Seller
+from .workflow_cycle import Warehouse
 
 
 class WorkflowStage(models.Model):
@@ -84,6 +85,9 @@ class Sale(ReferenceCodeModel, SoftDeleteModel):
     WORKFLOW_STAGE_IN_PRODUCTION = "in_production"
     WORKFLOW_STAGE_PRODUCTION_DONE = "production_done"
     WORKFLOW_STAGE_IN_FREIGHT = "in_freight"
+    WORKFLOW_STAGE_IN_WAREHOUSE = "in_warehouse"
+    WORKFLOW_STAGE_READY_FOR_PICKUP = "ready_for_pickup"
+    WORKFLOW_STAGE_MERCHANT_ASSIGNED = "merchant_assigned"
     WORKFLOW_STAGE_COMPLETED = "completed"
     WORKFLOW_STAGE_CHOICES = [
         (WORKFLOW_STAGE_PENDING_BRANCH, "منتظر سرپرست شعبه"),
@@ -92,7 +96,20 @@ class Sale(ReferenceCodeModel, SoftDeleteModel):
         (WORKFLOW_STAGE_IN_PRODUCTION, "در حال ساخت"),
         (WORKFLOW_STAGE_PRODUCTION_DONE, "آماده باربری"),
         (WORKFLOW_STAGE_IN_FREIGHT, "در باربری"),
+        (WORKFLOW_STAGE_IN_WAREHOUSE, "در انبار"),
+        (WORKFLOW_STAGE_READY_FOR_PICKUP, "آماده تحویل حضوری"),
+        (WORKFLOW_STAGE_MERCHANT_ASSIGNED, "بازرگان — صف کارخانه"),
         (WORKFLOW_STAGE_COMPLETED, "تکمیل شده"),
+    ]
+    FULFILLMENT_ROUTE_FACTORY = "factory"
+    FULFILLMENT_ROUTE_WAREHOUSE = "warehouse"
+    FULFILLMENT_ROUTE_PICKUP = "customer_pickup"
+    FULFILLMENT_ROUTE_MERCHANT = "merchant"
+    FULFILLMENT_ROUTE_CHOICES = [
+        (FULFILLMENT_ROUTE_FACTORY, "کارخانه"),
+        (FULFILLMENT_ROUTE_WAREHOUSE, "انبار"),
+        (FULFILLMENT_ROUTE_PICKUP, "تحویل به مشتری"),
+        (FULFILLMENT_ROUTE_MERCHANT, "بازرگان"),
     ]
 
     customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name="sales")
@@ -189,6 +206,34 @@ class Sale(ReferenceCodeModel, SoftDeleteModel):
     office_released_at = models.DateTimeField(null=True, blank=True)
     factory_released_at = models.DateTimeField(null=True, blank=True)
     materials_deducted_at = models.DateTimeField(null=True, blank=True)
+    fulfillment_route = models.CharField(
+        max_length=32, choices=FULFILLMENT_ROUTE_CHOICES, null=True, blank=True
+    )
+    fulfillment_warehouse = models.ForeignKey(
+        Warehouse,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="fulfillment_orders",
+    )
+    fulfillment_source_branch = models.ForeignKey(
+        Branch,
+        to_field="code",
+        db_column="fulfillment_source_branch",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="fulfillment_source_orders",
+    )
+    merchant_user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="merchant_sales",
+    )
+    warehouse_completed_at = models.DateTimeField(null=True, blank=True)
+    pickup_completed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -418,9 +463,9 @@ class OfficeOrder(Sale):
     @property
     def status(self):
         return (
-            self.STATUS_RELEASED
-            if self.workflow_stage_id == self.WORKFLOW_STAGE_ACCOUNTING_APPROVED
-            else self.STATUS_PENDING
+            self.STATUS_PENDING
+            if self.workflow_stage_id == self.WORKFLOW_STAGE_BRANCH_APPROVED
+            else self.STATUS_RELEASED
         )
 
     def get_status_display(self):
@@ -432,6 +477,7 @@ class FactoryOrderManager(SoftDeleteManager):
         return super().get_queryset().filter(
             workflow_stage_id__in=[
                 Sale.WORKFLOW_STAGE_ACCOUNTING_APPROVED,
+                Sale.WORKFLOW_STAGE_MERCHANT_ASSIGNED,
                 Sale.WORKFLOW_STAGE_IN_PRODUCTION,
                 Sale.WORKFLOW_STAGE_PRODUCTION_DONE,
                 Sale.WORKFLOW_STAGE_IN_FREIGHT,
@@ -442,6 +488,7 @@ class FactoryOrderManager(SoftDeleteManager):
 
 class FactoryOrder(Sale):
     WORKFLOW_STAGE_ACCOUNTING_APPROVED = Sale.WORKFLOW_STAGE_ACCOUNTING_APPROVED
+    WORKFLOW_STAGE_MERCHANT_ASSIGNED = Sale.WORKFLOW_STAGE_MERCHANT_ASSIGNED
     WORKFLOW_STAGE_IN_PRODUCTION = Sale.WORKFLOW_STAGE_IN_PRODUCTION
     WORKFLOW_STAGE_PRODUCTION_DONE = Sale.WORKFLOW_STAGE_PRODUCTION_DONE
     WORKFLOW_STAGE_IN_FREIGHT = Sale.WORKFLOW_STAGE_IN_FREIGHT

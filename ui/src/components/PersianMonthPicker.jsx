@@ -4,6 +4,7 @@ import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import JalaliScrollColumn from './JalaliScrollColumn'
 import JcalPanel from './JcalPanel'
 import { currentJalali, PERSIAN_MONTHS, toPersianDigits } from '../utils/jalali'
+import { fromLegacy } from '../styles/tw.js'
 
 function formatMonthLabel(year, month) {
   if (!year || !month) return ''
@@ -80,18 +81,18 @@ export default function PersianMonthPicker({
   const display = hasValue ? formatMonthLabel(year, month) : placeholder
 
   return (
-    <div className="jcal-wrap" ref={wrapRef}>
+    <div className={fromLegacy("jcal-wrap")} ref={wrapRef}>
       <input type="hidden" name={uid} value={hasValue ? `${year}-${month}` : ''} readOnly />
       <button
         type="button"
-        className={`jcal-trigger ${!hasValue ? 'placeholder' : ''}`}
+        className={fromLegacy(`jcal-trigger ${!hasValue ? 'placeholder' : ''}`)}
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         aria-haspopup="dialog"
       >
-        <span className="jcal-trigger-icon" aria-hidden>📅</span>
+        <span className={fromLegacy("jcal-trigger-icon")} aria-hidden>📅</span>
         <span>{display}</span>
-        <span className="jcal-trigger-chevron" aria-hidden>{open ? '▲' : '▼'}</span>
+        <span className={fromLegacy("jcal-trigger-chevron")} aria-hidden>{open ? '▲' : '▼'}</span>
       </button>
 
       <JcalPanel
@@ -101,31 +102,31 @@ export default function PersianMonthPicker({
         variant="month"
         ariaLabel="انتخاب ماه شمسی"
       >
-        <div className="jcal-panel-head">
-          <span className="jcal-panel-title">
+        <div className={fromLegacy("jcal-panel-head")}>
+          <span className={fromLegacy("jcal-panel-title")}>
             {formatMonthLabel(jy, jm) || 'ماه را انتخاب کنید'}
           </span>
-          <button type="button" className="link jcal-today-btn" onClick={goCurrentMonth}>
+          <button type="button" className={fromLegacy("link jcal-today-btn")} onClick={goCurrentMonth}>
             این ماه
           </button>
         </div>
 
-        <div className="jcal-wheels jcal-wheels--month">
+        <div className={fromLegacy("jcal-wheels jcal-wheels--month")}>
           <JalaliScrollColumn label="ماه" items={monthItems} value={jm} onSelect={setJm} />
           <JalaliScrollColumn label="سال" items={yearItems} value={jy} onSelect={setJy} />
         </div>
 
-        <div className="jcal-panel-foot">
+        <div className={fromLegacy("jcal-panel-foot")}>
           {onClear ? (
-            <button type="button" className="link jcal-clear-btn" onClick={clearAll}>
+            <button type="button" className={fromLegacy("link jcal-clear-btn")} onClick={clearAll}>
               همه تاریخ‌ها
             </button>
           ) : (
-            <span className="muted">
+            <span className={fromLegacy("muted")}>
               {toPersianDigits(minYear)} — {toPersianDigits(maxY)}
             </span>
           )}
-          <button type="button" className="btn btn-primary jcal-done" onClick={apply}>
+          <button type="button" className={fromLegacy("btn btn-primary jcal-done")} onClick={apply}>
             تأیید
           </button>
         </div>

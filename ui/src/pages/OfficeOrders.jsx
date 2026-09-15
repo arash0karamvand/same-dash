@@ -9,6 +9,7 @@ import { Badge, Button, EmptyState, LoadMoreButton, Modal } from '../components/
 import { PAGE_SIZE } from '../config/pagination'
 import { formatDate, formatMoney } from '../utils/format'
 import { toPersianDigits } from '../utils/jalali'
+import { fromLegacy } from '../styles/tw.js'
 
 const WORKFLOW_COLORS = {
   pending_branch: 'var(--warning)',
@@ -23,26 +24,26 @@ const WORKFLOW_COLORS = {
 function WorkflowProgress({ percent, stage, stageLabel, detail, stageColor }) {
   const safe = Math.min(100, Math.max(0, Number(percent) || 0))
   return (
-    <div className="order-workflow-progress">
-      <div className="order-workflow-progress-head">
+    <div className={fromLegacy("order-workflow-progress")}>
+      <div className={fromLegacy("order-workflow-progress-head")}>
         <Badge color={stageColor}>{stageLabel || stage}</Badge>
-        <span className="order-workflow-progress-pct">{toPersianDigits(safe)}٪</span>
+        <span className={fromLegacy("order-workflow-progress-pct")}>{toPersianDigits(safe)}٪</span>
       </div>
-      <div className="order-workflow-progress-track" role="progressbar" aria-valuenow={safe} aria-valuemin={0} aria-valuemax={100}>
-        <div className="order-workflow-progress-fill" style={{ width: `${safe}%`, backgroundColor: stageColor }} />
+      <div className={fromLegacy("order-workflow-progress-track")} role="progressbar" aria-valuenow={safe} aria-valuemin={0} aria-valuemax={100}>
+        <div className={fromLegacy("order-workflow-progress-fill")} style={{ width: `${safe}%`, backgroundColor: stageColor }} />
       </div>
-      {detail && <p className="muted small order-workflow-progress-detail">{detail}</p>}
+      {detail && <p className={fromLegacy("muted small order-workflow-progress-detail")}>{detail}</p>}
     </div>
   )
 }
 
 function PurchaseLinesTable({ lines, amountsMasked }) {
   if (!lines?.length) {
-    return <p className="muted">ردیف کالا ثبت نشده — فقط مبلغ کلی سفارش.</p>
+    return <p className={fromLegacy("muted")}>ردیف کالا ثبت نشده — فقط مبلغ کلی سفارش.</p>
   }
   return (
-    <div className="table-wrap">
-      <table className="table table-compact">
+    <div className={fromLegacy("table-wrap")}>
+      <table className={fromLegacy("table table-compact")}>
         <thead>
           <tr>
             <th>محصول</th>
@@ -57,7 +58,7 @@ function PurchaseLinesTable({ lines, amountsMasked }) {
               <td>
                 <div>{li.product_name}</div>
                 {(li.fabric || li.color_name) && (
-                  <div className="muted small">
+                  <div className={fromLegacy("muted small")}>
                     {[li.fabric, li.color_name].filter(Boolean).join(' — ')}
                   </div>
                 )}
@@ -143,7 +144,7 @@ export default function OfficeOrders() {
   }
 
   return (
-    <div className="page office-orders-tracking">
+    <div className={fromLegacy("page office-orders-tracking")}>
       <OfficeSectionCard
         section={OFFICE_ORDERS_FILTER}
         actions={<Button type="button" variant="ghost" onClick={() => load({ offset: 0 })}>بروزرسانی</Button>}
@@ -156,16 +157,16 @@ export default function OfficeOrders() {
           )
         }}
       >
-      {error && <div className="alert alert-error">{error}</div>}
+      {error && <div className={fromLegacy("alert alert-error")}>{error}</div>}
 
         {loading ? (
-          <p className="muted loading">در حال بارگذاری…</p>
+          <p className={fromLegacy("muted loading")}>در حال بارگذاری…</p>
         ) : orders.length === 0 ? (
           <EmptyState text="سفارشی ثبت نشده است." />
         ) : (
           <>
-            <div className="table-wrap office-orders-table-desktop">
-              <table className="table">
+            <div className={fromLegacy("table-wrap office-orders-table-desktop")}>
+              <table className={fromLegacy("table")}>
                 <thead>
                   <tr>
                     <th>فاکتور</th>
@@ -184,11 +185,11 @@ export default function OfficeOrders() {
                     return (
                       <Fragment key={o.id}>
                         <tr className={isOpen ? 'office-order-row-expanded' : ''}>
-                          <td className="ltr">{o.invoice_number || o.id}</td>
+                          <td className={fromLegacy("ltr")}>{o.invoice_number || o.id}</td>
                           <td>
                             <strong>{o.customer_name}</strong>
                             {o.branch_label && o.branch_label !== '—' && (
-                              <div className="muted small">{o.branch_label}</div>
+                              <div className={fromLegacy("muted small")}>{o.branch_label}</div>
                             )}
                           </td>
                           <td>{o.amounts_masked ? '—' : formatMoney(o.final_amount)}</td>
@@ -197,7 +198,7 @@ export default function OfficeOrders() {
                               ? `${toPersianDigits(o.total_quantity || 0)} قلم`
                               : '—'}
                           </td>
-                          <td className="office-order-progress-cell">
+                          <td className={fromLegacy("office-order-progress-cell")}>
                             <WorkflowProgress
                               percent={o.workflow_progress}
                               stage={o.workflow_stage}
@@ -208,7 +209,7 @@ export default function OfficeOrders() {
                           </td>
                           <td>{o.delivery_date ? formatDate(o.delivery_date) : '—'}</td>
                           <td>
-                            <div className="row-actions">
+                            <div className={fromLegacy("row-actions")}>
                               <Button type="button" size="sm" variant="ghost" onClick={() => toggleInline(o.id)}>
                                 {isOpen ? 'بستن خرید' : 'مقدار خرید'}
                               </Button>
@@ -219,13 +220,13 @@ export default function OfficeOrders() {
                           </td>
                         </tr>
                         {isOpen && (
-                          <tr className="office-order-lines-row">
+                          <tr className={fromLegacy("office-order-lines-row")}>
                             <td colSpan={7}>
-                              <div className="office-order-inline-purchase">
-                                <h4 className="office-order-inline-title">مقدار خرید — {o.customer_name}</h4>
+                              <div className={fromLegacy("office-order-inline-purchase")}>
+                                <h4 className={fromLegacy("office-order-inline-title")}>مقدار خرید — {o.customer_name}</h4>
                                 <PurchaseLinesTable lines={o.line_items} amountsMasked={o.amounts_masked} />
                                 {!o.amounts_masked && (
-                                  <p className="muted small">
+                                  <p className={fromLegacy("muted small")}>
                                     جمع سفارش: <strong>{formatMoney(o.final_amount)}</strong>
                                   </p>
                                 )}
@@ -240,15 +241,15 @@ export default function OfficeOrders() {
               </table>
             </div>
 
-            <div className="office-orders-cards-mobile">
+            <div className={fromLegacy("office-orders-cards-mobile")}>
               {orders.map((o) => {
                 const color = stageColor(o.workflow_stage)
                 return (
-                  <div key={o.id} className="m-card office-order-track-card">
-                    <div className="m-card-head">
+                  <div key={o.id} className={fromLegacy("m-card office-order-track-card")}>
+                    <div className={fromLegacy("m-card-head")}>
                       <div>
                         <strong>{o.customer_name}</strong>
-                        <div className="muted small ltr">{o.invoice_number || `#${o.id}`}</div>
+                        <div className={fromLegacy("muted small ltr")}>{o.invoice_number || `#${o.id}`}</div>
                       </div>
                       {!o.amounts_masked && (
                         <strong>{formatMoney(o.final_amount)}</strong>
@@ -261,22 +262,22 @@ export default function OfficeOrders() {
                       detail={o.holder_detail}
                       stageColor={color}
                     />
-                    <div className="m-card-grid">
+                    <div className={fromLegacy("m-card-grid")}>
                       <div>
-                        <span className="muted">تعداد</span>
+                        <span className={fromLegacy("muted")}>تعداد</span>
                         {o.line_items_count ? toPersianDigits(o.total_quantity || 0) : '—'}
                       </div>
                       <div>
-                        <span className="muted">تحویل</span>
+                        <span className={fromLegacy("muted")}>تحویل</span>
                         {o.delivery_date ? formatDate(o.delivery_date) : '—'}
                       </div>
                     </div>
                     {expandedId === o.id && (
-                      <div className="office-order-inline-purchase">
+                      <div className={fromLegacy("office-order-inline-purchase")}>
                         <PurchaseLinesTable lines={o.line_items} amountsMasked={o.amounts_masked} />
                       </div>
                     )}
-                    <div className="m-card-actions row-actions">
+                    <div className={fromLegacy("m-card-actions row-actions")}>
                       <Button type="button" size="sm" variant="ghost" onClick={() => toggleInline(o.id)}>
                         {expandedId === o.id ? 'بستن' : 'مقدار خرید'}
                       </Button>
@@ -304,10 +305,10 @@ export default function OfficeOrders() {
         wide
       >
         {detailLoading ? (
-          <p className="muted loading">در حال بارگذاری…</p>
+          <p className={fromLegacy("muted loading")}>در حال بارگذاری…</p>
         ) : detailOrder && (
-          <div className="office-purchase-detail">
-            <div className="office-purchase-detail-meta muted small">
+          <div className={fromLegacy("office-purchase-detail")}>
+            <div className={fromLegacy("office-purchase-detail-meta muted small")}>
               <span>فاکتور: {detailOrder.invoice_number || detailOrder.id}</span>
               {' · '}
               <span>ثبت: {formatDate(detailOrder.sold_at)}</span>

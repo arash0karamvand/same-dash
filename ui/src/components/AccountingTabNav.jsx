@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import Icon from './icons/Icon'
 import { useMediaQuery } from '../hooks/useMediaQuery'
+import { fromLegacy } from '../styles/tw.js'
 
 const TAB_GROUPS = [
   {
@@ -67,12 +68,12 @@ export default function AccountingTabNav({ tabs, activeTab, onChange }) {
 
   if (!compact) {
     return (
-      <div className="accounting-tabs accounting-tab-nav">
+      <div className={fromLegacy("accounting-tabs accounting-tab-nav")}>
         {tabs.map((tab) => (
           <button
             key={tab.id}
             type="button"
-            className={`accounting-tab ${activeTab === tab.id ? 'active' : ''}`}
+            className={fromLegacy(`accounting-tab ${activeTab === tab.id ? 'active' : ''}`)}
             onClick={() => onChange(tab.id)}
           >
             {tab.label}
@@ -86,28 +87,28 @@ export default function AccountingTabNav({ tabs, activeTab, onChange }) {
     <>
       <button
         type="button"
-        className="mobile-menu-backdrop"
+        className={fromLegacy("mobile-menu-backdrop")}
         aria-label="بستن"
         onClick={() => setSheetOpen(false)}
       />
-      <div className="accounting-tab-sheet liquid-glass liquid-glass--strong liquid-glass--panel" role="dialog" aria-modal="true" aria-label="انتخاب بخش حسابداری">
-        <div className="mobile-menu-handle" aria-hidden />
-        <div className="accounting-tab-sheet-head">
+      <div className={fromLegacy("accounting-tab-sheet liquid-glass liquid-glass--strong liquid-glass--panel")} role="dialog" aria-modal="true" aria-label="انتخاب بخش حسابداری">
+        <div className={fromLegacy("mobile-menu-handle")} aria-hidden />
+        <div className={fromLegacy("accounting-tab-sheet-head")}>
           <h3>بخش حسابداری</h3>
-          <button type="button" className="modal-close" onClick={() => setSheetOpen(false)} aria-label="بستن">
+          <button type="button" className={fromLegacy("modal-close")} onClick={() => setSheetOpen(false)} aria-label="بستن">
             <Icon name="x" size={18} />
           </button>
         </div>
-        <div className="accounting-tab-sheet-body">
+        <div className={fromLegacy("accounting-tab-sheet-body")}>
           {groupedTabs.map((group) => (
-            <section key={group.label} className="accounting-tab-sheet-group">
-              <p className="accounting-tab-sheet-group-label">{group.label}</p>
-              <div className="accounting-tab-sheet-items">
+            <section key={group.label} className={fromLegacy("accounting-tab-sheet-group")}>
+              <p className={fromLegacy("accounting-tab-sheet-group-label")}>{group.label}</p>
+              <div className={fromLegacy("accounting-tab-sheet-items")}>
                 {group.tabs.map((tab) => (
                   <button
                     key={tab.id}
                     type="button"
-                    className={`accounting-tab-sheet-item${activeTab === tab.id ? ' active' : ''}`}
+                    className={fromLegacy(`accounting-tab-sheet-item${activeTab === tab.id ? ' active' : ''}`)}
                     onClick={() => pickTab(tab.id)}
                   >
                     <span>{tab.label}</span>
@@ -125,23 +126,23 @@ export default function AccountingTabNav({ tabs, activeTab, onChange }) {
 
   return (
     <>
-      <div className="accounting-tab-nav accounting-tab-nav--compact">
+      <div className={fromLegacy("accounting-tab-nav accounting-tab-nav--compact")}>
         <button
           type="button"
-          className="accounting-tab-current"
+          className={fromLegacy("accounting-tab-current")}
           onClick={() => setSheetOpen(true)}
           aria-haspopup="dialog"
           aria-expanded={sheetOpen}
         >
-          <span className="accounting-tab-current-label">{activeLabel}</span>
+          <span className={fromLegacy("accounting-tab-current-label")}>{activeLabel}</span>
           <Icon name="chevron-down" size={18} />
         </button>
-        <div className="accounting-tab-quick-scroll">
+        <div className={fromLegacy("accounting-tab-quick-scroll")}>
           {tabs.slice(0, 4).map((tab) => (
             <button
               key={tab.id}
               type="button"
-              className={`accounting-tab-pill ${activeTab === tab.id ? 'active' : ''}`}
+              className={fromLegacy(`accounting-tab-pill ${activeTab === tab.id ? 'active' : ''}`)}
               onClick={() => onChange(tab.id)}
             >
               {tab.label}

@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react'
 import { salesApi } from '../api/client'
 import { Button, Modal } from './ui'
 import { buildInvoiceHtml } from '../utils/printInvoice'
+import { fromLegacy } from '../styles/tw.js'
 
 export default function InvoiceModal({ sale, open, onClose }) {
   const iframeRef = useRef(null)
@@ -29,7 +30,7 @@ export default function InvoiceModal({ sale, open, onClose }) {
 
   return (
     <Modal title={sale ? `فاکتور ${sale.invoice_number || sale.id}` : 'فاکتور'} open={open} onClose={onClose} wide>
-      <div className="invoice-modal-toolbar">
+      <div className={fromLegacy("invoice-modal-toolbar")}>
         <Button type="button" onClick={handlePrint}>چاپ / ذخیره PDF</Button>
         <Button type="button" variant="ghost" onClick={handleExcel} disabled={excelLoading || !sale?.id}>
           {excelLoading ? 'در حال آماده‌سازی…' : 'دانلود اکسل'}
@@ -40,11 +41,11 @@ export default function InvoiceModal({ sale, open, onClose }) {
         <iframe
           ref={iframeRef}
           title="پیش‌نمایش فاکتور"
-          className="invoice-preview-frame"
+          className={fromLegacy("invoice-preview-frame")}
           srcDoc={html}
         />
       ) : (
-        <p className="muted">فاکتور در دسترس نیست.</p>
+        <p className={fromLegacy("muted")}>فاکتور در دسترس نیست.</p>
       )}
     </Modal>
   )

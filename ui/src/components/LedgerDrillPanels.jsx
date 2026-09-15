@@ -3,6 +3,7 @@ import ResizeHandle from './ResizeHandle'
 import { EmptyState } from './ui'
 import { TERMS } from '../config/accountingTerms'
 import { formatRial } from '../utils/format'
+import { fromLegacy } from '../styles/tw.js'
 
 export const DEFAULT_DRILL_PANEL_LAYOUT = {
   general: 'normal',
@@ -82,7 +83,7 @@ export function LedgerDrillCard({
       ].filter(Boolean).join(' ')}
     >
       <header
-        className="ld-card__head"
+        className={fromLegacy("ld-card__head")}
         onClick={(e) => {
           if (e.target.closest('.ld-card__btn')) return
           if (canFocus) {
@@ -100,18 +101,18 @@ export function LedgerDrillCard({
         role={canFocus ? 'button' : undefined}
         tabIndex={canFocus ? 0 : undefined}
       >
-        <span className="ld-card__step" aria-hidden="true">{step}</span>
-        <div className="ld-card__meta">
-          <h3 className="ld-card__title">{title}</h3>
+        <span className={fromLegacy("ld-card__step")} aria-hidden="true">{step}</span>
+        <div className={fromLegacy("ld-card__meta")}>
+          <h3 className={fromLegacy("ld-card__title")}>{title}</h3>
           {headSubtitle && (
-            <p className="ld-card__subtitle">{headSubtitle}</p>
+            <p className={fromLegacy("ld-card__subtitle")}>{headSubtitle}</p>
           )}
         </div>
         {!compact && (
-          <div className="ld-card__actions">
+          <div className={fromLegacy("ld-card__actions")}>
             <button
               type="button"
-              className="ld-card__btn"
+              className={fromLegacy("ld-card__btn")}
               onClick={(e) => { e.stopPropagation(); onToggleMinimize(panelId) }}
               title={minimized ? 'باز کردن' : 'جمع کردن'}
               aria-label={minimized ? 'باز کردن' : 'جمع کردن'}
@@ -120,7 +121,7 @@ export function LedgerDrillCard({
             </button>
             <button
               type="button"
-              className="ld-card__btn"
+              className={fromLegacy("ld-card__btn")}
               onClick={(e) => { e.stopPropagation(); onToggleMaximize(panelId) }}
               title={maximized ? 'بازگشت' : 'تمام‌صفحه'}
               aria-label={maximized ? 'بازگشت' : 'تمام‌صفحه'}
@@ -132,12 +133,12 @@ export function LedgerDrillCard({
       </header>
 
       {!minimized && (
-        <div className="ld-card__body">
+        <div className={fromLegacy("ld-card__body")}>
           {children}
           {canResizeBody && onResizeHeight && (
             <ResizeHandle
               direction="row"
-              className="ld-card__resize-h"
+              className={fromLegacy("ld-card__resize-h")}
               ariaLabel={`تغییر ارتفاع ${title}`}
               onDrag={onResizeHeight}
             />
@@ -188,13 +189,13 @@ export function LedgerTrialColumn({
       onSelectCard={onSelectCard}
     >
       {loading ? (
-        <div className="ld-card__loading">در حال بارگذاری…</div>
+        <div className={fromLegacy("ld-card__loading")}>در حال بارگذاری…</div>
       ) : !rows.length ? (
-        <div className="ld-card__empty">
+        <div className={fromLegacy("ld-card__empty")}>
           <EmptyState text={emptyText} />
         </div>
       ) : (
-        <ul className="ld-list" role="listbox" aria-label={title}>
+        <ul className={fromLegacy("ld-list")} role="listbox" aria-label={title}>
           {rows.map((row) => {
             const rowId = row[idKey]
             const selected = selectedId != null && String(selectedId) === String(rowId)
@@ -205,15 +206,15 @@ export function LedgerTrialColumn({
                   type="button"
                   role="option"
                   aria-selected={selected}
-                  className={`ld-list__row${selected ? ' ld-list__row--active' : ''}`}
+                  className={fromLegacy(`ld-list__row${selected ? ' ld-list__row--active' : ''}`)}
                   onClick={() => {
                     onSelectCard?.(panelId)
                     onSelect(row)
                   }}
                 >
-                  <span className="ld-list__code">{row.account_code}</span>
-                  <span className="ld-list__name">{row.account_name}</span>
-                  <span className="ld-list__balance">
+                  <span className={fromLegacy("ld-list__code")}>{row.account_code}</span>
+                  <span className={fromLegacy("ld-list__name")}>{row.account_name}</span>
+                  <span className={fromLegacy("ld-list__balance")}>
                     {balance ? balance.text : '—'}
                   </span>
                 </button>
@@ -228,7 +229,7 @@ export function LedgerTrialColumn({
 
 export const LedgerDrillStage = forwardRef(function LedgerDrillStage({ style, children }, ref) {
   return (
-    <div ref={ref} className="ld-stage" style={style}>
+    <div ref={ref} className={fromLegacy("ld-stage")} style={style}>
       {children}
     </div>
   )
@@ -237,7 +238,7 @@ export const LedgerDrillStage = forwardRef(function LedgerDrillStage({ style, ch
 export function LedgerStageDivider({ label, onDrag, invert = false }) {
   return (
     <ResizeHandle
-      className="ld-stage__divider"
+      className={fromLegacy("ld-stage__divider")}
       ariaLabel={label}
       invert={invert}
       onDrag={onDrag}
@@ -247,17 +248,17 @@ export function LedgerStageDivider({ label, onDrag, invert = false }) {
 
 export function LedgerWorkspace({ title, breadcrumb, toolbar, children }) {
   return (
-    <section className="ld-workspace">
-      <header className="ld-workspace__bar">
-        <div className="ld-workspace__heading">
-          <h2 className="ld-workspace__title">{title}</h2>
+    <section className={fromLegacy("ld-workspace")}>
+      <header className={fromLegacy("ld-workspace__bar")}>
+        <div className={fromLegacy("ld-workspace__heading")}>
+          <h2 className={fromLegacy("ld-workspace__title")}>{title}</h2>
           {breadcrumb && (
-            <p className="ld-workspace__path">{breadcrumb}</p>
+            <p className={fromLegacy("ld-workspace__path")}>{breadcrumb}</p>
           )}
         </div>
-        {toolbar && <div className="ld-workspace__toolbar">{toolbar}</div>}
+        {toolbar && <div className={fromLegacy("ld-workspace__toolbar")}>{toolbar}</div>}
       </header>
-      <div className="ld-workspace__content">
+      <div className={fromLegacy("ld-workspace__content")}>
         {children}
       </div>
     </section>
@@ -280,23 +281,23 @@ export function LedgerSidePanel({
   return (
     <aside
       ref={panelRef}
-      className={`ld-side${minimized ? ' ld-side--collapsed' : ''}`}
+      className={fromLegacy(`ld-side${minimized ? ' ld-side--collapsed' : ''}`)}
       style={minimized ? undefined : { width: `${width}px` }}
     >
       {!minimized && (
         <ResizeHandle
-          className="ld-side__resize"
+          className={fromLegacy("ld-side__resize")}
           edge="inline-start"
           ariaLabel="تغییر عرض پنل"
           onDrag={onResize}
         />
       )}
-      <header className="ld-side__head">
-        <h3 className="ld-side__title">{title}</h3>
-        <div className="ld-side__actions">
+      <header className={fromLegacy("ld-side__head")}>
+        <h3 className={fromLegacy("ld-side__title")}>{title}</h3>
+        <div className={fromLegacy("ld-side__actions")}>
           <button
             type="button"
-            className="ld-card__btn"
+            className={fromLegacy("ld-card__btn")}
             onClick={onToggleMinimize}
             title={minimized ? 'باز کردن' : 'جمع کردن'}
             aria-label={minimized ? 'باز کردن' : 'جمع کردن'}
@@ -305,7 +306,7 @@ export function LedgerSidePanel({
           </button>
           <button
             type="button"
-            className="ld-card__btn"
+            className={fromLegacy("ld-card__btn")}
             onClick={onClose}
             title="بستن"
             aria-label="بستن"
@@ -315,7 +316,7 @@ export function LedgerSidePanel({
         </div>
       </header>
       {!minimized && (
-        <div className="ld-side__body">{children}</div>
+        <div className={fromLegacy("ld-side__body")}>{children}</div>
       )}
     </aside>
   )

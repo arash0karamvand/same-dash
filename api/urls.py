@@ -10,6 +10,7 @@ from api.views import (
     birthday_sms,
     config,
     customers,
+    cycle,
     dashboard,
     factory_accounting,
     factory_orders,
@@ -103,6 +104,8 @@ urlpatterns = [
     path("sales/<int:pk>/factory-complete/", sales.sale_factory_complete, name="sale-factory-complete"),
     path("sales/<int:pk>/freight-receive/", sales.sale_freight_receive, name="sale-freight-receive"),
     path("sales/<int:pk>/freight-complete/", sales.sale_freight_complete, name="sale-freight-complete"),
+    path("sales/<int:pk>/warehouse-complete/", sales.sale_warehouse_complete, name="sale-warehouse-complete"),
+    path("sales/<int:pk>/pickup-complete/", sales.sale_pickup_complete, name="sale-pickup-complete"),
     path("sales/<int:pk>/record-payment/",
         sales.sale_record_payment,
         name="sale-record-payment",
@@ -118,6 +121,14 @@ urlpatterns = [
     path("office/orders/<int:pk>/approve/", office_orders.office_order_approve, name="office-order-approve"),
     path("office/orders/<int:pk>/reject/", office_orders.office_order_reject, name="office-order-reject"),
     path("office/orders/<int:pk>/rollback/", office_orders.office_order_rollback, name="office-order-rollback"),
+
+    path("cycle/", cycle.cycle_config, name="cycle-config"),
+    path("cycle/me/", cycle.cycle_me, name="cycle-me"),
+    path("cycle/warehouses/", cycle.warehouse_list, name="cycle-warehouses"),
+    path("cycle/warehouses/<int:pk>/", cycle.warehouse_detail, name="cycle-warehouse-detail"),
+    path("cycle/watch/", cycle.cycle_watch, name="cycle-watch"),
+    path("cycle/warehouse-orders/", cycle.cycle_warehouse_orders, name="cycle-warehouse-orders"),
+    path("cycle/pickup-orders/", cycle.cycle_pickup_orders, name="cycle-pickup-orders"),
 
     # --- Factory queue (جدول جدا) ---
     path("factory/orders/", factory_orders.factory_order_list, name="factory-order-list"),

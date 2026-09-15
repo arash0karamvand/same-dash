@@ -451,8 +451,16 @@ def sale_approve_accounting(request, pk):
         order = OfficeOrder.objects.select_related("customer").get(pk=pk)
     except OfficeOrder.DoesNotExist:
         return fail("سفارش اداری یافت نشد — ابتدا سرپرست شعبه باید تایید کند.", status=404)
+    body = parse_json(request) if request.body else {}
     try:
-        order = approve_office_order(order, request.user)
+        order = approve_office_order(
+            order,
+            request.user,
+            fulfillment_route=body.get("fulfillment_route"),
+            warehouse_id=body.get("warehouse_id"),
+            source_branch=body.get("source_branch") or body.get("fulfillment_source_branch"),
+            merchant_user_id=body.get("merchant_user_id"),
+        )
     except ValueError as exc:
         return fail(str(exc), status=400)
     return success(
@@ -551,3 +559,51 @@ def employee_ranking(request):
         return success(build_employee_ranking_report(request.GET))
     except (ValueError, TypeError) as exc:
         return fail(str(exc), status=400)
+
+
+@api_view("POST")
+def sale_warehouse_complete(request, pk):
+    from logic.order_cycle import can_complete_warehouse
+    from logic.sale_workflow import complete_warehouse_order
+
+    sale = Sale.objects.filter(pk=pk, is_deleted=False).first()
+    if sale is None:
+        return fail("سفارش یافت نشد", status=404)
+    if not can_complete_warehouse(request.user, sale):
+        return fail("Permission denied", status=403)
+    try:
+        sale = complete_warehouse_order(sale, request.user)
+    except ValueError as exc:
+        return fail(str(exc), status=400)
+    log_action(
+        request.user,
+        "update",
+        f"تکمیل انبار — سفارش #{sale.id}",
+        entity_type="Sale",
+        entity_id=sale.id,
+    )
+    return success(sale_to_dict(sale, include_lines=True, user=request.user))
+
+
+@api_view("POST")
+def sale_pickup_complete(request, pk):
+    from logic.order_cycle import can_complete_pickup
+    from logic.sale_workflow import complete_pickup_order
+
+    sale = Sale.objects.filter(pk=pk, is_deleted=False).first()
+    if sale is None:
+        return fail("سفارش یافت نشد", status=404)
+    if not can_complete_pickup(request.user, sale):
+        return fail("Permission denied", status=403)
+    try:
+        sale = complete_pickup_order(sale, request.user)
+    except ValueError as exc:
+        return fail(str(exc), status=400)
+    log_action(
+        request.user,
+        "update",
+        f"تحویل حضوری — سفارش #{sale.id}",
+        entity_type="Sale",
+        entity_id=sale.id,
+    )
+    return success(sale_to_dict(sale, include_lines=True, user=request.user))

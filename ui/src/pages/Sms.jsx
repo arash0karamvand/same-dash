@@ -16,6 +16,7 @@ import { hasPermission } from '../utils/permissions'
 import { PAGE_GUIDE_DEFAULTS } from '../config/pageGuideDefaults'
 import { PAGE_SIZE, PICKER_LIMIT } from '../config/pagination'
 import { useRegisterPageGuide } from '../context/PageGuideContext'
+import { fromLegacy } from '../styles/tw.js'
 
 const STATUS_COLORS = {
   sent: 'var(--success)',
@@ -366,12 +367,12 @@ export default function Sms() {
   const sendTimeLabel = formatTimeFa(preview?.send_time || settingsForm.send_time)
 
   return (
-    <div className="page sms-page">
-      <div className="sms-tabs">
+    <div className={fromLegacy("page sms-page")}>
+      <div className={fromLegacy("sms-tabs")}>
         {canManageClub && (
           <button
             type="button"
-            className={`sms-tab ${tab === 'club' ? 'active' : ''}`}
+            className={fromLegacy(`sms-tab ${tab === 'club' ? 'active' : ''}`)}
             onClick={() => setTab('club')}
           >
             🏅 باشگاه
@@ -380,7 +381,7 @@ export default function Sms() {
         {canManageClub && (
           <button
             type="button"
-            className={`sms-tab ${tab === 'discount' ? 'active' : ''}`}
+            className={fromLegacy(`sms-tab ${tab === 'discount' ? 'active' : ''}`)}
             onClick={() => setTab('discount')}
           >
             🎁 تخفیف ویژه
@@ -389,7 +390,7 @@ export default function Sms() {
         {canManageBirthday && (
           <button
             type="button"
-            className={`sms-tab ${tab === 'birthday' ? 'active' : ''}`}
+            className={fromLegacy(`sms-tab ${tab === 'birthday' ? 'active' : ''}`)}
             onClick={() => setTab('birthday')}
           >
             🎂 تبریک تولد
@@ -398,7 +399,7 @@ export default function Sms() {
         {canManageReminders && (
           <button
             type="button"
-            className={`sms-tab ${tab === 'reminders' ? 'active' : ''}`}
+            className={fromLegacy(`sms-tab ${tab === 'reminders' ? 'active' : ''}`)}
             onClick={() => setTab('reminders')}
           >
             🔔 یادآوری باشگاه
@@ -407,26 +408,26 @@ export default function Sms() {
         {canViewLogs && (
           <button
             type="button"
-            className={`sms-tab ${tab === 'logs' ? 'active' : ''}`}
+            className={fromLegacy(`sms-tab ${tab === 'logs' ? 'active' : ''}`)}
             onClick={() => setTab('logs')}
           >
             📜 تاریخچه
           </button>
         )}
         {canSend && (tab === 'logs' || !canViewLogs) && (
-          <Button className="sms-tab-action" onClick={() => setModalOpen(true)}>
+          <Button className={fromLegacy("sms-tab-action")} onClick={() => setModalOpen(true)}>
             + ارسال پیامک
           </Button>
         )}
       </div>
 
-      {error && <div className="alert-error">{error}</div>}
-      {info && <div className="alert-info">{info}</div>}
+      {error && <div className={fromLegacy("alert-error")}>{error}</div>}
+      {info && <div className={fromLegacy("alert-info")}>{info}</div>}
 
       {tab === 'club' && canManageClub && (
-        <div className="sms-birthday-grid">
+        <div className={fromLegacy("sms-birthday-grid")}>
           <Card title="پیامک‌های خودکار باشگاه">
-            <form onSubmit={saveClubSettings} className="form">
+            <form onSubmit={saveClubSettings} className={fromLegacy("form")}>
               <Field label="نام فروشگاه">
                 <input
                   value={clubForm.shop_name}
@@ -434,7 +435,7 @@ export default function Sms() {
                 />
               </Field>
 
-              <label className="toggle-field">
+              <label className={fromLegacy("toggle-field")}>
                 <input
                   type="checkbox"
                   checked={clubForm.auto_order_placed}
@@ -443,12 +444,12 @@ export default function Sms() {
                 <span>ارسال خودکار پس از ثبت سفارش</span>
               </label>
               <Field label="قالب ثبت سفارش">
-                <div className="template-vars">
+                <div className={fromLegacy("template-vars")}>
                   {['name', 'amount', 'invoice', 'shop_name'].map((v) => (
                     <button
                       key={v}
                       type="button"
-                      className="var-chip"
+                      className={fromLegacy("var-chip")}
                       onClick={() => insertClubVar('order_placed_template', v)}
                     >
                       {`{${v}}`}
@@ -462,7 +463,7 @@ export default function Sms() {
                 />
               </Field>
 
-              <label className="toggle-field">
+              <label className={fromLegacy("toggle-field")}>
                 <input
                   type="checkbox"
                   checked={clubForm.auto_welcome}
@@ -478,7 +479,7 @@ export default function Sms() {
                 />
               </Field>
 
-              <label className="toggle-field">
+              <label className={fromLegacy("toggle-field")}>
                 <input
                   type="checkbox"
                   checked={clubForm.auto_level_up}
@@ -495,12 +496,12 @@ export default function Sms() {
               </Field>
 
               <Field label="قالب پیش‌فرض تخفیف ویژه">
-                <div className="template-vars">
+                <div className={fromLegacy("template-vars")}>
                   {['name', 'discount_label', 'shop_name'].map((v) => (
                     <button
                       key={v}
                       type="button"
-                      className="var-chip"
+                      className={fromLegacy("var-chip")}
                       onClick={() => insertClubVar('discount_template', v)}
                     >
                       {`{${v}}`}
@@ -514,7 +515,7 @@ export default function Sms() {
                 />
               </Field>
 
-              <div className="form-row">
+              <div className={fromLegacy("form-row")}>
                 <Field label="نوع تخفیف پیش‌فرض">
                   <Select
                     value={clubForm.default_discount_type}
@@ -548,7 +549,7 @@ export default function Sms() {
 
       {tab === 'discount' && canManageClub && (
         <Card title="ارسال تخفیف ویژه (دستی)">
-          <form onSubmit={sendDiscount} className="form">
+          <form onSubmit={sendDiscount} className={fromLegacy("form")}>
             <Field label="گیرندگان">
               <Select
                 value={discountForm.target}
@@ -585,7 +586,7 @@ export default function Sms() {
               </Field>
             )}
 
-            <div className="form-row">
+            <div className={fromLegacy("form-row")}>
               <Field label="نوع تخفیف">
                 <Select
                   value={discountForm.discount_type}
@@ -620,7 +621,7 @@ export default function Sms() {
             </Field>
 
             {discountPreview && discountForm.target === 'single' && (
-              <div className="birthday-preview-msg muted">
+              <div className={fromLegacy("birthday-preview-msg muted")}>
                 <strong>پیش‌نمایش:</strong> {discountPreview}
               </div>
             )}
@@ -633,10 +634,10 @@ export default function Sms() {
       )}
 
       {tab === 'birthday' && canManageBirthday && (
-        <div className="sms-birthday-grid">
+        <div className={fromLegacy("sms-birthday-grid")}>
           <Card title="تنظیمات تبریک تولد">
-            <form onSubmit={saveBirthdaySettings} className="form">
-              <label className="toggle-field">
+            <form onSubmit={saveBirthdaySettings} className={fromLegacy("form")}>
+              <label className={fromLegacy("toggle-field")}>
                 <input
                   type="checkbox"
                   checked={settingsForm.is_enabled}
@@ -656,7 +657,7 @@ export default function Sms() {
 
               <Field label="ساعت ارسال روزانه">
                 <input
-                  className="ltr"
+                  className={fromLegacy("ltr")}
                   type="time"
                   value={settingsForm.send_time}
                   onChange={(e) => setSettingsForm({ ...settingsForm, send_time: e.target.value })}
@@ -664,9 +665,9 @@ export default function Sms() {
               </Field>
 
               <Field label="متن پیام (قابل شخصی‌سازی)">
-                <div className="template-vars">
+                <div className={fromLegacy("template-vars")}>
                   {(birthdaySettings?.template_vars || ['name', 'shop_name', 'phone']).map((v) => (
-                    <button key={v} type="button" className="var-chip" onClick={() => insertVar(v)}>
+                    <button key={v} type="button" className={fromLegacy("var-chip")} onClick={() => insertVar(v)}>
                       {`{${v}}`}
                     </button>
                   ))}
@@ -698,10 +699,10 @@ export default function Sms() {
             }
           >
             {loading ? (
-              <div className="loading">در حال بارگذاری…</div>
+              <div className={fromLegacy("loading")}>در حال بارگذاری…</div>
             ) : (
               <>
-                <div className={`birthday-schedule-banner ${settingsForm.is_enabled ? 'on' : 'off'}`}>
+                <div className={fromLegacy(`birthday-schedule-banner ${settingsForm.is_enabled ? 'on' : 'off'}`)}>
                   {settingsForm.is_enabled ? (
                     preview?.will_send_count > 0 ? (
                       <>
@@ -715,31 +716,31 @@ export default function Sms() {
                     <>ارسال خودکار غیرفعال است — فقط با «ارسال الان» یا فعال‌سازی تنظیمات.</>
                   )}
                   {preview?.send_due && settingsForm.is_enabled && (
-                    <p className="muted">زمان ارسال رسیده — در صورت باز بودن صفحه، خودکار ارسال می‌شود.</p>
+                    <p className={fromLegacy("muted")}>زمان ارسال رسیده — در صورت باز بودن صفحه، خودکار ارسال می‌شود.</p>
                   )}
                 </div>
 
                 {activeRecipients.length === 0 ? (
                   <EmptyState text="مشتری در صف ارسال امروز نیست." />
                 ) : (
-                  <div className="birthday-recipient-list">
+                  <div className={fromLegacy("birthday-recipient-list")}>
                     {activeRecipients.map((r) => (
-                      <div key={r.customer_id} className="birthday-recipient-card">
-                        <div className="birthday-recipient-head">
+                      <div key={r.customer_id} className={fromLegacy("birthday-recipient-card")}>
+                        <div className={fromLegacy("birthday-recipient-head")}>
                           <div>
                             <strong>{r.full_name}</strong>
-                            <span className="ltr muted"> — {r.phone}</span>
+                            <span className={fromLegacy("ltr muted")}> — {r.phone}</span>
                           </div>
                           <button
                             type="button"
-                            className="link danger"
+                            className={fromLegacy("link danger")}
                             onClick={() => excludeFromBirthday(r.customer_id)}
                           >
                             حذف از لیست
                           </button>
                         </div>
-                        <p className="muted birthday-preview-msg">{r.preview_message}</p>
-                        <span className="muted">
+                        <p className={fromLegacy("muted birthday-preview-msg")}>{r.preview_message}</p>
+                        <span className={fromLegacy("muted")}>
                           تولد: {formatJalali(r.birthday)}
                         </span>
                       </div>
@@ -748,14 +749,14 @@ export default function Sms() {
                 )}
 
                 {preview?.excluded?.length > 0 && (
-                  <div className="birthday-excluded-section">
+                  <div className={fromLegacy("birthday-excluded-section")}>
                     <h4>حذف‌شده از ارسال امروز ({toPersianDigits(preview.excluded.length)})</h4>
                     {preview.excluded.map((r) => (
-                      <div key={r.customer_id} className="birthday-excluded-row">
+                      <div key={r.customer_id} className={fromLegacy("birthday-excluded-row")}>
                         <span>{r.full_name}</span>
                         <button
                           type="button"
-                          className="link"
+                          className={fromLegacy("link")}
                           onClick={() => restoreToBirthday(r.customer_id)}
                         >
                           بازگرداندن
@@ -774,14 +775,14 @@ export default function Sms() {
 
       {!canManageBirthday && !canViewLogs && canSend && (
         <Card title="ارسال پیامک">
-          <p className="muted">از دکمه زیر برای ارسال پیامک به مشتریان استفاده کنید.</p>
+          <p className={fromLegacy("muted")}>از دکمه زیر برای ارسال پیامک به مشتریان استفاده کنید.</p>
           <Button onClick={() => setModalOpen(true)}>+ ارسال پیامک</Button>
         </Card>
       )}
 
       {(tab === 'logs' || !canManageBirthday) && canViewLogs && (
         <Card title="تاریخچه پیامک‌ها">
-          <p className="muted">
+          <p className={fromLegacy("muted")}>
             درگاه پیش‌فرض شبیه‌سازی است. بدون SMS_API_KEY، وضعیت mock_sent ثبت می‌شود.
           </p>
           <FilterBar>
@@ -836,25 +837,25 @@ export default function Sms() {
             </Field>
             <Field label="جستجو">
               <input
-                className="search-input"
+                className={fromLegacy("search-input")}
                 value={logSearch}
                 onChange={(e) => setLogSearch(e.target.value)}
                 placeholder="موبایل، نام یا متن…"
                 onKeyDown={(e) => e.key === 'Enter' && loadLogs()}
               />
             </Field>
-            <div className="page-filters-actions">
+            <div className={fromLegacy("page-filters-actions")}>
               <Button type="button" variant="ghost" onClick={() => loadLogs()}>اعمال فیلتر</Button>
             </div>
           </FilterBar>
           {loading ? (
-            <div className="loading">در حال بارگذاری…</div>
+            <div className={fromLegacy("loading")}>در حال بارگذاری…</div>
           ) : messages.length === 0 ? (
             <EmptyState text="پیامکی ثبت نشده است." />
           ) : (
             <>
-              <div className="table-wrap sms-table-desktop">
-                <table className="table">
+              <div className={fromLegacy("table-wrap sms-table-desktop")}>
+                <table className={fromLegacy("table")}>
                   <thead>
                     <tr>
                       <th>شماره</th>
@@ -868,11 +869,11 @@ export default function Sms() {
                   <tbody>
                     {messages.map((m) => (
                       <tr key={m.id}>
-                        <td className="ltr">{m.phone_number}</td>
+                        <td className={fromLegacy("ltr")}>{m.phone_number}</td>
                         <td>
                           <Badge color={smsTypeColor(m.sms_type)}>{m.sms_type_display}</Badge>
                         </td>
-                        <td className="text-cell">{m.message}</td>
+                        <td className={fromLegacy("text-cell")}>{m.message}</td>
                         <td>
                           <Badge color={STATUS_COLORS[m.status]}>{m.status_display}</Badge>
                         </td>
@@ -884,17 +885,17 @@ export default function Sms() {
                 </table>
               </div>
 
-              <div className="sms-cards-mobile">
+              <div className={fromLegacy("sms-cards-mobile")}>
                 {messages.map((m) => (
-                  <div key={m.id} className="sms-log-card">
-                    <div className="sms-log-card-head">
-                      <span className="ltr">{m.phone_number}</span>
+                  <div key={m.id} className={fromLegacy("sms-log-card")}>
+                    <div className={fromLegacy("sms-log-card-head")}>
+                      <span className={fromLegacy("ltr")}>{m.phone_number}</span>
                       <Badge color={STATUS_COLORS[m.status]}>{m.status_display}</Badge>
                     </div>
                     <p>{m.message}</p>
-                    <div className="sms-log-card-meta">
+                    <div className={fromLegacy("sms-log-card-meta")}>
                       <Badge color={smsTypeColor(m.sms_type)}>{m.sms_type_display}</Badge>
-                      <span className="muted">{formatDate(m.created_at)}</span>
+                      <span className={fromLegacy("muted")}>{formatDate(m.created_at)}</span>
                     </div>
                   </div>
                 ))}
@@ -911,7 +912,7 @@ export default function Sms() {
 
       {canSend && (
         <Modal title="ارسال پیامک" open={modalOpen} onClose={() => setModalOpen(false)}>
-          <form onSubmit={send} className="form">
+          <form onSubmit={send} className={fromLegacy("form")}>
             <Field label="گیرندگان">
               <Select
                 value={form.target}

@@ -15,6 +15,7 @@ import { PageGuideProvider } from '../context/PageGuideContext'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { iconForNavItem, iconForPortal } from '../config/iconMap'
 import { getVisiblePortals, canSeeNavItem, getFirstAccessiblePageForPortal } from '../utils/permissions'
+import { buttonClass, cn, tw } from '../styles/tw'
 
 function getPortalFromList(portals, id) {
   return portals.find((p) => p.id === id)
@@ -91,37 +92,30 @@ export default function Layout({ portal, page, onNavigate, children }) {
   }, [isMobile])
 
   const showTabletMenu = isCompactNav && !isMobile
-
-  const layoutClass = [
-    'layout',
-    'portal-layout',
-    menuOpen && !isMobile ? 'menu-open' : '',
-    isMobile ? 'layout--mobile' : '',
-    showTabletMenu ? 'layout--compact' : '',
-  ].filter(Boolean).join(' ')
+  const drawerOpen = menuOpen && !isMobile
 
   return (
-    <div className={layoutClass}>
+    <div className={tw.layout}>
       <button
         type="button"
-        className="sidebar-backdrop"
+        className={cn(tw.sidebarBackdrop, drawerOpen && tw.sidebarBackdropOpen)}
         aria-label="بستن منو"
-        aria-hidden={!(menuOpen && !isMobile)}
-        tabIndex={menuOpen && !isMobile ? 0 : -1}
+        aria-hidden={!drawerOpen}
+        tabIndex={drawerOpen ? 0 : -1}
         onClick={() => setMenuOpen(false)}
       />
       <aside
-        className="sidebar"
+        className={cn(tw.sidebar, drawerOpen && tw.sidebarOpen)}
         aria-label="پورتال‌ها"
         aria-hidden={isMobile || (showTabletMenu && !menuOpen)}
         inert={isMobile || (showTabletMenu && !menuOpen) ? true : undefined}
       >
-        <div className="brand">
+        <div className={tw.brand}>
           <BrandLogo size={40} />
-          <span className="brand-name">پنل مدیریت</span>
+          <span className={tw.brandName}>پنل مدیریت</span>
           <button
             type="button"
-            className="sidebar-close"
+            className={tw.sidebarClose}
             aria-label="بستن منو"
             onClick={() => setMenuOpen(false)}
           >
@@ -129,84 +123,92 @@ export default function Layout({ portal, page, onNavigate, children }) {
           </button>
         </div>
 
-        <nav className="portal-nav" aria-label="بخش‌های اصلی">
-          {visiblePortals.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              className={`portal-nav-item ${portal === p.id ? 'active' : ''}`}
-              onClick={() => navigatePortal(p.id)}
-            >
-              <span className="portal-nav-icon">
-                <Icon name={iconForPortal(p)} size={20} />
-              </span>
-              <span className="portal-nav-label">{p.label}</span>
-            </button>
-          ))}
+        <nav className={tw.portalNav} aria-label="بخش‌های اصلی">
+          {visiblePortals.map((p) => {
+            const active = portal === p.id
+            return (
+              <button
+                key={p.id}
+                type="button"
+                className={cn(tw.portalNavItem, active && tw.portalNavItemActive)}
+                onClick={() => navigatePortal(p.id)}
+              >
+                {active && <span className="nav-item-active-bar" aria-hidden />}
+                <span className={cn(tw.portalNavIcon, active && 'opacity-100 text-accent')}>
+                  <Icon name={iconForPortal(p)} size={20} />
+                </span>
+                <span>{p.label}</span>
+              </button>
+            )
+          })}
         </nav>
 
         {activePortal && (!isCompactNav || menuOpen) && (
-          <nav className="portal-sidebar-sub nav" aria-label="زیرمنو">
+          <nav className={tw.nav} aria-label="زیرمنو">
             {(activePortal.children || [])
               .filter((c) => canSeeNavItem(user, c))
-              .map((item) => (
-                <button
-                  key={item.key}
-                  type="button"
-                  className={`nav-item ${page === item.key ? 'active' : ''}`}
-                  onClick={() => navigateSub(portal, item.key)}
-                >
-                  <span className="nav-icon">
-                    <Icon name={iconForNavItem(item)} size={17} />
-                  </span>
-                  <span>{item.label}</span>
-                </button>
-              ))}
+              .map((item) => {
+                const active = page === item.key
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    className={cn(tw.navItem, active && tw.navItemActive)}
+                    onClick={() => navigateSub(portal, item.key)}
+                  >
+                    {active && <span className="nav-item-active-bar nav-item-active-bar--thin" aria-hidden />}
+                    <span className={cn(tw.navIcon, active && 'opacity-100 text-accent')}>
+                      <Icon name={iconForNavItem(item)} size={17} />
+                    </span>
+                    <span>{item.label}</span>
+                  </button>
+                )
+              })}
           </nav>
         )}
 
-        <div className="sidebar-footer">نسخه ۲.۰</div>
+        <div className={tw.sidebarFooter}>نسخه ۲.۰</div>
       </aside>
 
-      <div className="main">
-        <div className="main-chrome">
-          <header className={`topbar${topbarScrolled ? ' topbar--scrolled' : ''}`}>
-            <div className="topbar-start">
+      <div className={tw.main}>
+        <div className={tw.mainChrome}>
+          <header className={cn(tw.topbar, topbarScrolled && tw.topbarScrolled)}>
+            <div className={tw.topbarStart}>
               {showTabletMenu && (
                 <button
                   type="button"
-                  className="menu-toggle"
+                  className={cn(tw.menuToggle, menuOpen && tw.menuToggleOpen)}
                   aria-label={menuOpen ? 'بستن منو' : 'باز کردن منو'}
                   aria-expanded={menuOpen}
                   onClick={() => setMenuOpen((open) => !open)}
                 >
-                  <span />
-                  <span />
-                  <span />
+                  <span className={tw.menuToggleBar} />
+                  <span className={tw.menuToggleBar} />
+                  <span className={tw.menuToggleBar} />
                 </button>
               )}
-              <div className="topbar-titles">
+              <div className={tw.topbarTitles}>
                 {activePortal && (
-                  <span className="topbar-portal muted">
-                    <Icon name={iconForPortal(activePortal)} size={14} className="icon" />
+                  <span className={cn(tw.topbarPortal, tw.muted)}>
+                    <Icon name={iconForPortal(activePortal)} size={14} className={cn(tw.icon, 'opacity-70')} />
                     {activePortal.label}
                   </span>
                 )}
-                <h2 className="page-title">{pageTitle}</h2>
+                <h2 className={tw.pageTitle}>{pageTitle}</h2>
               </div>
             </div>
-            <div className="user-box">
+            <div className={tw.userBox}>
               <div className="liquid-glass-group">
                 <ThemeToggle />
               </div>
-              <div className="user-info">
-                <span className="user-name">{user?.full_name}</span>
-                <span className="user-role">{user?.role_label}</span>
+              <div className={tw.userInfo}>
+                <span className={tw.userName}>{user?.full_name}</span>
+                <span className={tw.userRole}>{user?.role_label}</span>
               </div>
-              <button className="btn btn-ghost btn-sm hide-xs" type="button" onClick={() => setPasswordOpen(true)}>
+              <button className={buttonClass({ variant: 'ghost', size: 'sm', className: tw.hideXs })} type="button" onClick={() => setPasswordOpen(true)}>
                 تغییر رمز
               </button>
-              <button className="btn btn-ghost btn-sm" type="button" onClick={logout}>
+              <button className={buttonClass({ variant: 'ghost', size: 'sm' })} type="button" onClick={logout}>
                 خروج
               </button>
             </div>
@@ -217,7 +219,7 @@ export default function Layout({ portal, page, onNavigate, children }) {
           )}
         </div>
 
-        <main className="content">
+        <main className={tw.content}>
           <PageGuideProvider>
             {children}
             <SiteFooterGuide pageKey={page} />

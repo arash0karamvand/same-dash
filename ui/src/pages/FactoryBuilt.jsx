@@ -6,6 +6,7 @@ import PersianDateInput from '../components/PersianDateInput'
 import { Field } from '../components/ui'
 import { formatJalali, todayIso } from '../utils/jalali'
 import WorkflowOrdersPage from './WorkflowOrdersPage'
+import { fromLegacy } from '../styles/tw.js'
 
 export default function FactoryBuilt() {
   const [builtDate, setBuiltDate] = useState('')
@@ -31,7 +32,7 @@ export default function FactoryBuilt() {
       showAmounts={false}
       showProductionDate
       filters={(
-        <div className="workflow-filter-bar">
+        <div className={fromLegacy("workflow-filter-bar")}>
           <Field label="تاریخ پایان ساخت">
             <PersianDateInput
               value={builtDate}
@@ -41,7 +42,7 @@ export default function FactoryBuilt() {
               clearLabel="همه"
             />
           </Field>
-          <button type="button" className="link workflow-filter-today" onClick={() => setBuiltDate(todayIso())}>
+          <button type="button" className={fromLegacy("link workflow-filter-today")} onClick={() => setBuiltDate(todayIso())}>
             امروز
           </button>
         </div>

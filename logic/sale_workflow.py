@@ -9,6 +9,9 @@ STAGE_ACCOUNTING_APPROVED = "accounting_approved"
 STAGE_IN_PRODUCTION = "in_production"
 STAGE_PRODUCTION_DONE = "production_done"
 STAGE_IN_FREIGHT = "in_freight"
+STAGE_IN_WAREHOUSE = "in_warehouse"
+STAGE_READY_FOR_PICKUP = "ready_for_pickup"
+STAGE_MERCHANT_ASSIGNED = "merchant_assigned"
 STAGE_COMPLETED = "completed"
 
 WORKFLOW_STAGE_LABELS = {
@@ -18,6 +21,9 @@ WORKFLOW_STAGE_LABELS = {
     STAGE_IN_PRODUCTION: "در حال ساخت",
     STAGE_PRODUCTION_DONE: "آماده باربری",
     STAGE_IN_FREIGHT: "در باربری",
+    STAGE_IN_WAREHOUSE: "در انبار",
+    STAGE_READY_FOR_PICKUP: "آماده تحویل حضوری",
+    STAGE_MERCHANT_ASSIGNED: "بازرگان — صف کارخانه",
     STAGE_COMPLETED: "تکمیل شده",
 }
 
@@ -28,6 +34,9 @@ WORKFLOW_STAGE_PROGRESS = {
     STAGE_IN_PRODUCTION: 60,
     STAGE_PRODUCTION_DONE: 80,
     STAGE_IN_FREIGHT: 92,
+    STAGE_IN_WAREHOUSE: 55,
+    STAGE_READY_FOR_PICKUP: 70,
+    STAGE_MERCHANT_ASSIGNED: 40,
     STAGE_COMPLETED: 100,
 }
 
@@ -41,6 +50,9 @@ BRANCH_MASK_STAGES = {
     STAGE_IN_PRODUCTION,
     STAGE_PRODUCTION_DONE,
     STAGE_IN_FREIGHT,
+    STAGE_IN_WAREHOUSE,
+    STAGE_READY_FOR_PICKUP,
+    STAGE_MERCHANT_ASSIGNED,
     STAGE_COMPLETED,
 }
 
@@ -82,6 +94,10 @@ def approve_office_order(
     check_registration_account_id=None,
     check_deposit_account_id=None,
     save_check_accounts_as_default=False,
+    fulfillment_route=None,
+    warehouse_id=None,
+    source_branch=None,
+    merchant_user_id=None,
 ):
     from logic.check_accounting import (
         _resolve_account,
@@ -89,7 +105,12 @@ def approve_office_order(
         sale_has_pending_checks,
         save_user_accounting_preference,
     )
-    from logic.order_queues import create_factory_order_from_office
+    from logic.order_cycle import (
+        ROUTE_FACTORY,
+        apply_fulfillment_fields,
+        fulfillment_note,
+    )
+    from logic.order_queues import create_factory_order_from_office, route_office_order
     from logic.sales import _apply_purchase_to_customer, _create_sale_accounting, balance_due
 
     if office_order.status != office_order.STATUS_PENDING:
@@ -103,7 +124,27 @@ def approve_office_order(
     if has_checks and not check_registration_account_id:
         raise ValueError("برای سفارش چکی، انتخاب حساب ثبت چک الزامی است.")
 
-    create_factory_order_from_office(office_order, user)
+    fields = apply_fulfillment_fields(
+        sale,
+        route=fulfillment_route,
+        warehouse_id=warehouse_id,
+        source_branch=source_branch,
+        merchant_user_id=merchant_user_id,
+    )
+    route = fields["fulfillment_route"]
+    note = fulfillment_note(
+        route,
+        warehouse=fields["fulfillment_warehouse"],
+        source_branch=fields["fulfillment_source_branch"],
+        merchant=fields["merchant_user"],
+    )
+    if route == ROUTE_FACTORY:
+        create_factory_order_from_office(office_order, user)
+        sale.refresh_from_db()
+        sale.fulfillment_route = route
+        sale.save(update_fields=["fulfillment_route"])
+    else:
+        route_office_order(office_order, user, fields, note=note)
     office_order.refresh_from_db()
     sale.refresh_from_db()
 
@@ -167,13 +208,57 @@ def get_office_workflow_snapshot(office_order, factory_order=None):
         return {
             "workflow_stage": STAGE_BRANCH_APPROVED,
             "workflow_stage_display": WORKFLOW_STAGE_LABELS[STAGE_BRANCH_APPROVED],
-            "holder_department": "اداری",
+            "holder_department": "اداری CRM",
             "holder_name": None,
             "holder_detail": "در انتظار بررسی و تایید اداری",
             "can_rollback": True,
             "rollback_label": "بازگشت به فروشگاه",
             "rollback_action": "to_shop",
         }
+
+    stage = office_order.workflow_stage_id
+
+    if stage == STAGE_IN_WAREHOUSE:
+        source = office_order.fulfillment_warehouse or office_order.fulfillment_source_branch
+        source_label = source.label if source else "انبار"
+        return {
+            "workflow_stage": STAGE_IN_WAREHOUSE,
+            "workflow_stage_display": WORKFLOW_STAGE_LABELS[STAGE_IN_WAREHOUSE],
+            "holder_department": "انبار",
+            "holder_name": _user_display(office_order.accounting_approved_by),
+            "holder_detail": f"ارسال از {source_label}",
+            "can_rollback": True,
+            "rollback_label": "بازگشت به صف اداری",
+            "rollback_action": "to_office",
+        }
+
+    if stage == STAGE_READY_FOR_PICKUP:
+        return {
+            "workflow_stage": STAGE_READY_FOR_PICKUP,
+            "workflow_stage_display": WORKFLOW_STAGE_LABELS[STAGE_READY_FOR_PICKUP],
+            "holder_department": "فروشگاه",
+            "holder_name": _user_display(office_order.accounting_approved_by),
+            "holder_detail": "آماده تحویل حضوری از مغازه",
+            "can_rollback": True,
+            "rollback_label": "بازگشت به صف اداری",
+            "rollback_action": "to_office",
+        }
+
+    if stage == STAGE_MERCHANT_ASSIGNED:
+        merchant = _user_display(office_order.merchant_user)
+        return {
+            "workflow_stage": STAGE_MERCHANT_ASSIGNED,
+            "workflow_stage_display": WORKFLOW_STAGE_LABELS[STAGE_MERCHANT_ASSIGNED],
+            "holder_department": "کارخانه",
+            "holder_name": merchant,
+            "holder_detail": "فاکتور بازرگان — در صف ساخت" + (f" — همکار: {merchant}" if merchant else ""),
+            "can_rollback": True,
+            "rollback_label": "بازگشت به صف اداری",
+            "rollback_action": "to_office",
+        }
+
+    if factory_order is None:
+        factory_order = office_order
 
     stage = factory_order.workflow_stage_id
     if stage == FactoryOrder.WORKFLOW_STAGE_COMPLETED:
@@ -253,13 +338,19 @@ def get_office_workflow_snapshot(office_order, factory_order=None):
 
 @transaction.atomic
 def recall_factory_order_to_office(office_order, user, reason=""):
-    from backend.models import OfficeOrder
+    from backend.models import OfficeOrder, Sale
     from logic.order_queues import as_office_order, transition_order
 
+    allowed = {
+        STAGE_ACCOUNTING_APPROVED,
+        STAGE_IN_WAREHOUSE,
+        STAGE_READY_FOR_PICKUP,
+        STAGE_MERCHANT_ASSIGNED,
+    }
     if office_order.status != OfficeOrder.STATUS_RELEASED:
-        raise ValueError("فقط سفارش‌های ارسال‌شده به کارخانه قابل بازگردانی به اداری هستند.")
-    if office_order.workflow_stage_id != STAGE_ACCOUNTING_APPROVED:
-        raise ValueError("فقط سفارش‌های در صف دریافت کارخانه قابل بازگردانی به اداری هستند.")
+        raise ValueError("فقط سفارش‌های ارسال‌شده از اداری قابل بازگردانی هستند.")
+    if office_order.workflow_stage_id not in allowed:
+        raise ValueError("این سفارش در مرحله‌ای نیست که بتوان آن را به اداری برگرداند.")
 
     sale = transition_order(
         office_order,
@@ -270,6 +361,11 @@ def recall_factory_order_to_office(office_order, user, reason=""):
         accounting_approved_at=None,
         accounting_approved_by_id=None,
         factory_released_at=None,
+        fulfillment_route=None,
+        fulfillment_warehouse_id=None,
+        fulfillment_source_branch_id=None,
+        merchant_user_id=None,
+        order_status=Sale.ORDER_STATUS_PENDING,
     )
     return as_office_order(sale)
 
@@ -395,7 +491,11 @@ def reject_office_order(office_order, user, reason=""):
 
 @transaction.atomic
 def receive_factory_order(factory_order, user):
-    if factory_order.workflow_stage_id != factory_order.WORKFLOW_STAGE_ACCOUNTING_APPROVED:
+    allowed = {
+        factory_order.WORKFLOW_STAGE_ACCOUNTING_APPROVED,
+        STAGE_MERCHANT_ASSIGNED,
+    }
+    if factory_order.workflow_stage_id not in allowed:
         raise ValueError("این سفارش هنوز برای کارخانه ارسال نشده است.")
     from logic.order_queues import as_factory_order, transition_order
 
@@ -463,3 +563,33 @@ def complete_factory_freight(factory_order, user):
         freight_completed_at=timezone.now(),
     )
     return as_factory_order(sale)
+
+
+@transaction.atomic
+def complete_warehouse_order(sale, user):
+    from logic.order_queues import transition_order
+
+    if sale.workflow_stage_id != STAGE_IN_WAREHOUSE:
+        raise ValueError("این سفارش در مرحله انبار نیست.")
+    return transition_order(
+        sale,
+        STAGE_COMPLETED,
+        user,
+        note="تکمیل ارسال انبار",
+        warehouse_completed_at=timezone.now(),
+    )
+
+
+@transaction.atomic
+def complete_pickup_order(sale, user):
+    from logic.order_queues import transition_order
+
+    if sale.workflow_stage_id != STAGE_READY_FOR_PICKUP:
+        raise ValueError("این سفارش آماده تحویل حضوری نیست.")
+    return transition_order(
+        sale,
+        STAGE_COMPLETED,
+        user,
+        note="تحویل حضوری به مشتری",
+        pickup_completed_at=timezone.now(),
+    )

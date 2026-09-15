@@ -14,6 +14,7 @@ import { PAGE_SIZE, PICKER_LIMIT, withPageParams } from '../config/pagination'
 import { useConfirm } from '../context/ConfirmContext'
 import { formatDate, formatMoney } from '../utils/format'
 import { currentJalali, jalaliMonthToGregorian, PERSIAN_MONTHS, todayIso, toPersianDigits } from '../utils/jalali'
+import { fromLegacy } from '../styles/tw.js'
 
 const EMPTY = {
   sale_id: '',
@@ -28,7 +29,7 @@ function CheckFormFields({ form, setForm, editingCustomer = '' }) {
 
   return (
     <>
-      {editingCustomer && <p className="muted">نام مشتری: {editingCustomer}</p>}
+      {editingCustomer && <p className={fromLegacy("muted")}>نام مشتری: {editingCustomer}</p>}
       {CHECK_ROW_FIELDS.map((field) => {
         if (field.type === 'date') {
           return (
@@ -226,13 +227,13 @@ export default function Checks() {
   }
 
   return (
-    <div className="page">
+    <div className={fromLegacy("page")}>
       {report && (
-        <div className="stats-grid">
-          <Card title={`چک‌های ${monthLabel}`}><p className="stat-value">{report.count} فقره</p></Card>
-          <Card title="مجموع مبلغ"><p className="stat-value">{formatMoney(report.total_amount)}</p></Card>
-          <Card title="پرداخت‌شده"><p className="stat-value">{formatMoney(report.paid_amount)}</p></Card>
-          <Card title="مانده"><p className="stat-value">{formatMoney(report.pending_amount)}</p></Card>
+        <div className={fromLegacy("stats-grid")}>
+          <Card title={`چک‌های ${monthLabel}`}><p className={fromLegacy("stat-value")}>{report.count} فقره</p></Card>
+          <Card title="مجموع مبلغ"><p className={fromLegacy("stat-value")}>{formatMoney(report.total_amount)}</p></Card>
+          <Card title="پرداخت‌شده"><p className={fromLegacy("stat-value")}>{formatMoney(report.paid_amount)}</p></Card>
+          <Card title="مانده"><p className={fromLegacy("stat-value")}>{formatMoney(report.pending_amount)}</p></Card>
         </div>
       )}
       <OfficeSectionCard
@@ -244,7 +245,7 @@ export default function Checks() {
           </>
         }
       >
-        {error && <div className="alert-error">{error}</div>}
+        {error && <div className={fromLegacy("alert-error")}>{error}</div>}
         <FilterBar>
           <Field label="ماه گزارش">
             <PersianMonthPicker
@@ -268,23 +269,23 @@ export default function Checks() {
           </Field>
           <Field label="جستجو">
             <input
-              className="search-input"
+              className={fromLegacy("search-input")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="شماره چک، بانک یا مشتری…"
               onKeyDown={(e) => e.key === 'Enter' && load()}
             />
           </Field>
-          <div className="page-filters-actions">
+          <div className={fromLegacy("page-filters-actions")}>
             <Button type="button" variant="ghost" onClick={() => load()}>اعمال فیلتر</Button>
           </div>
         </FilterBar>
-        {loading ? <div className="loading">در حال بارگذاری…</div> : items.length === 0 ? (
+        {loading ? <div className={fromLegacy("loading")}>در حال بارگذاری…</div> : items.length === 0 ? (
           <EmptyState text="چکی در این ماه نیست." />
         ) : (
           <>
-            <div className="table-wrap checks-table-desktop">
-              <table className="table">
+            <div className={fromLegacy("table-wrap checks-table-desktop")}>
+              <table className={fromLegacy("table")}>
                 <thead>
                   <tr>
                     <th>مشتری</th>
@@ -305,47 +306,47 @@ export default function Checks() {
                       <td>{i.received_at ? formatDate(i.received_at) : '—'}</td>
                       <td>{i.bank_name || '—'}</td>
                       <td>{formatDate(i.due_date)}</td>
-                      <td className="ltr">{i.check_number || '—'}</td>
+                      <td className={fromLegacy("ltr")}>{i.check_number || '—'}</td>
                       <td>{formatMoney(i.amount)}</td>
                       <td>{i.receiver_name || '—'}</td>
                       <td><Badge color={i.status === 'paid' ? 'var(--success)' : 'var(--warning)'}>{i.status_display}</Badge></td>
-                      <td className="row-actions">
+                      <td className={fromLegacy("row-actions")}>
                         {i.status !== 'paid' && (
                           <>
-                            <button type="button" className="link" onClick={() => openEdit(i)}>ویرایش</button>
-                            <button type="button" className="link link-success" onClick={() => pay(i.id)}>وصول</button>
+                            <button type="button" className={fromLegacy("link")} onClick={() => openEdit(i)}>ویرایش</button>
+                            <button type="button" className={fromLegacy("link link-success")} onClick={() => pay(i.id)}>وصول</button>
                           </>
                         )}
-                        <button type="button" className="link danger" onClick={() => remove(i.id)}>حذف</button>
+                        <button type="button" className={fromLegacy("link danger")} onClick={() => remove(i.id)}>حذف</button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <div className="checks-cards-mobile">
+            <div className={fromLegacy("checks-cards-mobile")}>
               {items.map((i) => (
-                <div key={i.id} className="m-card">
-                  <div className="m-card-head">
+                <div key={i.id} className={fromLegacy("m-card")}>
+                  <div className={fromLegacy("m-card-head")}>
                     <strong>{i.customer_name}</strong>
                     <Badge color={i.status === 'paid' ? 'var(--success)' : 'var(--warning)'}>{i.status_display}</Badge>
                   </div>
-                  <div className="m-card-grid">
-                    <div><span className="muted">تحویل به شعبه</span>{i.received_at ? formatDate(i.received_at) : '—'}</div>
-                    <div><span className="muted">بانک</span>{i.bank_name || '—'}</div>
-                    <div><span className="muted">سررسید</span>{formatDate(i.due_date)}</div>
-                    <div><span className="muted">شماره چک</span><span className="ltr">{i.check_number || '—'}</span></div>
-                    <div><span className="muted">مبلغ</span><strong>{formatMoney(i.amount)}</strong></div>
-                    <div><span className="muted">تحویل‌گیرنده</span>{i.receiver_name || '—'}</div>
+                  <div className={fromLegacy("m-card-grid")}>
+                    <div><span className={fromLegacy("muted")}>تحویل به شعبه</span>{i.received_at ? formatDate(i.received_at) : '—'}</div>
+                    <div><span className={fromLegacy("muted")}>بانک</span>{i.bank_name || '—'}</div>
+                    <div><span className={fromLegacy("muted")}>سررسید</span>{formatDate(i.due_date)}</div>
+                    <div><span className={fromLegacy("muted")}>شماره چک</span><span className={fromLegacy("ltr")}>{i.check_number || '—'}</span></div>
+                    <div><span className={fromLegacy("muted")}>مبلغ</span><strong>{formatMoney(i.amount)}</strong></div>
+                    <div><span className={fromLegacy("muted")}>تحویل‌گیرنده</span>{i.receiver_name || '—'}</div>
                   </div>
-                  <div className="m-card-actions">
+                  <div className={fromLegacy("m-card-actions")}>
                     {i.status !== 'paid' && (
                       <>
-                        <button type="button" className="link" onClick={() => openEdit(i)}>ویرایش</button>
-                        <button type="button" className="link link-success" onClick={() => pay(i.id)}>وصول</button>
+                        <button type="button" className={fromLegacy("link")} onClick={() => openEdit(i)}>ویرایش</button>
+                        <button type="button" className={fromLegacy("link link-success")} onClick={() => pay(i.id)}>وصول</button>
                       </>
                     )}
-                    <button type="button" className="link danger" onClick={() => remove(i.id)}>حذف</button>
+                    <button type="button" className={fromLegacy("link danger")} onClick={() => remove(i.id)}>حذف</button>
                   </div>
                 </div>
               ))}
@@ -359,7 +360,7 @@ export default function Checks() {
         )}
       </OfficeSectionCard>
       <Modal title={editing ? 'ویرایش چک' : 'ثبت چک'} open={modalOpen} onClose={() => { setModalOpen(false); setEditing(null) }}>
-        <form onSubmit={save} className="form">
+        <form onSubmit={save} className={fromLegacy("form")}>
           {!editing && (
             <Field label="فروش (نام مشتری از فاکتور)">
               <Select

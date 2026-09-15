@@ -35,10 +35,15 @@ import EmployeeRanking from './pages/EmployeeRanking'
 import OrgChart from './pages/OrgChart'
 import RecordFilter from './pages/RecordFilter'
 import Settings from './pages/Settings'
+import Cycle from './pages/Cycle'
+import CycleWatch from './pages/CycleWatch'
+import WarehouseOrders from './pages/WarehouseOrders'
+import PickupOrders from './pages/PickupOrders'
 import Icon from './components/icons/Icon'
 import { Button } from './components/ui'
 import BrandLogo from './components/BrandLogo'
 import ThemeToggle from './components/ThemeToggle'
+import { cn, tw } from './styles/tw'
 
 const PAGES = {
   dashboard: Dashboard,
@@ -59,6 +64,10 @@ const PAGES = {
   users: Users,
   roles: Roles,
   settings: Settings,
+  cycle: Cycle,
+  'cycle-watch': CycleWatch,
+  warehouse: WarehouseOrders,
+  pickup: PickupOrders,
   ranking: EmployeeRanking,
   orgchart: OrgChart,
   attendance: Attendance,
@@ -72,15 +81,15 @@ const PAGES = {
 function NoAccessScreen() {
   const { user, logout } = useAuth()
   return (
-    <div className="auth-screen">
-      <ThemeToggle />
-      <div className="auth-card auth-card--centered liquid-glass liquid-glass--strong liquid-glass--panel">
-        <BrandLogo size={72} className="brand-logo--auth" />
-        <div className="auth-status-icon auth-status-icon--denied">
+    <div className={tw.authScreen}>
+      <ThemeToggle className={tw.themeToggleAuth} />
+      <div className={cn(tw.authCard, tw.authCardCentered, 'liquid-glass liquid-glass--strong liquid-glass--panel')}>
+        <BrandLogo size={72} className={tw.brandLogoAuth} />
+        <div className={tw.authStatusIcon}>
           <Icon name="prohibit" size={28} />
         </div>
-        <h1 className="auth-status-title">دسترسی ندارید</h1>
-        <p className="muted auth-status-message">
+        <h1 className={tw.authStatusTitle}>دسترسی ندارید</h1>
+        <p className={cn(tw.muted, tw.authStatusMessage)}>
           {user?.full_name} عزیز، هیچ بخشی از پنل برای نقش شما فعال نیست.
         </p>
         <Button variant="ghost" onClick={logout}>
@@ -94,15 +103,15 @@ function NoAccessScreen() {
 function PendingScreen() {
   const { user, logout } = useAuth()
   return (
-    <div className="auth-screen">
-      <ThemeToggle />
-      <div className="auth-card auth-card--centered liquid-glass liquid-glass--strong liquid-glass--panel">
-        <BrandLogo size={72} className="brand-logo--auth" />
-        <div className="auth-status-icon auth-status-icon--warning">
+    <div className={tw.authScreen}>
+      <ThemeToggle className={tw.themeToggleAuth} />
+      <div className={cn(tw.authCard, tw.authCardCentered, 'liquid-glass liquid-glass--strong liquid-glass--panel')}>
+        <BrandLogo size={72} className={tw.brandLogoAuth} />
+        <div className={tw.authStatusIcon}>
           <Icon name="hourglass" size={28} />
         </div>
-        <h1 className="auth-status-title">در انتظار تایید مدیر</h1>
-        <p className="muted auth-status-message">
+        <h1 className={tw.authStatusTitle}>در انتظار تایید مدیر</h1>
+        <p className={cn(tw.muted, tw.authStatusMessage)}>
           {user?.full_name} عزیز، حساب شما ساخته شده اما هنوز نقشی به آن اختصاص داده نشده است.
         </p>
         <Button variant="ghost" onClick={logout}>
@@ -186,7 +195,7 @@ function Shell() {
   }, [route.portal, route.page, user, portals])
 
   if (loading) {
-    return <div className="fullscreen-loading">در حال بارگذاری…</div>
+    return <div className={tw.loading}>در حال بارگذاری…</div>
   }
 
   if (!user) return <Login />
@@ -205,8 +214,8 @@ function Shell() {
       {allowed ? (
         <PageComponent portal={route.portal} page={route.page} />
       ) : (
-        <div className="page">
-          <div className="alert-error">دسترسی به این بخش را ندارید.</div>
+        <div className={tw.page}>
+          <div className={tw.alert}>دسترسی به این بخش را ندارید.</div>
         </div>
       )}
     </Layout>

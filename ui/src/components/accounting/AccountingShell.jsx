@@ -3,6 +3,7 @@
 import Icon from '../icons/Icon'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
 import { ACCOUNTING_SECTIONS, sectionForTab } from '../../config/accountingNav'
+import { fromLegacy } from '../../styles/tw.js'
 
 export default function AccountingShell({
   pageTitle,
@@ -24,37 +25,37 @@ export default function AccountingShell({
   }
 
   return (
-    <div className={`acct-v2 page accounting-page accounting-page--v2 accounting-page--${ledgerKind}`}>
-      <header className="acct-v2-header">
-        <div className="acct-v2-header-main">
-          <div className="acct-v2-title-block">
-            <h1 className="acct-v2-title">{pageTitle}</h1>
-            <span className={`acct-v2-ledger-badge acct-v2-ledger-badge--${ledgerKind}`}>
+    <div className={fromLegacy(`acct-v2 page accounting-page accounting-page--v2 accounting-page--${ledgerKind}`)}>
+      <header className={fromLegacy("acct-v2-header")}>
+        <div className={fromLegacy("acct-v2-header-main")}>
+          <div className={fromLegacy("acct-v2-title-block")}>
+            <h1 className={fromLegacy("acct-v2-title")}>{pageTitle}</h1>
+            <span className={fromLegacy(`acct-v2-ledger-badge acct-v2-ledger-badge--${ledgerKind}`)}>
               {ledgerKind === 'factory' ? 'دفتر کارخانه' : 'دفتر اداری'}
             </span>
           </div>
-          <p className="acct-v2-section-label muted">{currentSection.label}</p>
+          <p className={fromLegacy("acct-v2-section-label muted")}>{currentSection.label}</p>
         </div>
-        {toolbar && <div className="acct-v2-toolbar">{toolbar}</div>}
+        {toolbar && <div className={fromLegacy("acct-v2-toolbar")}>{toolbar}</div>}
       </header>
 
-      <div className="acct-v2-body">
+      <div className={fromLegacy("acct-v2-body")}>
         {!compact && (
-          <aside className="acct-v2-sidebar liquid-glass liquid-glass--panel" aria-label="بخش‌های حسابداری">
-            <nav className="acct-v2-nav">
+          <aside className={fromLegacy("acct-v2-sidebar liquid-glass liquid-glass--panel")} aria-label="بخش‌های حسابداری">
+            <nav className={fromLegacy("acct-v2-nav")}>
               {sections.map((section) => {
                 const active = section.tabs.includes(activeTab)
                 return (
                   <button
                     key={section.id}
                     type="button"
-                    className={`acct-v2-nav-item${active ? ' active' : ''}`}
+                    className={fromLegacy(`acct-v2-nav-item${active ? ' active' : ''}`)}
                     onClick={() => pickSection(section)}
                   >
-                    <span className="acct-v2-nav-icon" aria-hidden>
+                    <span className={fromLegacy("acct-v2-nav-icon")} aria-hidden>
                       <Icon name={section.icon} size={20} />
                     </span>
-                    <span className="acct-v2-nav-text">
+                    <span className={fromLegacy("acct-v2-nav-text")}>
                       <strong>{section.label}</strong>
                       <small>{section.description}</small>
                     </span>
@@ -66,14 +67,14 @@ export default function AccountingShell({
         )}
 
         {compact && (
-          <nav className="acct-v2-mobile-nav" aria-label="بخش‌های حسابداری">
+          <nav className={fromLegacy("acct-v2-mobile-nav")} aria-label="بخش‌های حسابداری">
             {sections.map((section) => {
               const active = section.tabs.includes(activeTab)
               return (
                 <button
                   key={section.id}
                   type="button"
-                  className={`acct-v2-mobile-pill${active ? ' active' : ''}`}
+                  className={fromLegacy(`acct-v2-mobile-pill${active ? ' active' : ''}`)}
                   onClick={() => pickSection(section)}
                 >
                   <Icon name={section.icon} size={16} />
@@ -84,7 +85,7 @@ export default function AccountingShell({
           </nav>
         )}
 
-        <main className="acct-v2-main">{children}</main>
+        <main className={fromLegacy("acct-v2-main")}>{children}</main>
       </div>
     </div>
   )

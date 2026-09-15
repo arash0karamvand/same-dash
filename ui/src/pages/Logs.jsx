@@ -4,6 +4,7 @@ import Select from '../components/Select'
 import { Button, Card, EmptyState, Field, FilterBar, LoadMoreButton } from '../components/ui'
 import { PAGE_SIZE } from '../config/pagination'
 import { formatDate } from '../utils/format'
+import { fromLegacy } from '../styles/tw.js'
 
 export default function Logs() {
   const [logs, setLogs] = useState([])
@@ -50,9 +51,9 @@ export default function Logs() {
   }, [load])
 
   return (
-    <div className="page">
+    <div className={fromLegacy("page")}>
       <Card title="لاگ فعالیت‌ها">
-        {error && <div className="alert-error">{error}</div>}
+        {error && <div className={fromLegacy("alert-error")}>{error}</div>}
         <FilterBar>
           <Field label="نوع عملیات">
             <Select
@@ -72,27 +73,27 @@ export default function Logs() {
           </Field>
           <Field label="جستجو">
             <input
-              className="search-input"
+              className={fromLegacy("search-input")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="کاربر، شرح، نوع موجودیت…"
               onKeyDown={(e) => e.key === 'Enter' && load({ offset: 0 })}
             />
           </Field>
-          <div className="page-filters-actions">
+          <div className={fromLegacy("page-filters-actions")}>
             <Button type="button" onClick={() => load({ offset: 0 })}>اعمال فیلتر</Button>
           </div>
         </FilterBar>
-        <p className="muted">
+        <p className={fromLegacy("muted")}>
           {total > 0 ? `${total.toLocaleString('fa-IR')} رکورد` : 'بدون رکورد'}
           {logs.some((l) => l.is_executive_only) && ' — شامل لاگ‌های محرمانه'}
         </p>
-        {loading ? <div className="loading">در حال بارگذاری…</div> : logs.length === 0 ? (
+        {loading ? <div className={fromLegacy("loading")}>در حال بارگذاری…</div> : logs.length === 0 ? (
           <EmptyState text="لاگی ثبت نشده." />
         ) : (
           <>
-            <div className="table-wrap logs-table-desktop">
-              <table className="table">
+            <div className={fromLegacy("table-wrap logs-table-desktop")}>
+              <table className={fromLegacy("table")}>
                 <thead>
                   <tr><th>زمان</th><th>کاربر</th><th>عملیات</th><th>موجودیت</th><th>شرح</th></tr>
                 </thead>
@@ -109,18 +110,18 @@ export default function Logs() {
                 </tbody>
               </table>
             </div>
-            <div className="logs-cards-mobile">
+            <div className={fromLegacy("logs-cards-mobile")}>
               {logs.map((l) => (
-                <div key={l.id} className={`m-card${l.is_executive_only ? ' row-highlight' : ''}`}>
-                  <div className="m-card-head">
+                <div key={l.id} className={fromLegacy(`m-card${l.is_executive_only ? ' row-highlight' : ''}`)}>
+                  <div className={fromLegacy("m-card-head")}>
                     <strong>{l.action_display}</strong>
-                    <span className="muted small">{formatDate(l.created_at)}</span>
+                    <span className={fromLegacy("muted small")}>{formatDate(l.created_at)}</span>
                   </div>
-                  <div className="m-card-grid">
-                    <div><span className="muted">کاربر</span>{l.user_name}</div>
-                    <div><span className="muted">موجودیت</span>{l.entity_type || '—'}</div>
+                  <div className={fromLegacy("m-card-grid")}>
+                    <div><span className={fromLegacy("muted")}>کاربر</span>{l.user_name}</div>
+                    <div><span className={fromLegacy("muted")}>موجودیت</span>{l.entity_type || '—'}</div>
                   </div>
-                  <p className="muted small" style={{ margin: '8px 0 0' }}>{l.message}{l.is_executive_only ? ' 🔒' : ''}</p>
+                  <p className={fromLegacy("muted small")} style={{ margin: '8px 0 0' }}>{l.message}{l.is_executive_only ? ' 🔒' : ''}</p>
                 </div>
               ))}
             </div>

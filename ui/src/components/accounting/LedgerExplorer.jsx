@@ -6,6 +6,7 @@ import { Button, EmptyState } from '../ui'
 import { TERMS } from '../../config/accountingTerms'
 import { formatNumber, formatRial } from '../../utils/format'
 import { useMediaQuery } from '../../hooks/useMediaQuery'
+import { fromLegacy } from '../../styles/tw.js'
 
 function balanceLabel(row) {
   if (!row) return null
@@ -18,20 +19,20 @@ function balanceLabel(row) {
 
 function TreeNode({ label, code, balance, depth = 0, active, expanded, hasChildren, onToggle, onSelect }) {
   return (
-    <div className={`acct-tree-node acct-tree-node--depth-${depth}${active ? ' is-active' : ''}`}>
-      <div className="acct-tree-node-row">
+    <div className={fromLegacy(`acct-tree-node acct-tree-node--depth-${depth}${active ? ' is-active' : ''}`)}>
+      <div className={fromLegacy("acct-tree-node-row")}>
         {hasChildren ? (
-          <button type="button" className="acct-tree-toggle" onClick={onToggle} aria-label={expanded ? 'بستن' : 'باز کردن'}>
+          <button type="button" className={fromLegacy("acct-tree-toggle")} onClick={onToggle} aria-label={expanded ? 'بستن' : 'باز کردن'}>
             <Icon name={expanded ? 'chevron-up' : 'chevron-down'} size={14} />
           </button>
         ) : (
-          <span className="acct-tree-toggle acct-tree-toggle--spacer" />
+          <span className={fromLegacy("acct-tree-toggle acct-tree-toggle--spacer")} />
         )}
-        <button type="button" className="acct-tree-select" onClick={onSelect}>
-          <span className="acct-tree-code">{code}</span>
-          <span className="acct-tree-name">{label}</span>
+        <button type="button" className={fromLegacy("acct-tree-select")} onClick={onSelect}>
+          <span className={fromLegacy("acct-tree-code")}>{code}</span>
+          <span className={fromLegacy("acct-tree-name")}>{label}</span>
           {balance && (
-            <span className="acct-tree-balance">
+            <span className={fromLegacy("acct-tree-balance")}>
               {formatRial(balance.amount)}
               <small>{balance.side}</small>
             </span>
@@ -152,32 +153,32 @@ export default function LedgerExplorer({
   }
 
   const treePanel = (
-    <div className="acct-ledger-tree">
-      <div className="acct-ledger-tree-head">
+    <div className={fromLegacy("acct-ledger-tree")}>
+      <div className={fromLegacy("acct-ledger-tree-head")}>
         <h3>درخت حساب‌ها</h3>
         <input
-          className="search-input"
+          className={fromLegacy("search-input")}
           value={treeSearch}
           onChange={(e) => onTreeSearchChange?.(e.target.value)}
           placeholder="جستجوی کد یا عنوان…"
         />
       </div>
-      <div className="acct-ledger-tree-body">
+      <div className={fromLegacy("acct-ledger-tree-body")}>
         {loadingGeneral && !filteredGroups.length ? (
-          <div className="loading">در حال بارگذاری…</div>
+          <div className={fromLegacy("loading")}>در حال بارگذاری…</div>
         ) : !filteredGroups.length ? (
           <EmptyState text="حسابی یافت نشد." />
         ) : (
           filteredGroups.map((group) => (
-            <section key={group.class} className="acct-tree-group">
-              <p className="acct-tree-group-label">{group.class_label}</p>
+            <section key={group.class} className={fromLegacy("acct-tree-group")}>
+              <p className={fromLegacy("acct-tree-group-label")}>{group.class_label}</p>
               {(group.accounts || []).map((acc) => {
                 const balRow = generalBalanceMap.get(acc.id)
                 const isActive = drillGeneral?.account_id === acc.id && !drillSubsidiary && !drillDetailed
                 const expanded = expandedGenerals.has(acc.id) || drillGeneral?.account_id === acc.id
                 const accSubs = subsidiaries.filter((s) => s.account_id === acc.id)
                 return (
-                  <div key={acc.id} className="acct-tree-branch">
+                  <div key={acc.id} className={fromLegacy("acct-tree-branch")}>
                     <TreeNode
                       label={acc.name}
                       code={acc.code}
@@ -195,7 +196,7 @@ export default function LedgerExplorer({
                       const subExpanded = expandedSubs.has(sub.id) || drillSubsidiary?.subsidiary_id === sub.id
                       const subDetails = details.filter((d) => d.subsidiary_id === sub.id)
                       return (
-                        <div key={sub.id} className="acct-tree-branch">
+                        <div key={sub.id} className={fromLegacy("acct-tree-branch")}>
                           <TreeNode
                             label={sub.name}
                             code={sub.full_code || sub.code}
@@ -226,13 +227,13 @@ export default function LedgerExplorer({
                             )
                           })}
                           {subExpanded && loadingDetailed && !subDetails.length && (
-                            <p className="muted small acct-tree-loading">در حال بارگذاری تفصیلی…</p>
+                            <p className={fromLegacy("muted small acct-tree-loading")}>در حال بارگذاری تفصیلی…</p>
                           )}
                         </div>
                       )
                     })}
                     {expanded && loadingSubsidiary && !accSubs.length && (
-                      <p className="muted small acct-tree-loading">در حال بارگذاری معین…</p>
+                      <p className={fromLegacy("muted small acct-tree-loading")}>در حال بارگذاری معین…</p>
                     )}
                   </div>
                 )
@@ -245,33 +246,33 @@ export default function LedgerExplorer({
   )
 
   return (
-    <div className={`acct-ledger-explorer${sidePanel ? ' has-side-panel' : ''}`}>
+    <div className={fromLegacy(`acct-ledger-explorer${sidePanel ? ' has-side-panel' : ''}`)}>
       {compact && (
-        <div className="acct-ledger-mobile-bar">
+        <div className={fromLegacy("acct-ledger-mobile-bar")}>
           <Button type="button" variant="ghost" onClick={() => setTreeOpen((v) => !v)}>
             {treeOpen ? 'بستن درخت' : 'انتخاب حساب'}
           </Button>
-          {breadcrumb && <span className="acct-ledger-crumb muted">{breadcrumb}</span>}
+          {breadcrumb && <span className={fromLegacy("acct-ledger-crumb muted")}>{breadcrumb}</span>}
         </div>
       )}
 
-      <div className="acct-ledger-layout">
+      <div className={fromLegacy("acct-ledger-layout")}>
         {(!compact || treeOpen) && (
-          <aside className={`acct-ledger-tree-panel${compact ? ' acct-ledger-tree-panel--sheet' : ''}`}>
+          <aside className={fromLegacy(`acct-ledger-tree-panel${compact ? ' acct-ledger-tree-panel--sheet' : ''}`)}>
             {treePanel}
           </aside>
         )}
 
-        <section className="acct-ledger-detail-panel liquid-glass liquid-glass--panel">
-          <header className="acct-ledger-detail-head">
+        <section className={fromLegacy("acct-ledger-detail-panel liquid-glass liquid-glass--panel")}>
+          <header className={fromLegacy("acct-ledger-detail-head")}>
             <div>
               <h2>{TERMS.ledger}</h2>
-              {detailHint ? <p className="acct-ledger-detail-sub">{detailHint}</p> : (
-                <p className="muted">از درخت سمت راست یک حساب انتخاب کنید.</p>
+              {detailHint ? <p className={fromLegacy("acct-ledger-detail-sub")}>{detailHint}</p> : (
+                <p className={fromLegacy("muted")}>از درخت سمت راست یک حساب انتخاب کنید.</p>
               )}
-              {breadcrumb && !compact && <p className="acct-ledger-crumb muted">{breadcrumb}</p>}
+              {breadcrumb && !compact && <p className={fromLegacy("acct-ledger-crumb muted")}>{breadcrumb}</p>}
             </div>
-            <div className="acct-ledger-detail-actions">
+            <div className={fromLegacy("acct-ledger-detail-actions")}>
               {canCreate && (
                 <>
                   <Button type="button" size="sm" onClick={onQuickDoc}>+ سند سریع</Button>
@@ -280,13 +281,13 @@ export default function LedgerExplorer({
               )}
             </div>
           </header>
-          <div className="acct-ledger-detail-body">
+          <div className={fromLegacy("acct-ledger-detail-body")}>
             {ledgerPanel || <EmptyState text="حسابی انتخاب نشده — از درخت یک حساب را برگزینید." />}
           </div>
         </section>
 
         {sidePanel && (
-          <aside className="acct-ledger-side-panel">{sidePanel}</aside>
+          <aside className={fromLegacy("acct-ledger-side-panel")}>{sidePanel}</aside>
         )}
       </div>
     </div>

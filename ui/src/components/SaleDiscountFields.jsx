@@ -1,6 +1,7 @@
 import MoneyInput from './MoneyInput'
 import { Field } from './ui'
 import { formatMoney } from '../utils/format'
+import { fromLegacy } from '../styles/tw.js'
 
 export const DISCOUNT_TYPES = [
   { value: 'percent', label: 'درصدی' },
@@ -69,16 +70,16 @@ export default function SaleDiscountFields({
   }
 
   return (
-    <div className="sale-discount-block">
+    <div className={fromLegacy("sale-discount-block")}>
       <Field label="نوع تخفیف">
-        <div className="discount-type-picker" role="group" aria-label="نوع تخفیف">
+        <div className={fromLegacy("discount-type-picker")} role="group" aria-label="نوع تخفیف">
           {DISCOUNT_TYPES.map((opt) => {
             const disabled = opt.value === 'wallet' && walletDisabled
             return (
               <button
                 key={opt.value}
                 type="button"
-                className={`discount-type-btn${form.discount_type === opt.value ? ' active' : ''}`}
+                className={fromLegacy(`discount-type-btn${form.discount_type === opt.value ? ' active' : ''}`)}
                 onClick={() => !disabled && setDiscountType(opt.value)}
                 disabled={disabled}
                 title={disabled ? 'مشتری موجودی حساب ندارد' : undefined}
@@ -114,8 +115,8 @@ export default function SaleDiscountFields({
       )}
 
       {form.discount_type === 'wallet' && (
-        <div className="wallet-discount-panel">
-          <p className="wallet-balance-line">
+        <div className={fromLegacy("wallet-discount-panel")}>
+          <p className={fromLegacy("wallet-balance-line")}>
             موجودی حساب مشتری: <strong>{formatMoney(walletBalance)}</strong>
           </p>
           <Field label="مبلغ استفاده از موجودی">
@@ -126,17 +127,17 @@ export default function SaleDiscountFields({
               onChange={(e) => setForm({ ...form, discount_value: e.target.value })}
             />
           </Field>
-          <button type="button" className="link wallet-use-all" onClick={useFullWallet}>
+          <button type="button" className={fromLegacy("link wallet-use-all")} onClick={useFullWallet}>
             استفاده از کل موجودی ({formatMoney(Math.min(walletBalance, saleLineTotal(form)))})
           </button>
         </div>
       )}
 
       {saleLineTotal(form) > 0 && (
-        <div className="sale-amount-summary">
+        <div className={fromLegacy("sale-amount-summary")}>
           <div><span>جمع</span><strong>{formatMoney(saleLineTotal(form))}</strong></div>
-          <div><span>تخفیف</span><strong className="discount-amount">−{formatMoney(discountTomans)}</strong></div>
-          <div className="final-row"><span>مبلغ نهایی</span><strong>{formatMoney(finalAmount)}</strong></div>
+          <div><span>تخفیف</span><strong className={fromLegacy("discount-amount")}>−{formatMoney(discountTomans)}</strong></div>
+          <div className={fromLegacy("final-row")}><span>مبلغ نهایی</span><strong>{formatMoney(finalAmount)}</strong></div>
         </div>
       )}
     </div>

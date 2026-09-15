@@ -4,6 +4,7 @@ import PersianDateInput from './PersianDateInput'
 import { Button, Field } from './ui'
 import { TERMS } from '../config/accountingTerms'
 import { accountLevelLabel } from '../utils/accountHelpers'
+import { fromLegacy } from '../styles/tw.js'
 
 const CARD_LABELS = {
   general: TERMS.generalAccount,
@@ -33,7 +34,7 @@ export default function LedgerSidePanelContent({
   return (
     <>
       {showTabs && (
-        <div className="ld-side__tabs" role="tablist" aria-label="نوع ساخت">
+        <div className={fromLegacy("ld-side__tabs")} role="tablist" aria-label="نوع ساخت">
           <button
             type="button"
             role="tab"
@@ -55,7 +56,7 @@ export default function LedgerSidePanelContent({
         </div>
       )}
 
-      <p className="ld-side__context muted small">
+      <p className={fromLegacy("ld-side__context muted small")}>
         کارت فعال: <strong>{cardLabel}</strong>
         {selection?.row && (
           <>
@@ -68,15 +69,15 @@ export default function LedgerSidePanelContent({
       </p>
 
       {showTabs && sideTab === 'document' ? (
-        <form className="form chart-account-detail-form" onSubmit={onSaveQuickDoc}>
+        <form className={fromLegacy("form chart-account-detail-form")} onSubmit={onSaveQuickDoc}>
           {!selection ? (
-            <div className="chart-account-detail-empty">
-              <p className="muted">برای ثبت {TERMS.document}، ابتدا در کارت «{cardLabel}» یک حساب انتخاب کنید.</p>
+            <div className={fromLegacy("chart-account-detail-empty")}>
+              <p className={fromLegacy("muted")}>برای ثبت {TERMS.document}، ابتدا در کارت «{cardLabel}» یک حساب انتخاب کنید.</p>
             </div>
           ) : (
             <>
-              {quickDocSuccess && <div className="alert-success">{quickDocSuccess}</div>}
-              {quickDocError && <div className="alert-error">{quickDocError}</div>}
+              {quickDocSuccess && <div className={fromLegacy("alert-success")}>{quickDocSuccess}</div>}
+              {quickDocError && <div className={fromLegacy("alert-error")}>{quickDocError}</div>}
               <Field label={TERMS.description}>
                 <input
                   value={quickDocForm.description}
@@ -96,13 +97,13 @@ export default function LedgerSidePanelContent({
               </Field>
               <Field label={TERMS.attachCode}>
                 <input
-                  className="attach-code-input"
+                  className={fromLegacy("attach-code-input")}
                   value={quickDocForm.attach_code}
                   onChange={(e) => onQuickDocFormChange({ ...quickDocForm, attach_code: e.target.value })}
                   placeholder="اختیاری"
                 />
               </Field>
-              <p className="muted small chart-account-detail-hint">
+              <p className={fromLegacy("muted small chart-account-detail-hint")}>
                 ثبت روی{' '}
                 <strong>{accountLevelLabel(selection.level)}</strong>
                 {' — '}
@@ -110,7 +111,7 @@ export default function LedgerSidePanelContent({
                 {' '}
                 {selection.row.account_name}
               </p>
-              <div className="form-grid-2">
+              <div className={fromLegacy("form-grid-2")}>
                 <Field label={TERMS.debit}>
                   <MoneyInput
                     min="0"

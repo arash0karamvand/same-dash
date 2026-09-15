@@ -108,7 +108,10 @@ DEFAULT_LOOKUPS = [
     ("workflow_stage", "in_production", "در حال ساخت", 3, {"color": "#0ea5e9"}),
     ("workflow_stage", "production_done", "آماده باربری", 4, {"color": "#14b8a6"}),
     ("workflow_stage", "in_freight", "در باربری", 5, {"color": "#f97316"}),
-    ("workflow_stage", "completed", "تکمیل شده", 6, {"color": "#10b981"}),
+    ("workflow_stage", "in_warehouse", "در انبار", 6, {"color": "#64748b"}),
+    ("workflow_stage", "ready_for_pickup", "آماده تحویل حضوری", 7, {"color": "#22c55e"}),
+    ("workflow_stage", "merchant_assigned", "بازرگان — صف کارخانه", 8, {"color": "#a855f7"}),
+    ("workflow_stage", "completed", "تکمیل شده", 9, {"color": "#10b981"}),
 ]
 
 REFERENCE_ROWS = {
@@ -460,6 +463,12 @@ def seed_config_defaults():
     seed_menu_sections()
     seed_org_ranks()
     seed_org_roles()
+    try:
+        from logic.order_cycle import seed_order_cycle
+
+        seed_order_cycle()
+    except Exception:
+        pass
 
 
 def permission_catalog():

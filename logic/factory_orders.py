@@ -24,6 +24,7 @@ QUEUE_IN_PRODUCTION = "in_production"
 
 PRODUCTION_STAGES = {
     FactoryOrder.WORKFLOW_STAGE_ACCOUNTING_APPROVED,
+    FactoryOrder.WORKFLOW_STAGE_MERCHANT_ASSIGNED,
     FactoryOrder.WORKFLOW_STAGE_IN_PRODUCTION,
 }
 BUILT_STAGES = {FactoryOrder.WORKFLOW_STAGE_PRODUCTION_DONE}
@@ -96,7 +97,12 @@ def apply_section_filters(qs, user, params):
         else:
             qs = qs.filter(workflow_stage__in=PRODUCTION_STAGES)
             if queue == QUEUE_NEEDS_BUILD:
-                qs = qs.filter(workflow_stage_id=FactoryOrder.WORKFLOW_STAGE_ACCOUNTING_APPROVED)
+                qs = qs.filter(
+                    workflow_stage_id__in=[
+                        FactoryOrder.WORKFLOW_STAGE_ACCOUNTING_APPROVED,
+                        FactoryOrder.WORKFLOW_STAGE_MERCHANT_ASSIGNED,
+                    ]
+                )
             elif queue == QUEUE_IN_PRODUCTION:
                 qs = qs.filter(workflow_stage_id=FactoryOrder.WORKFLOW_STAGE_IN_PRODUCTION)
         return qs.order_by("-created_at")
@@ -112,7 +118,12 @@ def apply_section_filters(qs, user, params):
         else:
             qs = qs.filter(workflow_stage__in=PRODUCTION_STAGES)
             if queue == QUEUE_NEEDS_BUILD:
-                qs = qs.filter(workflow_stage_id=FactoryOrder.WORKFLOW_STAGE_ACCOUNTING_APPROVED)
+                qs = qs.filter(
+                    workflow_stage_id__in=[
+                        FactoryOrder.WORKFLOW_STAGE_ACCOUNTING_APPROVED,
+                        FactoryOrder.WORKFLOW_STAGE_MERCHANT_ASSIGNED,
+                    ]
+                )
             elif queue == QUEUE_IN_PRODUCTION:
                 qs = qs.filter(workflow_stage_id=FactoryOrder.WORKFLOW_STAGE_IN_PRODUCTION)
         return qs.order_by("-created_at")
@@ -138,7 +149,12 @@ def apply_section_filters(qs, user, params):
         else:
             qs = qs.filter(workflow_stage__in=PRODUCTION_STAGES)
             if queue == QUEUE_NEEDS_BUILD:
-                qs = qs.filter(workflow_stage_id=FactoryOrder.WORKFLOW_STAGE_ACCOUNTING_APPROVED)
+                qs = qs.filter(
+                    workflow_stage_id__in=[
+                        FactoryOrder.WORKFLOW_STAGE_ACCOUNTING_APPROVED,
+                        FactoryOrder.WORKFLOW_STAGE_MERCHANT_ASSIGNED,
+                    ]
+                )
             elif queue == QUEUE_IN_PRODUCTION:
                 qs = qs.filter(workflow_stage_id=FactoryOrder.WORKFLOW_STAGE_IN_PRODUCTION)
         return qs.order_by("-created_at")

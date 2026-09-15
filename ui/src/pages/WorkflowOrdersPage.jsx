@@ -8,6 +8,7 @@ import { Badge, Button, Card, EmptyState, Field, FilterBar, LoadMoreButton } fro
 import { PAGE_SIZE, withPageParams } from '../config/pagination'
 import { formatDate, formatMoney } from '../utils/format'
 import { hasPermission } from '../utils/permissions'
+import { fromLegacy } from '../styles/tw.js'
 
 const WORKFLOW_COLORS = {
   pending_branch: 'var(--warning)',
@@ -16,6 +17,9 @@ const WORKFLOW_COLORS = {
   in_production: '#0ea5e9',
   production_done: '#14b8a6',
   in_freight: '#f97316',
+  in_warehouse: '#64748b',
+  ready_for_pickup: '#22c55e',
+  merchant_assigned: '#a855f7',
   completed: 'var(--success)',
 }
 
@@ -145,20 +149,20 @@ export default function WorkflowOrdersPage({
   const renderMaterialRequirements = (o) => {
     const items = o.material_requirements || []
     if (!items.length) {
-      return <span className="muted">—</span>
+      return <span className={fromLegacy("muted")}>—</span>
     }
     return (
-      <div className="order-materials-list">
+      <div className={fromLegacy("order-materials-list")}>
         {items.map((item) => (
           <div
             key={item.material_id}
-            className={`order-material-row${item.sufficient === false ? ' shortage' : ''}`}
+            className={fromLegacy(`order-material-row${item.sufficient === false ? ' shortage' : ''}`)}
           >
-            <span className="order-material-name">
+            <span className={fromLegacy("order-material-name")}>
               {item.material?.name}
               {item.material?.color_name ? ` (${item.material.color_name})` : ''}
             </span>
-            <span className="order-material-qty">
+            <span className={fromLegacy("order-material-qty")}>
               نیاز: <strong>{item.required_quantity}</strong> {item.unit}
               {item.unit_cost != null && (
                 <> × {formatMoney(item.unit_cost)}</>
@@ -168,7 +172,7 @@ export default function WorkflowOrdersPage({
               )}
             </span>
             {item.line_cost != null && item.line_cost > 0 && (
-              <span className="order-material-cost muted small">
+              <span className={fromLegacy("order-material-cost muted small")}>
                 بهای ردیف: <strong>{formatMoney(item.line_cost)}</strong>
               </span>
             )}
@@ -178,10 +182,10 @@ export default function WorkflowOrdersPage({
           </div>
         ))}
         {o.materials_deducted && (
-          <div className="muted small order-materials-deducted">✓ متریال کسر شده</div>
+          <div className={fromLegacy("muted small order-materials-deducted")}>✓ متریال کسر شده</div>
         )}
         {o.material_cost_total > 0 && (
-          <div className="order-material-total">
+          <div className={fromLegacy("order-material-total")}>
             جمع بهای متریال: <strong>{formatMoney(o.material_cost_total)}</strong>
           </div>
         )}
@@ -194,7 +198,7 @@ export default function WorkflowOrdersPage({
       <FilterBar>
         <Field label="جستجو">
           <input
-            className="search-input"
+            className={fromLegacy("search-input")}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="مشتری، فاکتور یا توضیحات…"
@@ -202,13 +206,13 @@ export default function WorkflowOrdersPage({
         </Field>
       </FilterBar>
       {loading ? (
-        <p className="muted loading">در حال بارگذاری…</p>
+        <p className={fromLegacy("muted loading")}>در حال بارگذاری…</p>
       ) : orders.length === 0 ? (
         <EmptyState text={emptyTitle} />
       ) : (
         <>
-        <div className="table-wrap workflow-table-desktop">
-            <table className="table">
+        <div className={fromLegacy("table-wrap workflow-table-desktop")}>
+            <table className={fromLegacy("table")}>
               <thead>
                 <tr>
                   <th>فاکتور</th>
@@ -229,13 +233,18 @@ export default function WorkflowOrdersPage({
               <tbody>
                 {orders.map((o) => (
                   <tr key={o.id}>
-                    <td className="ltr">{o.invoice_number || o.id}</td>
+                    <td className={fromLegacy("ltr")}>
+                      {o.invoice_number || o.id}
+                      {o.fulfillment_route_display && (
+                        <div className={fromLegacy("muted small")}>{o.fulfillment_route_display}{o.merchant_user_name ? ` — ${o.merchant_user_name}` : ''}{o.fulfillment_warehouse_label ? ` — ${o.fulfillment_warehouse_label}` : ''}{o.fulfillment_source_branch_label ? ` — ${o.fulfillment_source_branch_label}` : ''}</div>
+                      )}
+                    </td>
                     {showBranch && <td>{o.branch_label || o.branch || '—'}</td>}
                     {showCustomer && (
                       <td>
                         <div>{o.customer_name}</div>
-                        {o.customer_phone && <div className="muted ltr">{o.customer_phone}</div>}
-                        {o.customer_address && <div className="muted">{o.customer_address}</div>}
+                        {o.customer_phone && <div className={fromLegacy("muted ltr")}>{o.customer_phone}</div>}
+                        {o.customer_address && <div className={fromLegacy("muted")}>{o.customer_address}</div>}
                       </td>
                     )}
                     <td>{renderLineItems(o)}</td>
@@ -254,7 +263,7 @@ export default function WorkflowOrdersPage({
                           {o.accounting_mode_display || (o.accounting_mode === 'automatic' ? 'خودکار' : 'دستی')}
                         </Badge>
                         {o.accounting_mode === 'automatic' && o.payment_account_label && (
-                          <div className="muted small">{o.payment_account_label}</div>
+                          <div className={fromLegacy("muted small")}>{o.payment_account_label}</div>
                         )}
                       </td>
                     )}
@@ -264,7 +273,7 @@ export default function WorkflowOrdersPage({
                         {o.workflow_stage_display || o.workflow_stage}
                       </Badge>
                       {o.holder_detail && (
-                        <div className="muted small workflow-holder-detail">{o.holder_detail}</div>
+                        <div className={fromLegacy("muted small workflow-holder-detail")}>{o.holder_detail}</div>
                       )}
                     </td>
                     )}
@@ -272,12 +281,12 @@ export default function WorkflowOrdersPage({
                     <td>
                       <div>{o.holder_department || '—'}</div>
                       {o.holder_name && (
-                        <div className="muted small">{o.holder_name}</div>
+                        <div className={fromLegacy("muted small")}>{o.holder_name}</div>
                       )}
                     </td>
                     )}
                     <td>
-                      <div className="row-actions">
+                      <div className={fromLegacy("row-actions")}>
                         {renderOrderActions(o)}
                       </div>
                     </td>
@@ -287,15 +296,15 @@ export default function WorkflowOrdersPage({
             </table>
           </div>
 
-          <div className="workflow-cards-mobile">
+          <div className={fromLegacy("workflow-cards-mobile")}>
             {orders.map((o) => (
-              <div key={o.id} className="m-card workflow-order-card">
-                <div className="m-card-head">
+              <div key={o.id} className={fromLegacy("m-card workflow-order-card")}>
+                <div className={fromLegacy("m-card-head")}>
                   <div>
                     <strong>{o.customer_name || '—'}</strong>
-                    <div className="muted small ltr">{o.invoice_number || `#${o.id}`}</div>
+                    <div className={fromLegacy("muted small ltr")}>{o.invoice_number || `#${o.id}`}</div>
                     {showBranch && (
-                      <div className="muted small">{o.branch_label || o.branch || '—'}</div>
+                      <div className={fromLegacy("muted small")}>{o.branch_label || o.branch || '—'}</div>
                     )}
                   </div>
                   {showStage && (
@@ -304,40 +313,40 @@ export default function WorkflowOrdersPage({
                     </Badge>
                   )}
                 </div>
-                <div className="m-card-grid">
+                <div className={fromLegacy("m-card-grid")}>
                   {showCustomer && o.customer_phone && (
-                    <div><span className="muted">تلفن</span><span className="ltr">{o.customer_phone}</span></div>
+                    <div><span className={fromLegacy("muted")}>تلفن</span><span className={fromLegacy("ltr")}>{o.customer_phone}</span></div>
                   )}
                   {showAmounts && (
-                    <div><span className="muted">مبلغ</span><strong>{o.amounts_masked ? '—' : formatMoney(o.final_amount)}</strong></div>
+                    <div><span className={fromLegacy("muted")}>مبلغ</span><strong>{o.amounts_masked ? '—' : formatMoney(o.final_amount)}</strong></div>
                   )}
-                  <div><span className="muted">تحویل</span>{o.delivery_date ? formatDate(o.delivery_date) : '—'}</div>
+                  <div><span className={fromLegacy("muted")}>تحویل</span>{o.delivery_date ? formatDate(o.delivery_date) : '—'}</div>
                   {showProductionDate && (
-                    <div><span className="muted">پایان ساخت</span>{o.production_done_at ? formatDate(o.production_done_at) : '—'}</div>
+                    <div><span className={fromLegacy("muted")}>پایان ساخت</span>{o.production_done_at ? formatDate(o.production_done_at) : '—'}</div>
                   )}
                   {showStatus && (
-                    <div><span className="muted">وضعیت</span>{o.status_display || o.status || '—'}</div>
+                    <div><span className={fromLegacy("muted")}>وضعیت</span>{o.status_display || o.status || '—'}</div>
                   )}
                   {showWorkflowHolder && (
-                    <div><span className="muted">دست</span>{o.holder_department || '—'}{o.holder_name ? ` — ${o.holder_name}` : ''}</div>
+                    <div><span className={fromLegacy("muted")}>دست</span>{o.holder_department || '—'}{o.holder_name ? ` — ${o.holder_name}` : ''}</div>
                   )}
                 </div>
                 {(o.line_items || []).length > 0 && (
-                  <div className="muted small" style={{ marginTop: 8 }}>{renderLineItems(o)}</div>
+                  <div className={fromLegacy("muted small")} style={{ marginTop: 8 }}>{renderLineItems(o)}</div>
                 )}
                 {showMaterials && (o.material_requirements || []).length > 0 && (
-                  <div className="order-materials-mobile" style={{ marginTop: 8 }}>
-                    <div className="muted small" style={{ marginBottom: 4 }}>متریال</div>
+                  <div className={fromLegacy("order-materials-mobile")} style={{ marginTop: 8 }}>
+                    <div className={fromLegacy("muted small")} style={{ marginBottom: 4 }}>متریال</div>
                     {renderMaterialRequirements(o)}
                   </div>
                 )}
                 {showStage && o.holder_detail && (
-                  <div className="muted small workflow-holder-detail">{o.holder_detail}</div>
+                  <div className={fromLegacy("muted small workflow-holder-detail")}>{o.holder_detail}</div>
                 )}
                 {showCustomer && o.customer_address && (
-                  <div className="muted small" style={{ marginTop: 6 }}>{o.customer_address}</div>
+                  <div className={fromLegacy("muted small")} style={{ marginTop: 6 }}>{o.customer_address}</div>
                 )}
-                <div className="m-card-actions row-actions">
+                <div className={fromLegacy("m-card-actions row-actions")}>
                   {renderOrderActions(o)}
                 </div>
               </div>
@@ -355,29 +364,29 @@ export default function WorkflowOrdersPage({
 
   if (embedInSection) {
     return (
-      <div className="workflow-orders-embedded">
-        <div className="office-section-list-toolbar">
+      <div className={fromLegacy("workflow-orders-embedded")}>
+        <div className={fromLegacy("office-section-list-toolbar")}>
           <Button type="button" variant="ghost" onClick={() => load({ offset: 0 })}>بروزرسانی لیست</Button>
         </div>
-        {error && <div className="alert alert-error">{error}</div>}
+        {error && <div className={fromLegacy("alert alert-error")}>{error}</div>}
         {listContent}
       </div>
     )
   }
 
   return (
-    <div className="page workflow-orders-page">
-      <div className="page-head">
+    <div className={fromLegacy("page workflow-orders-page")}>
+      <div className={fromLegacy("page-head")}>
         <div>
           <h1>{title}</h1>
-          {subtitle && <p className="muted">{subtitle}</p>}
+          {subtitle && <p className={fromLegacy("muted")}>{subtitle}</p>}
         </div>
         <Button type="button" variant="ghost" onClick={() => load({ offset: 0 })}>بروزرسانی</Button>
       </div>
 
       {filters}
 
-      {error && <div className="alert alert-error">{error}</div>}
+      {error && <div className={fromLegacy("alert alert-error")}>{error}</div>}
 
       <Card>
         {listContent}

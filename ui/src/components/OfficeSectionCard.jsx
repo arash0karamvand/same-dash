@@ -2,6 +2,7 @@ import { PAGE_GUIDE_DEFAULTS } from '../config/pageGuideDefaults'
 import { useRegisterPageGuide } from '../context/PageGuideContext'
 import { Card } from './ui'
 import RecordFilterPanel from './RecordFilterPanel'
+import { fromLegacy } from '../styles/tw.js'
 
 /**
  * یک بخش اداری: فیلتر زنده + (اختیاری) محتوای لیست/عملیات در همان کارت.
@@ -42,7 +43,7 @@ export default function OfficeSectionCard({
         onFiltersChange={onFiltersChange}
         unified
       />
-      {children && <div className="office-section-body">{children}</div>}
+      {children && <div className={fromLegacy("office-section-body")}>{children}</div>}
     </Card>
   )
 }

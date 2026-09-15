@@ -6,6 +6,7 @@ import PersianDateInput from '../components/PersianDateInput'
 import { Field } from '../components/ui'
 import { formatJalali, todayIso } from '../utils/jalali'
 import WorkflowOrdersPage from './WorkflowOrdersPage'
+import { fromLegacy } from '../styles/tw.js'
 
 export default function FreightOrders() {
   const [deliveryDate, setDeliveryDate] = useState(todayIso())
@@ -26,7 +27,7 @@ export default function FreightOrders() {
       showAmounts={false}
       showStage
       filters={(
-        <div className="workflow-filter-bar">
+        <div className={fromLegacy("workflow-filter-bar")}>
           <Field label="تاریخ تحویل">
             <PersianDateInput
               value={deliveryDate}
@@ -34,7 +35,7 @@ export default function FreightOrders() {
               placeholder="انتخاب تاریخ"
             />
           </Field>
-          <button type="button" className="link workflow-filter-today" onClick={() => setDeliveryDate(todayIso())}>
+          <button type="button" className={fromLegacy("link workflow-filter-today")} onClick={() => setDeliveryDate(todayIso())}>
             امروز
           </button>
         </div>

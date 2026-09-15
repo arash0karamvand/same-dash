@@ -22,6 +22,8 @@ from logic.sale_workflow import approve_office_order, reject_office_order, rollb
 def office_order_list(request):
     scope = (request.GET.get("scope") or "queue").strip()
     status = (request.GET.get("status") or "").strip()
+    if scope != "tracking" and not status:
+        status = OfficeOrder.STATUS_PENDING
     if scope == "tracking":
         if not (
             is_executive_user(request.user)
@@ -76,7 +78,7 @@ def office_order_approve(request, pk):
     if order is None:
         return fail("سفارش اداری یافت نشد", status=404)
     if order.status != OfficeOrder.STATUS_PENDING:
-        return fail("فقط سفارش‌های در انتظار تایید اداری قابل ارسال به کارخانه هستند.", status=400)
+        return fail("فقط سفارش‌های در انتظار تایید اداری قابل ارسال هستند.", status=400)
     if not can_view_office_order(request.user, order):
         return fail("Permission denied", status=403)
     body = parse_json(request) if request.body else {}
@@ -87,6 +89,10 @@ def office_order_approve(request, pk):
             check_registration_account_id=body.get("check_registration_account_id"),
             check_deposit_account_id=body.get("check_deposit_account_id"),
             save_check_accounts_as_default=bool(body.get("save_as_default")),
+            fulfillment_route=body.get("fulfillment_route"),
+            warehouse_id=body.get("warehouse_id"),
+            source_branch=body.get("source_branch") or body.get("fulfillment_source_branch"),
+            merchant_user_id=body.get("merchant_user_id"),
         )
     except ValueError as exc:
         return fail(str(exc), status=400)

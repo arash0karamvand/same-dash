@@ -1,5 +1,6 @@
 import Icon from './icons/Icon'
 import { useTheme } from '../context/ThemeContext'
+import { cn, tw } from '../styles/tw'
 
 export default function ThemeToggle({ className = '' }) {
   const { isDark, toggleTheme } = useTheme()
@@ -7,7 +8,7 @@ export default function ThemeToggle({ className = '' }) {
   return (
     <button
       type="button"
-      className={`theme-toggle${className ? ` ${className}` : ''}`}
+      className={cn(tw.themeToggle, className)}
       onClick={toggleTheme}
       aria-label={isDark ? 'فعال‌سازی حالت روشن' : 'فعال‌سازی حالت تاریک'}
       title={isDark ? 'حالت روشن' : 'حالت تاریک'}

@@ -9,6 +9,7 @@ import {
 } from '../config/checkForm'
 import { formatMoney } from '../utils/format'
 import { todayIso } from '../utils/jalali'
+import { fromLegacy } from '../styles/tw.js'
 
 export const EMPTY_INSTALLMENT = {
   ...EMPTY_CHECK_ROW,
@@ -94,27 +95,27 @@ export default function InstallmentLines({
   }
 
   return (
-    <div className="installment-lines check-form-lines">
-      <div className="installment-lines-head">
-        <h4 className="installment-lines-title">{title}</h4>
-        <span className="muted">
+    <div className={fromLegacy("installment-lines check-form-lines")}>
+      <div className={fromLegacy("installment-lines-head")}>
+        <h4 className={fromLegacy("installment-lines-title")}>{title}</h4>
+        <span className={fromLegacy("muted")}>
           {customerName ? `مشتری: ${customerName} — ` : ''}
           حداکثر {CHECK_FORM_MAX_ROWS} چک — مانده: {formatMoney(balanceDue)}
         </span>
       </div>
 
       {slotsLeft > 0 && (
-        <div className="installment-quick-add">
-          <span className="muted">افزودن:</span>
+        <div className={fromLegacy("installment-quick-add")}>
+          <span className={fromLegacy("muted")}>افزودن:</span>
           {[1, 2, 3, 4, 5].filter((n) => n <= slotsLeft).map((n) => (
-            <button key={n} type="button" className="btn btn-ghost btn-sm" onClick={() => addRows(n)}>
+            <button key={n} type="button" className={fromLegacy("btn btn-ghost btn-sm")} onClick={() => addRows(n)}>
               +{n}
             </button>
           ))}
           {balanceDue > 0 && (
             <button
               type="button"
-              className="btn btn-ghost btn-sm"
+              className={fromLegacy("btn btn-ghost btn-sm")}
               onClick={() => splitEvenly(Math.max(installments.length, 1))}
             >
               تقسیم مساوی مانده
@@ -124,15 +125,15 @@ export default function InstallmentLines({
       )}
 
       {installments.length === 0 ? (
-        <p className="muted">چکی ثبت نشده — حداکثر {CHECK_FORM_MAX_ROWS} ردیف مطابق فرم اکسل.</p>
+        <p className={fromLegacy("muted")}>چکی ثبت نشده — حداکثر {CHECK_FORM_MAX_ROWS} ردیف مطابق فرم اکسل.</p>
       ) : (
         installments.map((inst, idx) => (
-          <div key={idx} className="installment-card check-form-row">
-            <div className="installment-card-head">
+          <div key={idx} className={fromLegacy("installment-card check-form-row")}>
+            <div className={fromLegacy("installment-card-head")}>
               <strong>ردیف {idx + 1}</strong>
-              <button type="button" className="link danger" onClick={() => removeRow(idx)}>حذف</button>
+              <button type="button" className={fromLegacy("link danger")} onClick={() => removeRow(idx)}>حذف</button>
             </div>
-            <div className="form-grid">
+            <div className={fromLegacy("form-grid")}>
               {CHECK_ROW_FIELDS.map((field) => renderField(inst, idx, field))}
               <Field label={CHECK_NOTES_LABEL}>
                 <input
@@ -147,10 +148,10 @@ export default function InstallmentLines({
       )}
 
       {installments.length > 0 && (
-        <div className={`installment-summary ${Math.abs(diff) > 0 ? 'installment-summary-warn' : ''}`}>
+        <div className={fromLegacy(`installment-summary ${Math.abs(diff) > 0 ? 'installment-summary-warn' : ''}`)}>
           <span>جمع مبلغ چک‌ها: {formatMoney(checksTotal)}</span>
           {Math.abs(diff) > 0 && balanceDue > 0 && (
-            <span className="muted">
+            <span className={fromLegacy("muted")}>
               {diff > 0 ? `کمتر از مانده (${formatMoney(diff)})` : `بیشتر از مانده (${formatMoney(Math.abs(diff))})`}
             </span>
           )}

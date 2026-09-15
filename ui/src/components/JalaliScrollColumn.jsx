@@ -1,6 +1,7 @@
 // ستون اسکرولی تقویم شمسی — سال / ماه / روز
 
 import { useEffect, useRef } from 'react'
+import { fromLegacy } from '../styles/tw.js'
 
 export const JCAL_CELL_H = 44
 
@@ -32,25 +33,25 @@ export default function JalaliScrollColumn({ label, items, value, onSelect }) {
   }
 
   return (
-    <div className="jcal-column">
-      <div className="jcal-column-label">{label}</div>
-      <div className="jcal-column-viewport">
-        <div className="jcal-column-highlight" aria-hidden />
+    <div className={fromLegacy("jcal-column")}>
+      <div className={fromLegacy("jcal-column-label")}>{label}</div>
+      <div className={fromLegacy("jcal-column-viewport")}>
+        <div className={fromLegacy("jcal-column-highlight")} aria-hidden />
         <div
           ref={scrollRef}
-          className="jcal-column-scroll"
+          className={fromLegacy("jcal-column-scroll")}
           onScroll={onScroll}
           role="listbox"
           aria-label={label}
         >
-          <div className="jcal-column-spacer" />
+          <div className={fromLegacy("jcal-column-spacer")} />
           {items.map((it, idx) => (
             <button
               key={it.value}
               type="button"
               role="option"
               aria-selected={it.value === value}
-              className={`jcal-cell ${it.value === value ? 'selected' : ''}`}
+              className={fromLegacy(`jcal-cell ${it.value === value ? 'selected' : ''}`)}
               onClick={() => {
                 onSelect(it.value)
                 scrollRef.current?.scrollTo({ top: idx * JCAL_CELL_H, behavior: 'smooth' })
@@ -59,7 +60,7 @@ export default function JalaliScrollColumn({ label, items, value, onSelect }) {
               {it.label}
             </button>
           ))}
-          <div className="jcal-column-spacer" />
+          <div className={fromLegacy("jcal-column-spacer")} />
         </div>
       </div>
     </div>

@@ -3,6 +3,7 @@
 
 
 import { useEffect, useState } from 'react'
+import { fromLegacy } from '../styles/tw.js'
 
 import { salesApi } from '../api/client'
 import { PAGE_GUIDE_DEFAULTS } from '../config/pageGuideDefaults'
@@ -131,14 +132,14 @@ function isDeposit(form) {
 function ShopDailyBreakdownSection({ data, loading, breakdownMonth, onMonthChange, compact = false }) {
   const monthLabel = `${PERSIAN_MONTHS[breakdownMonth.month - 1]} ${toPersianDigits(breakdownMonth.year)}`
   return (
-    <div className={`shop-daily-breakdown${compact ? ' shop-daily-breakdown-compact' : ''}`}>
-      <div className="shop-daily-breakdown-head">
+    <div className={fromLegacy(`shop-daily-breakdown${compact ? ' shop-daily-breakdown-compact' : ''}`)}>
+      <div className={fromLegacy("shop-daily-breakdown-head")}>
         <div>
-          <h3 className="shop-daily-breakdown-title">خلاصه فروش روزانه</h3>
+          <h3 className={fromLegacy("shop-daily-breakdown-title")}>خلاصه فروش روزانه</h3>
           {data && (
-            <p className="shop-daily-breakdown-total">
+            <p className={fromLegacy("shop-daily-breakdown-total")}>
               جمع {monthLabel}: <strong>{formatMoney(data.total_final || 0)}</strong>
-              <span className="shop-daily-breakdown-count">{toPersianDigits(data.count || 0)} سفارش</span>
+              <span className={fromLegacy("shop-daily-breakdown-count")}>{toPersianDigits(data.count || 0)} سفارش</span>
             </p>
           )}
         </div>
@@ -151,13 +152,13 @@ function ShopDailyBreakdownSection({ data, loading, breakdownMonth, onMonthChang
         </Field>
       </div>
       {loading && !data ? (
-        <div className="loading">در حال بارگذاری…</div>
+        <div className={fromLegacy("loading")}>در حال بارگذاری…</div>
       ) : !data?.days?.length ? (
         <EmptyState text="در این ماه فروشی ثبت نشده." />
       ) : (
-        <div className="shop-daily-breakdown-table">
-          <div className="table-wrap">
-            <table className="table shop-daily-table">
+        <div className={fromLegacy("shop-daily-breakdown-table")}>
+          <div className={fromLegacy("table-wrap")}>
+            <table className={fromLegacy("table shop-daily-table")}>
               <thead>
                 <tr>
                   <th>تاریخ</th>
@@ -863,7 +864,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
 
   return (
 
-    <div className={`page sales-page${shopOfficeQueue ? ' sales-page-shop-office' : ''}`}>
+    <div className={fromLegacy(`page sales-page${shopOfficeQueue ? ' sales-page-shop-office' : ''}`)}>
 
       {(summaryOnly || (viewOwnSales && !branchQueueOnly)) && (
         <PersonalSalesPanel
@@ -875,7 +876,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
       )}
 
       {viewAllSales && (
-      <div className="stats-grid">
+      <div className={fromLegacy("stats-grid")}>
 
         <Card
           title={
@@ -884,37 +885,37 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
               : `فروش ${formatJalali(todayIso())}`
           }
         >
-          <p className="stat-value">{formatMoney(daily?.total_final || 0)}</p>
-          <p className="muted">{daily?.count || 0} فقره — فقط همین روز</p>
+          <p className={fromLegacy("stat-value")}>{formatMoney(daily?.total_final || 0)}</p>
+          <p className={fromLegacy("muted")}>{daily?.count || 0} فقره — فقط همین روز</p>
         </Card>
 
-        <Card title={`فروش ${monthLabel}`}><p className="stat-value">{formatMoney(monthly?.total_final || 0)}</p><p className="muted">{monthly?.count || 0} فقره — همه شعب</p></Card>
+        <Card title={`فروش ${monthLabel}`}><p className={fromLegacy("stat-value")}>{formatMoney(monthly?.total_final || 0)}</p><p className={fromLegacy("muted")}>{monthly?.count || 0} فقره — همه شعب</p></Card>
 
-        <Card title={`فروش سال ${yearLabel}`}><p className="stat-value">{formatMoney(yearly?.total_final || 0)}</p><p className="muted">{yearly?.count || 0} فقره — سال جاری</p></Card>
+        <Card title={`فروش سال ${yearLabel}`}><p className={fromLegacy("stat-value")}>{formatMoney(yearly?.total_final || 0)}</p><p className={fromLegacy("muted")}>{yearly?.count || 0} فقره — سال جاری</p></Card>
 
       </div>
       )}
 
       {shopOfficeQueue && (
-      <div className="shop-office-queue-hero">
-        <div className="shop-office-queue-hero-main">
-          <span className="shop-office-queue-hero-icon" aria-hidden>📤</span>
+      <div className={fromLegacy("shop-office-queue-hero")}>
+        <div className={fromLegacy("shop-office-queue-hero-main")}>
+          <span className={fromLegacy("shop-office-queue-hero-icon")} aria-hidden>📤</span>
           <div>
-            <h2 className="shop-office-queue-hero-title">صف ارسال به اداری</h2>
-            <p className="shop-office-queue-hero-desc">
+            <h2 className={fromLegacy("shop-office-queue-hero-title")}>صف ارسال به اداری</h2>
+            <p className={fromLegacy("shop-office-queue-hero-desc")}>
               سفارش‌های ثبت‌شده را بررسی کنید و برای تایید حسابداری ارسال کنید.
             </p>
           </div>
         </div>
-        <div className="shop-office-queue-hero-badge">
-          <span className="shop-office-queue-hero-count">{toPersianDigits(pendingSendCount)}</span>
-          <span className="shop-office-queue-hero-label">در انتظار ارسال</span>
+        <div className={fromLegacy("shop-office-queue-hero-badge")}>
+          <span className={fromLegacy("shop-office-queue-hero-count")}>{toPersianDigits(pendingSendCount)}</span>
+          <span className={fromLegacy("shop-office-queue-hero-label")}>در انتظار ارسال</span>
         </div>
       </div>
       )}
 
       {shopOfficeQueue && !viewAllSales && (
-      <div className="stat-grid shop-office-stats sales-stats-grid">
+      <div className={fromLegacy("stat-grid shop-office-stats sales-stats-grid")}>
         <StatCard
           label={`فروش ${monthLabel}`}
           value={formatMoney(monthly?.total_final || 0)}
@@ -937,14 +938,14 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
       )}
 
       {branchQueueView && !viewAllSales && !shopOfficeQueue && (
-      <div className="stats-grid">
+      <div className={fromLegacy("stats-grid")}>
         <Card title={`فروش ماه ${monthLabel} — ${branchStatsTitle}`}>
-          <p className="stat-value">{formatMoney(monthly?.total_final || 0)}</p>
-          <p className="muted">{monthly?.count || 0} فقره — شامل ارسال‌شده به اداری</p>
+          <p className={fromLegacy("stat-value")}>{formatMoney(monthly?.total_final || 0)}</p>
+          <p className={fromLegacy("muted")}>{monthly?.count || 0} فقره — شامل ارسال‌شده به اداری</p>
         </Card>
         <Card title={`فروش سال ${yearLabel} — ${branchStatsTitle}`}>
-          <p className="stat-value">{formatMoney(yearly?.total_final || 0)}</p>
-          <p className="muted">{yearly?.count || 0} فقره — سال جاری شعبه</p>
+          <p className={fromLegacy("stat-value")}>{formatMoney(yearly?.total_final || 0)}</p>
+          <p className={fromLegacy("muted")}>{yearly?.count || 0} فقره — سال جاری شعبه</p>
         </Card>
       </div>
       )}
@@ -955,10 +956,10 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
         actions={canCreateSale ? <Button onClick={openCreate}>+ ثبت فروش</Button> : null}
       >
 
-        {error && <div className="alert-error">{error}</div>}
+        {error && <div className={fromLegacy("alert-error")}>{error}</div>}
 
         {shopOfficeQueue && !loading && pendingSendCount > 0 && (
-          <p className="shop-office-queue-hint">
+          <p className={fromLegacy("shop-office-queue-hint")}>
             {toPersianDigits(pendingSendCount)} سفارش هنوز به اداری ارسال نشده — پس از بررسی، دکمه «ارسال به اداری» را بزنید.
           </p>
         )}
@@ -974,8 +975,8 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
 
         {summaryOnly && !isShop && monthly && (
           <Card title={`فروش ماه ${monthLabel}`}>
-            <p className="stat-value">{formatMoney(monthly.total_final || 0)}</p>
-            <p className="muted">{monthly.count || 0} سفارش ثبت‌شده</p>
+            <p className={fromLegacy("stat-value")}>{formatMoney(monthly.total_final || 0)}</p>
+            <p className={fromLegacy("muted")}>{monthly.count || 0} سفارش ثبت‌شده</p>
           </Card>
         )}
 
@@ -1032,19 +1033,19 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
             </Field>
             <Field label="جستجو">
               <input
-                className="search-input"
+                className={fromLegacy("search-input")}
                 value={filters.search}
                 onChange={(e) => setFilters({ ...filters, search: e.target.value })}
                 placeholder="فاکتور یا مشتری"
               />
             </Field>
-            <div className="page-filters-actions">
+            <div className={fromLegacy("page-filters-actions")}>
               <Button type="submit">اعمال فیلتر</Button>
             </div>
           </FilterBar>
         </form>
 
-        {loading ? <div className="loading">در حال بارگذاری…</div> : sales.length === 0 ? (
+        {loading ? <div className={fromLegacy("loading")}>در حال بارگذاری…</div> : sales.length === 0 ? (
 
           <EmptyState text={shopOfficeQueue ? 'سفارشی در صف ارسال نیست — همه به اداری ارسال شده‌اند.' : 'فروشی یافت نشد.'} />
 
@@ -1052,9 +1053,9 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
 
           <>
 
-          <div className={`table-wrap sales-table-desktop${shopOfficeQueue ? ' shop-office-table-wrap' : ''}`}>
+          <div className={fromLegacy(`table-wrap sales-table-desktop${shopOfficeQueue ? ' shop-office-table-wrap' : ''}`)}>
 
-          <table className={`table${shopOfficeQueue ? ' shop-office-table' : ''}`}>
+          <table className={fromLegacy(`table${shopOfficeQueue ? ' shop-office-table' : ''}`)}>
 
             <thead>
 
@@ -1112,56 +1113,56 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
                   <td>{formatDate(s.sold_at)}</td>
 
                   <td>
-                    <button type="button" className="link" onClick={() => openInvoice(s)} disabled={invoiceLoadingId === s.id}>
+                    <button type="button" className={fromLegacy("link")} onClick={() => openInvoice(s)} disabled={invoiceLoadingId === s.id}>
                       {invoiceLoadingId === s.id ? '…' : 'فاکتور'}
                     </button>
                   </td>
 
                   <td>
-                    <button type="button" className="link" onClick={() => downloadExcel(s)} disabled={excelLoadingId === s.id}>
+                    <button type="button" className={fromLegacy("link")} onClick={() => downloadExcel(s)} disabled={excelLoadingId === s.id}>
                       {excelLoadingId === s.id ? '…' : 'اکسل'}
                     </button>
                   </td>
 
                   {(canActOnSale(s)) && (
 
-                    <td className="row-actions">
+                    <td className={fromLegacy("row-actions")}>
 
                       {canApproveBranch && pendingSend && (
                         shopOfficeQueue ? (
-                          <Button type="button" variant="success" className="btn-sm shop-office-send-btn" onClick={() => approveBranch(s)}>
+                          <Button type="button" variant="success" className={fromLegacy("btn-sm shop-office-send-btn")} onClick={() => approveBranch(s)}>
                             ارسال به اداری
                           </Button>
                         ) : (
-                          <button type="button" className="link link-success" onClick={() => approveBranch(s)}>{isShop ? 'ارسال به اداری' : 'تایید شعبه'}</button>
+                          <button type="button" className={fromLegacy("link link-success")} onClick={() => approveBranch(s)}>{isShop ? 'ارسال به اداری' : 'تایید شعبه'}</button>
                         )
                       )}
 
                       {canApproveAccounting && s.workflow_stage === 'branch_approved' && (
-                        <button type="button" className="link link-success" onClick={() => approveAccounting(s)}>تایید حسابداری</button>
+                        <button type="button" className={fromLegacy("link link-success")} onClick={() => approveAccounting(s)}>تایید حسابداری</button>
                       )}
 
                       {canEditSale(s) && (
                         <>
-                      <button type="button" className="link" onClick={() => openEdit(s)}>ویرایش</button>
+                      <button type="button" className={fromLegacy("link")} onClick={() => openEdit(s)}>ویرایش</button>
 
                       {s.balance_due > 0 && s.order_status !== 'cancelled' && !s.amounts_masked && (
-                        <button type="button" className="link link-success" onClick={() => { setPayModal(s); setPayAmount(String(s.balance_due)) }}>پرداخت</button>
+                        <button type="button" className={fromLegacy("link link-success")} onClick={() => { setPayModal(s); setPayAmount(String(s.balance_due)) }}>پرداخت</button>
                       )}
 
                       {s.order_kind === 'pre_invoice' && s.order_status === 'pending' && (
                         <>
-                          <button type="button" className="link link-success" onClick={() => confirmOrder(s)}>تایید</button>
-                          <button type="button" className="link danger" onClick={() => cancelOrder(s)}>لغو</button>
+                          <button type="button" className={fromLegacy("link link-success")} onClick={() => confirmOrder(s)}>تایید</button>
+                          <button type="button" className={fromLegacy("link danger")} onClick={() => cancelOrder(s)}>لغو</button>
                         </>
                       )}
 
                       {(s.order_kind === 'deposit') && s.order_status === 'pending' && (
-                        <button type="button" className="link danger" onClick={() => cancelOrder(s)}>لغو</button>
+                        <button type="button" className={fromLegacy("link danger")} onClick={() => cancelOrder(s)}>لغو</button>
                       )}
 
                       {s.order_status !== 'cancelled' && (
-                        <button type="button" className="link danger" onClick={() => remove(s.id)}>حذف</button>
+                        <button type="button" className={fromLegacy("link danger")} onClick={() => remove(s.id)}>حذف</button>
                       )}
                         </>
                       )}
@@ -1180,41 +1181,41 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
 
           </div>
 
-          <div className={`sales-cards-mobile${shopOfficeQueue ? ' shop-office-cards-mobile' : shopBranchSupervisor ? ' sales-branch-queue-mobile' : ''}`}>
+          <div className={fromLegacy(`sales-cards-mobile${shopOfficeQueue ? ' shop-office-cards-mobile' : shopBranchSupervisor ? ' sales-branch-queue-mobile' : ''}`)}>
             {sales.map((s) => {
               const pendingSend = s.workflow_stage === 'pending_branch'
               if (shopOfficeQueue) {
                 return (
-                  <div key={s.id} className={`shop-office-card${pendingSend ? ' shop-office-card-pending' : ''}`}>
-                    <div className="shop-office-card-head">
-                      <div className="shop-office-card-meta">
-                        <span className="shop-office-card-invoice">{s.invoice_number || `#${s.id}`}</span>
+                  <div key={s.id} className={fromLegacy(`shop-office-card${pendingSend ? ' shop-office-card-pending' : ''}`)}>
+                    <div className={fromLegacy("shop-office-card-head")}>
+                      <div className={fromLegacy("shop-office-card-meta")}>
+                        <span className={fromLegacy("shop-office-card-invoice")}>{s.invoice_number || `#${s.id}`}</span>
                         {isShop && branchQueueView && (
-                          <span className="shop-office-card-branch">{s.branch_label || s.branch || '—'}</span>
+                          <span className={fromLegacy("shop-office-card-branch")}>{s.branch_label || s.branch || '—'}</span>
                         )}
                       </div>
                       <Badge color={resolvedOrderStatusColors[s.order_status] || 'var(--accent)'}>
                         {s.order_kind_display}
                       </Badge>
                     </div>
-                    <div className="shop-office-card-customer">{s.customer_name}</div>
-                    <div className="shop-office-card-grid">
-                      <div className="shop-office-card-stat">
-                        <span className="shop-office-card-stat-label">مبلغ نهایی</span>
+                    <div className={fromLegacy("shop-office-card-customer")}>{s.customer_name}</div>
+                    <div className={fromLegacy("shop-office-card-grid")}>
+                      <div className={fromLegacy("shop-office-card-stat")}>
+                        <span className={fromLegacy("shop-office-card-stat-label")}>مبلغ نهایی</span>
                         <strong>{s.amounts_masked ? '—' : formatMoney(s.final_amount)}</strong>
                       </div>
-                      <div className="shop-office-card-stat">
-                        <span className="shop-office-card-stat-label">مانده</span>
+                      <div className={fromLegacy("shop-office-card-stat")}>
+                        <span className={fromLegacy("shop-office-card-stat-label")}>مانده</span>
                         <strong className={!s.amounts_masked && s.balance_due > 0 ? 'shop-office-balance-due' : ''}>
                           {s.amounts_masked ? '—' : formatMoney(s.balance_due)}
                         </strong>
                       </div>
-                      <div className="shop-office-card-stat">
-                        <span className="shop-office-card-stat-label">پرداخت‌شده</span>
+                      <div className={fromLegacy("shop-office-card-stat")}>
+                        <span className={fromLegacy("shop-office-card-stat-label")}>پرداخت‌شده</span>
                         <span>{s.amounts_masked ? '—' : formatMoney(s.paid_amount)}</span>
                       </div>
-                      <div className="shop-office-card-stat">
-                        <span className="shop-office-card-stat-label">تاریخ</span>
+                      <div className={fromLegacy("shop-office-card-stat")}>
+                        <span className={fromLegacy("shop-office-card-stat-label")}>تاریخ</span>
                         <span>{formatDate(s.sold_at)}</span>
                       </div>
                     </div>
@@ -1222,36 +1223,36 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
                       <Button
                         type="button"
                         variant="success"
-                        className="shop-office-send-btn"
+                        className={fromLegacy("shop-office-send-btn")}
                         onClick={() => approveBranch(s)}
                       >
                         ارسال به اداری
                       </Button>
                     )}
-                    <div className="shop-office-card-tools">
-                      <button type="button" className="link" onClick={() => openInvoice(s)} disabled={invoiceLoadingId === s.id}>
+                    <div className={fromLegacy("shop-office-card-tools")}>
+                      <button type="button" className={fromLegacy("link")} onClick={() => openInvoice(s)} disabled={invoiceLoadingId === s.id}>
                         {invoiceLoadingId === s.id ? '…' : 'فاکتور'}
                       </button>
-                      <button type="button" className="link" onClick={() => downloadExcel(s)} disabled={excelLoadingId === s.id}>
+                      <button type="button" className={fromLegacy("link")} onClick={() => downloadExcel(s)} disabled={excelLoadingId === s.id}>
                         {excelLoadingId === s.id ? '…' : 'اکسل'}
                       </button>
                       {canEditSale(s) && (
                         <>
-                          <button type="button" className="link" onClick={() => openEdit(s)}>ویرایش</button>
+                          <button type="button" className={fromLegacy("link")} onClick={() => openEdit(s)}>ویرایش</button>
                           {s.balance_due > 0 && s.order_status !== 'cancelled' && !s.amounts_masked && (
-                            <button type="button" className="link link-success" onClick={() => { setPayModal(s); setPayAmount(String(s.balance_due)) }}>پرداخت</button>
+                            <button type="button" className={fromLegacy("link link-success")} onClick={() => { setPayModal(s); setPayAmount(String(s.balance_due)) }}>پرداخت</button>
                           )}
                           {s.order_kind === 'pre_invoice' && s.order_status === 'pending' && (
                             <>
-                              <button type="button" className="link link-success" onClick={() => confirmOrder(s)}>تایید</button>
-                              <button type="button" className="link danger" onClick={() => cancelOrder(s)}>لغو</button>
+                              <button type="button" className={fromLegacy("link link-success")} onClick={() => confirmOrder(s)}>تایید</button>
+                              <button type="button" className={fromLegacy("link danger")} onClick={() => cancelOrder(s)}>لغو</button>
                             </>
                           )}
                           {s.order_kind === 'deposit' && s.order_status === 'pending' && (
-                            <button type="button" className="link danger" onClick={() => cancelOrder(s)}>لغو</button>
+                            <button type="button" className={fromLegacy("link danger")} onClick={() => cancelOrder(s)}>لغو</button>
                           )}
                           {s.order_status !== 'cancelled' && hasPermission(user, 'delete_sale') && (
-                            <button type="button" className="link danger" onClick={() => remove(s.id)}>حذف</button>
+                            <button type="button" className={fromLegacy("link danger")} onClick={() => remove(s.id)}>حذف</button>
                           )}
                         </>
                       )}
@@ -1260,13 +1261,13 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
                 )
               }
               return (
-              <div key={s.id} className={`m-card${shopBranchSupervisor ? ' sales-branch-queue-card' : ''}`}>
-                <div className="m-card-head">
+              <div key={s.id} className={fromLegacy(`m-card${shopBranchSupervisor ? ' sales-branch-queue-card' : ''}`)}>
+                <div className={fromLegacy("m-card-head")}>
                   <div>
                     <strong>{s.customer_name}</strong>
-                    <div className="muted small">{s.invoice_number || `#${s.id}`}</div>
+                    <div className={fromLegacy("muted small")}>{s.invoice_number || `#${s.id}`}</div>
                     {isShop && branchQueueView && (
-                      <div className="muted small">{s.branch_label || s.branch || '—'}</div>
+                      <div className={fromLegacy("muted small")}>{s.branch_label || s.branch || '—'}</div>
                     )}
                   </div>
                   <Badge color={resolvedOrderStatusColors[s.order_status] || 'var(--accent)'}>
@@ -1274,51 +1275,51 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
                     {!hideWorkflowStage && s.order_status === 'pending' ? ' — در انتظار' : ''}
                   </Badge>
                 </div>
-                <div className="m-card-grid">
-                  <div><span className="muted">نهایی</span><strong>{s.amounts_masked ? '—' : formatMoney(s.final_amount)}</strong></div>
-                  <div><span className="muted">مانده</span><strong>{s.amounts_masked ? '—' : formatMoney(s.balance_due)}</strong></div>
-                  <div><span className="muted">پرداخت</span>{s.amounts_masked ? '—' : formatMoney(s.paid_amount)}</div>
-                  <div><span className="muted">تاریخ</span>{formatDate(s.sold_at)}</div>
+                <div className={fromLegacy("m-card-grid")}>
+                  <div><span className={fromLegacy("muted")}>نهایی</span><strong>{s.amounts_masked ? '—' : formatMoney(s.final_amount)}</strong></div>
+                  <div><span className={fromLegacy("muted")}>مانده</span><strong>{s.amounts_masked ? '—' : formatMoney(s.balance_due)}</strong></div>
+                  <div><span className={fromLegacy("muted")}>پرداخت</span>{s.amounts_masked ? '—' : formatMoney(s.paid_amount)}</div>
+                  <div><span className={fromLegacy("muted")}>تاریخ</span>{formatDate(s.sold_at)}</div>
                 </div>
                 {canApproveBranch && s.workflow_stage === 'pending_branch' && (
-                  <div className={`m-card-primary-action${shopBranchSupervisor ? ' m-card-primary-action-prominent' : ''}`}>
+                  <div className={fromLegacy(`m-card-primary-action${shopBranchSupervisor ? ' m-card-primary-action-prominent' : ''}`)}>
                     <Button
                       type="button"
                       variant="success"
-                      className="m-card-send-office"
+                      className={fromLegacy("m-card-send-office")}
                       onClick={() => approveBranch(s)}
                     >
                       {isShop ? 'ارسال به اداری' : 'تایید شعبه'}
                     </Button>
                   </div>
                 )}
-                <div className="m-card-actions">
-                  <button type="button" className="link" onClick={() => openInvoice(s)} disabled={invoiceLoadingId === s.id}>
+                <div className={fromLegacy("m-card-actions")}>
+                  <button type="button" className={fromLegacy("link")} onClick={() => openInvoice(s)} disabled={invoiceLoadingId === s.id}>
                     {invoiceLoadingId === s.id ? '…' : 'فاکتور'}
                   </button>
-                  <button type="button" className="link" onClick={() => downloadExcel(s)} disabled={excelLoadingId === s.id}>
+                  <button type="button" className={fromLegacy("link")} onClick={() => downloadExcel(s)} disabled={excelLoadingId === s.id}>
                     {excelLoadingId === s.id ? '…' : 'اکسل'}
                   </button>
                   {canApproveAccounting && s.workflow_stage === 'branch_approved' && (
-                    <button type="button" className="link link-success" onClick={() => approveAccounting(s)}>تایید حسابداری</button>
+                    <button type="button" className={fromLegacy("link link-success")} onClick={() => approveAccounting(s)}>تایید حسابداری</button>
                   )}
                   {canEditSale(s) && (
                     <>
-                      <button type="button" className="link" onClick={() => openEdit(s)}>ویرایش</button>
+                      <button type="button" className={fromLegacy("link")} onClick={() => openEdit(s)}>ویرایش</button>
                       {s.balance_due > 0 && s.order_status !== 'cancelled' && !s.amounts_masked && (
-                        <button type="button" className="link link-success" onClick={() => { setPayModal(s); setPayAmount(String(s.balance_due)) }}>پرداخت</button>
+                        <button type="button" className={fromLegacy("link link-success")} onClick={() => { setPayModal(s); setPayAmount(String(s.balance_due)) }}>پرداخت</button>
                       )}
                       {s.order_kind === 'pre_invoice' && s.order_status === 'pending' && (
                         <>
-                          <button type="button" className="link link-success" onClick={() => confirmOrder(s)}>تایید</button>
-                          <button type="button" className="link danger" onClick={() => cancelOrder(s)}>لغو</button>
+                          <button type="button" className={fromLegacy("link link-success")} onClick={() => confirmOrder(s)}>تایید</button>
+                          <button type="button" className={fromLegacy("link danger")} onClick={() => cancelOrder(s)}>لغو</button>
                         </>
                       )}
                       {s.order_kind === 'deposit' && s.order_status === 'pending' && (
-                        <button type="button" className="link danger" onClick={() => cancelOrder(s)}>لغو</button>
+                        <button type="button" className={fromLegacy("link danger")} onClick={() => cancelOrder(s)}>لغو</button>
                       )}
                       {s.order_status !== 'cancelled' && hasPermission(user, 'delete_sale') && (
-                        <button type="button" className="link danger" onClick={() => remove(s.id)}>حذف</button>
+                        <button type="button" className={fromLegacy("link danger")} onClick={() => remove(s.id)}>حذف</button>
                       )}
                     </>
                   )}
@@ -1357,13 +1358,13 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
 
       <Modal title={editing ? 'ویرایش فروش' : 'ثبت فروش'} open={modalOpen} onClose={() => { setModalOpen(false); setEditing(null) }}>
 
-        <form onSubmit={save} className="form">
+        <form onSubmit={save} className={fromLegacy("form")}>
 
           {editing ? (
 
             <>
 
-              <p className="muted">مشتری: {editing.customer_name}</p>
+              <p className={fromLegacy("muted")}>مشتری: {editing.customer_name}</p>
 
               <Field label="مبلغ"><MoneyInput min="1" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required /></Field>
 
@@ -1384,7 +1385,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
                 />
               </Field>
 
-              <Field label="شماره فاکتور"><input className="ltr" value={form.invoice_number} onChange={(e) => setForm({ ...form, invoice_number: e.target.value })} /></Field>
+              <Field label="شماره فاکتور"><input className={fromLegacy("ltr")} value={form.invoice_number} onChange={(e) => setForm({ ...form, invoice_number: e.target.value })} /></Field>
 
               <Field label="توضیحات"><textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} /></Field>
 
@@ -1438,7 +1439,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
 
               {form.line_items?.length > 0 ? (
                 <Field label="جمع محصولات">
-                  <p className="sale-lines-total"><strong>{formatMoney(Number(form.amount || 0))}</strong></p>
+                  <p className={fromLegacy("sale-lines-total")}><strong>{formatMoney(Number(form.amount || 0))}</strong></p>
                 </Field>
               ) : (
                 <Field label="مبلغ"><MoneyInput min="1" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required /></Field>
@@ -1506,7 +1507,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
                 />
               )}
 
-              <Field label="شماره فاکتور"><input className="ltr" value={form.invoice_number} onChange={(e) => setForm({ ...form, invoice_number: e.target.value })} placeholder="خالی = شماره سیستمی" /></Field>
+              <Field label="شماره فاکتور"><input className={fromLegacy("ltr")} value={form.invoice_number} onChange={(e) => setForm({ ...form, invoice_number: e.target.value })} placeholder="خالی = شماره سیستمی" /></Field>
 
               {!isDeposit(form) && (
                 <Field label="تاریخ تحویل">
@@ -1536,9 +1537,9 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
 
         {payModal && (
 
-          <form onSubmit={submitPayment} className="form">
+          <form onSubmit={submitPayment} className={fromLegacy("form")}>
 
-            <p className="muted">مانده: {formatMoney(payModal.balance_due)}</p>
+            <p className={fromLegacy("muted")}>مانده: {formatMoney(payModal.balance_due)}</p>
 
             <Field label="مبلغ"><MoneyInput min="1" max={payModal.balance_due} value={payAmount} onChange={(e) => setPayAmount(e.target.value)} required /></Field>
 

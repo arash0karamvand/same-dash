@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmContext'
 import { formatMoney } from '../utils/format'
 import { parseRoute } from '../utils/routing'
+import { fromLegacy } from '../styles/tw.js'
 
 import { hasAnyPermission, hasPermission } from '../utils/permissions'
 import { PAGE_GUIDE_DEFAULTS } from '../config/pageGuideDefaults'
@@ -373,13 +374,13 @@ export default function Products() {
   }
 
   return (
-    <div className="page products-page">
-      <div className="products-page-header">
+    <div className={fromLegacy("page products-page")}>
+      <div className={fromLegacy("products-page-header")}>
         <div>
-          <h1 className="page-title">محصولات</h1>
+          <h1 className={fromLegacy("page-title")}>محصولات</h1>
         </div>
         {canManage && (
-          <div className="products-header-actions">
+          <div className={fromLegacy("products-header-actions")}>
             {canManageCategories && (
               <Button type="button" variant="ghost" onClick={openCreateCategory}>+ دسته</Button>
             )}
@@ -388,13 +389,13 @@ export default function Products() {
         )}
       </div>
 
-      {error && <div className="alert-error">{error}</div>}
+      {error && <div className={fromLegacy("alert-error")}>{error}</div>}
 
       {topSelling.length > 0 && (
-        <Card title="پرفروش‌ترین کالاها" className="analytics-card">
+        <Card title="پرفروش‌ترین کالاها" className={fromLegacy("analytics-card")}>
           <>
-            <div className="table-wrap top-selling-table-desktop">
-              <table className="table table-compact">
+            <div className={fromLegacy("table-wrap top-selling-table-desktop")}>
+              <table className={fromLegacy("table table-compact")}>
                 <thead>
                   <tr>
                     <th>#</th>
@@ -421,18 +422,18 @@ export default function Products() {
                 </tbody>
               </table>
             </div>
-            <div className="top-selling-cards-mobile">
+            <div className={fromLegacy("top-selling-cards-mobile")}>
               {topSelling.map((item, idx) => (
-                <div key={`${item.product_id || item.product_name}-${idx}`} className="m-card">
-                  <div className="m-card-head">
+                <div key={`${item.product_id || item.product_name}-${idx}`} className={fromLegacy("m-card")}>
+                  <div className={fromLegacy("m-card-head")}>
                     <strong>{idx + 1}. {item.product_name}</strong>
                     <span>{formatMoney(item.total_revenue)}</span>
                   </div>
-                  <div className="m-card-grid">
-                    <div><span className="muted">مدل</span>{item.product_model || '—'}</div>
-                    <div><span className="muted">پارچه</span>{item.fabric || '—'}</div>
-                    <div><span className="muted">تعداد فروش</span><strong>{item.total_quantity}</strong></div>
-                    <div><span className="muted">فاکتور</span>{item.sales_count}</div>
+                  <div className={fromLegacy("m-card-grid")}>
+                    <div><span className={fromLegacy("muted")}>مدل</span>{item.product_model || '—'}</div>
+                    <div><span className={fromLegacy("muted")}>پارچه</span>{item.fabric || '—'}</div>
+                    <div><span className={fromLegacy("muted")}>تعداد فروش</span><strong>{item.total_quantity}</strong></div>
+                    <div><span className={fromLegacy("muted")}>فاکتور</span>{item.sales_count}</div>
                   </div>
                 </div>
               ))}
@@ -441,10 +442,10 @@ export default function Products() {
         </Card>
       )}
 
-      <div className="category-scroll">
+      <div className={fromLegacy("category-scroll")}>
         <button
           type="button"
-          className={`category-chip${!categoryFilter ? ' active' : ''}`}
+          className={fromLegacy(`category-chip${!categoryFilter ? ' active' : ''}`)}
           onClick={() => setCategoryFilter('')}
         >
           همه
@@ -453,12 +454,12 @@ export default function Products() {
           <button
             key={c.id}
             type="button"
-            className={`category-chip${categoryFilter === String(c.id) ? ' active' : ''}`}
+            className={fromLegacy(`category-chip${categoryFilter === String(c.id) ? ' active' : ''}`)}
             style={{ '--cat-color': c.color }}
             onClick={() => setCategoryFilter(String(c.id))}
           >
             <span>{c.icon}</span> {c.name}
-            <span className="category-count">{c.product_count}</span>
+            <span className={fromLegacy("category-count")}>{c.product_count}</span>
           </button>
         ))}
       </div>
@@ -467,7 +468,7 @@ export default function Products() {
         <FilterBar>
           <Field label="جستجو">
             <input
-              className="search-input"
+              className={fromLegacy("search-input")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="نام، کد، برند یا رنگ…"
@@ -493,33 +494,33 @@ export default function Products() {
         </FilterBar>
 
         {loading ? (
-          <div className="loading">در حال بارگذاری…</div>
+          <div className={fromLegacy("loading")}>در حال بارگذاری…</div>
         ) : products.length === 0 ? (
           <EmptyState text="محصولی یافت نشد." />
         ) : (
           <>
-          <div className="product-catalog-grid">
+          <div className={fromLegacy("product-catalog-grid")}>
             {products.map((p) => (
-              <article key={p.id} className={`product-card${p.is_active ? '' : ' inactive'}`}>
-                <div className="product-card-head">
+              <article key={p.id} className={fromLegacy(`product-card${p.is_active ? '' : ' inactive'}`)}>
+                <div className={fromLegacy("product-card-head")}>
                   <div>
                     {p.category && (
                       <Badge color={p.category.color}>{p.category.icon} {p.category.name}</Badge>
                     )}
                     <h3>{p.name}</h3>
-                    {p.product_model && <p className="muted small">مدل: {p.product_model}</p>}
-                    {p.fabric && <p className="muted small">پارچه: {p.fabric}</p>}
-                    {p.sku && <p className="muted small ltr">SKU: {p.sku}</p>}
+                    {p.product_model && <p className={fromLegacy("muted small")}>مدل: {p.product_model}</p>}
+                    {p.fabric && <p className={fromLegacy("muted small")}>پارچه: {p.fabric}</p>}
+                    {p.sku && <p className={fromLegacy("muted small ltr")}>SKU: {p.sku}</p>}
                   </div>
                   {!p.is_active && <Badge color="#94a3b8">غیرفعال</Badge>}
                 </div>
 
                 {p.variants?.length > 0 && (
-                  <div className="product-color-swatches">
+                  <div className={fromLegacy("product-color-swatches")}>
                     {p.variants.map((v) => (
                       <span
                         key={v.id}
-                        className="color-swatch"
+                        className={fromLegacy("color-swatch")}
                         title={v.color_name}
                         style={{ background: v.color_hex, borderColor: v.color_hex === '#f8fafc' ? '#cbd5e1' : v.color_hex }}
                       />
@@ -527,31 +528,31 @@ export default function Products() {
                   </div>
                 )}
 
-                <div className="product-card-meta">
+                <div className={fromLegacy("product-card-meta")}>
                   {showSalesPrice && p.display_price != null && (
                     <strong>{formatMoney(p.display_price)}</strong>
                   )}
                   {showCosts && p.material_cost_total != null && (
-                    <span className="muted small">
+                    <span className={fromLegacy("muted small")}>
                       تمام‌شده: {formatMoney(p.material_cost_total)}
                     </span>
                   )}
                   {isOffice && p.profit_margin != null && (
-                    <span className={`small${p.profit_margin >= 0 ? ' text-success' : ' text-danger'}`}>
+                    <span className={fromLegacy(`small${p.profit_margin >= 0 ? ' text-success' : ' text-danger'}`)}>
                       سود: {formatMoney(p.profit_margin)}
                     </span>
                   )}
                   {isFactory && p.material_cost_total != null && (
                     <strong>تمام‌شده: {formatMoney(p.material_cost_total)}</strong>
                   )}
-                  <span className="muted">{p.variants?.length || 0} رنگ</span>
+                  <span className={fromLegacy("muted")}>{p.variants?.length || 0} رنگ</span>
                   {showCosts && p.materials?.length > 0 && (
-                    <span className="muted">{p.materials.length} متریال</span>
+                    <span className={fromLegacy("muted")}>{p.materials.length} متریال</span>
                   )}
                 </div>
 
                 {showCosts && p.materials?.length > 0 && (
-                  <ul className="product-materials-preview muted small">
+                  <ul className={fromLegacy("product-materials-preview muted small")}>
                     {p.materials.map((pm) => (
                       <li key={pm.id}>
                         {pm.material?.name}
@@ -562,13 +563,13 @@ export default function Products() {
                   </ul>
                 )}
 
-                {p.description && <p className="product-card-desc muted">{p.description}</p>}
+                {p.description && <p className={fromLegacy("product-card-desc muted")}>{p.description}</p>}
 
                 {canManage && (
-                  <div className="product-card-actions">
-                    <button type="button" className="link" onClick={() => openEditProduct(p)}>ویرایش</button>
+                  <div className={fromLegacy("product-card-actions")}>
+                    <button type="button" className={fromLegacy("link")} onClick={() => openEditProduct(p)}>ویرایش</button>
                     {canDelete && (
-                      <button type="button" className="link danger" onClick={() => removeProduct(p)}>حذف</button>
+                      <button type="button" className={fromLegacy("link danger")} onClick={() => removeProduct(p)}>حذف</button>
                     )}
                   </div>
                 )}
@@ -586,17 +587,17 @@ export default function Products() {
 
       {canManageCategories && categories.length > 0 && (
         <Card title="دسته‌بندی‌ها">
-          <div className="category-manage-list">
+          <div className={fromLegacy("category-manage-list")}>
             {categories.map((c) => (
-              <div key={c.id} className="category-manage-row">
-                <span className="category-manage-icon" style={{ background: c.color }}>{c.icon}</span>
-                <div className="category-manage-info">
+              <div key={c.id} className={fromLegacy("category-manage-row")}>
+                <span className={fromLegacy("category-manage-icon")} style={{ background: c.color }}>{c.icon}</span>
+                <div className={fromLegacy("category-manage-info")}>
                   <strong>{c.name}</strong>
-                  <span className="muted">{c.product_count} محصول</span>
+                  <span className={fromLegacy("muted")}>{c.product_count} محصول</span>
                 </div>
-                <div className="row-actions">
-                  <button type="button" className="link" onClick={() => openEditCategory(c)}>ویرایش</button>
-                  <button type="button" className="link danger" onClick={() => removeCategory(c)}>حذف</button>
+                <div className={fromLegacy("row-actions")}>
+                  <button type="button" className={fromLegacy("link")} onClick={() => openEditCategory(c)}>ویرایش</button>
+                  <button type="button" className={fromLegacy("link danger")} onClick={() => removeCategory(c)}>حذف</button>
                 </div>
               </div>
             ))}
@@ -610,8 +611,8 @@ export default function Products() {
         onClose={() => !saving && setProductModal(false)}
         wide
       >
-        <form onSubmit={saveProduct} className="form product-form">
-          <div className="form-grid-2">
+        <form onSubmit={saveProduct} className={fromLegacy("form product-form")}>
+          <div className={fromLegacy("form-grid-2")}>
             <Field label="نام محصول">
               <input value={productForm.name} onChange={(e) => setProductForm({ ...productForm, name: e.target.value })} required />
             </Field>
@@ -624,7 +625,7 @@ export default function Products() {
               />
             </Field>
             <Field label="کد محصول (SKU)">
-              <input className="ltr" value={productForm.sku} onChange={(e) => setProductForm({ ...productForm, sku: e.target.value })} />
+              <input className={fromLegacy("ltr")} value={productForm.sku} onChange={(e) => setProductForm({ ...productForm, sku: e.target.value })} />
             </Field>
             <Field label="برند">
               <input value={productForm.brand} onChange={(e) => setProductForm({ ...productForm, brand: e.target.value })} />
@@ -649,57 +650,57 @@ export default function Products() {
             <textarea rows={2} value={productForm.description} onChange={(e) => setProductForm({ ...productForm, description: e.target.value })} />
           </Field>
 
-          <div className="product-variants-section">
-            <div className="section-head">
+          <div className={fromLegacy("product-variants-section")}>
+            <div className={fromLegacy("section-head")}>
               <h4>رنگ‌بندی</h4>
               <Button type="button" variant="ghost" onClick={addVariant}>+ رنگ</Button>
             </div>
             {productForm.variants.map((v, idx) => (
-              <div key={idx} className="variant-row">
-                <div className="variant-color-presets">
+              <div key={idx} className={fromLegacy("variant-row")}>
+                <div className={fromLegacy("variant-color-presets")}>
                   {COLOR_PRESETS.map((preset) => (
                     <button
                       key={preset.hex}
                       type="button"
-                      className="color-preset-btn"
+                      className={fromLegacy("color-preset-btn")}
                       title={preset.name}
                       style={{ background: preset.hex, borderColor: preset.hex === '#f8fafc' ? '#cbd5e1' : preset.hex }}
                       onClick={() => applyColorPreset(idx, preset)}
                     />
                   ))}
                 </div>
-                <div className="form-grid-2 variant-fields">
+                <div className={fromLegacy("form-grid-2 variant-fields")}>
                   <Field label="نام رنگ">
                     <input value={v.color_name} onChange={(e) => updateVariant(idx, 'color_name', e.target.value)} placeholder="مثلاً مشکی" />
                   </Field>
                   <Field label="کد رنگ">
-                    <input className="ltr" type="color" value={v.color_hex} onChange={(e) => updateVariant(idx, 'color_hex', e.target.value)} />
+                    <input className={fromLegacy("ltr")} type="color" value={v.color_hex} onChange={(e) => updateVariant(idx, 'color_hex', e.target.value)} />
                   </Field>
                   <Field label="موجودی (اختیاری)">
-                    <input className="ltr" type="number" min="0" value={v.stock} onChange={(e) => updateVariant(idx, 'stock', e.target.value)} placeholder="—" />
+                    <input className={fromLegacy("ltr")} type="number" min="0" value={v.stock} onChange={(e) => updateVariant(idx, 'stock', e.target.value)} placeholder="—" />
                   </Field>
                 </div>
                 {productForm.variants.length > 1 && (
-                  <button type="button" className="link danger variant-remove" onClick={() => removeVariant(idx)}>حذف رنگ</button>
+                  <button type="button" className={fromLegacy("link danger variant-remove")} onClick={() => removeVariant(idx)}>حذف رنگ</button>
                 )}
               </div>
             ))}
           </div>
 
           {(showCosts || canEditMaterials) && (
-            <div className="product-variants-section">
-              <div className="section-head">
+            <div className={fromLegacy("product-variants-section")}>
+              <div className={fromLegacy("section-head")}>
                 <h4>متریال</h4>
                 {canEditMaterials && (
                   <Button type="button" variant="ghost" onClick={addProductMaterial}>+ متریال</Button>
                 )}
               </div>
               {(productForm.materials || []).length === 0 && !canEditMaterials && (
-                <p className="muted small">متریالی تعریف نشده.</p>
+                <p className={fromLegacy("muted small")}>متریالی تعریف نشده.</p>
               )}
               {(productForm.materials || []).map((m, idx) => (
-                <div key={idx} className="variant-row product-material-row">
-                  <div className="form-grid-2 variant-fields">
+                <div key={idx} className={fromLegacy("variant-row product-material-row")}>
+                  <div className={fromLegacy("form-grid-2 variant-fields")}>
                     <Field label="متریال">
                       {canEditMaterials ? (
                         <Select
@@ -714,7 +715,7 @@ export default function Products() {
                     </Field>
                     <Field label="مقدار مصرف">
                       <input
-                        className="ltr"
+                        className={fromLegacy("ltr")}
                         type="number"
                         min="0.001"
                         step="0.001"
@@ -725,19 +726,19 @@ export default function Products() {
                     </Field>
                   </div>
                   {canEditMaterials && (
-                    <button type="button" className="link danger variant-remove" onClick={() => removeProductMaterial(idx)}>حذف</button>
+                    <button type="button" className={fromLegacy("link danger variant-remove")} onClick={() => removeProductMaterial(idx)}>حذف</button>
                   )}
                 </div>
               ))}
             </div>
           )}
 
-          <label className="checkbox-row">
+          <label className={fromLegacy("checkbox-row")}>
             <input type="checkbox" checked={productForm.is_active} onChange={(e) => setProductForm({ ...productForm, is_active: e.target.checked })} />
             فعال
           </label>
 
-          <div className="form-actions">
+          <div className={fromLegacy("form-actions")}>
             <Button type="button" variant="ghost" onClick={() => setProductModal(false)} disabled={saving}>انصراف</Button>
             <Button type="submit" disabled={saving}>{saving ? 'در حال ذخیره…' : 'ذخیره محصول'}</Button>
           </div>
@@ -745,7 +746,7 @@ export default function Products() {
       </Modal>
 
       <Modal title={editingCategory ? 'ویرایش دسته' : 'دسته جدید'} open={categoryModal} onClose={() => !saving && setCategoryModal(false)}>
-        <form onSubmit={saveCategory} className="form">
+        <form onSubmit={saveCategory} className={fromLegacy("form")}>
           <Field label="نام دسته">
             <input value={categoryForm.name} onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })} required />
           </Field>
@@ -756,12 +757,12 @@ export default function Products() {
             <input type="color" value={categoryForm.color} onChange={(e) => setCategoryForm({ ...categoryForm, color: e.target.value })} />
           </Field>
           <Field label="ترتیب">
-            <input className="ltr" type="number" min="0" value={categoryForm.sort_order} onChange={(e) => setCategoryForm({ ...categoryForm, sort_order: e.target.value })} />
+            <input className={fromLegacy("ltr")} type="number" min="0" value={categoryForm.sort_order} onChange={(e) => setCategoryForm({ ...categoryForm, sort_order: e.target.value })} />
           </Field>
           <Field label="توضیحات">
             <textarea rows={2} value={categoryForm.description} onChange={(e) => setCategoryForm({ ...categoryForm, description: e.target.value })} />
           </Field>
-          <label className="checkbox-row">
+          <label className={fromLegacy("checkbox-row")}>
             <input type="checkbox" checked={categoryForm.is_active} onChange={(e) => setCategoryForm({ ...categoryForm, is_active: e.target.checked })} />
             فعال
           </label>

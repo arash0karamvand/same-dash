@@ -88,6 +88,8 @@
   --shadow-ambient: var(--jelly-drop-soft);
   --shadow-inset: inset 0 1px 0 var(--jelly-gloss-top);
   --shadow: var(--shadow-ambient);
+  --shadow-sunken: inset 0 2px 5px var(--jelly-shade-bottom), inset 0 -1px 0 var(--jelly-gloss-mid);
+  --shadow-focus: inset 0 2px 5px var(--jelly-shade-bottom), 0 0 0 3px var(--accent-glow);
 
   --grain-opacity: 0.03;
   --grain-blend: soft-light;
@@ -177,6 +179,8 @@
   --shadow-ambient: var(--jelly-drop-soft);
   --shadow-inset: inset 0 1px 0 var(--jelly-gloss-top);
   --shadow: var(--shadow-ambient);
+  --shadow-sunken: inset 0 2px 5px var(--jelly-shade-bottom), inset 0 -1px 0 var(--jelly-gloss-mid);
+  --shadow-focus: inset 0 2px 5px var(--jelly-shade-bottom), 0 0 0 3px var(--accent-glow);
 
   --grain-opacity: 0.02;
   --grain-blend: multiply;

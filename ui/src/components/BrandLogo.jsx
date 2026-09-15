@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import Icon from './icons/Icon'
 import { useConfig } from '../context/ConfigContext'
+import { cn, tw } from '../styles/tw'
 
 export default function BrandLogo({ size = 32, className = '', alt = 'لوگوی شرکت' }) {
   const { logoUrl } = useConfig()
@@ -10,7 +11,7 @@ export default function BrandLogo({ size = 32, className = '', alt = 'لوگوی
 
   useEffect(() => { setFailed(false) }, [logoUrl])
 
-  const classes = `brand-logo${className ? ` ${className}` : ''}`
+  const classes = cn(tw.brandLogo, className)
 
   if (!logoUrl || failed) {
     return (
@@ -22,7 +23,7 @@ export default function BrandLogo({ size = 32, className = '', alt = 'لوگوی
 
   return (
     <span className={classes} style={{ width: size, height: size }}>
-      <img src={logoUrl} alt={alt} className="brand-logo-img" onError={() => setFailed(true)} />
+      <img src={logoUrl} alt={alt} className={tw.brandLogoImg} onError={() => setFailed(true)} />
     </span>
   )
 }

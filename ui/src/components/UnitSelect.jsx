@@ -1,4 +1,5 @@
 import Select from './Select'
+import { fromLegacy } from '../styles/tw.js'
 
 export const MATERIAL_UNIT_PRESETS = [
   { value: 'متر', label: 'متر' },
@@ -39,7 +40,7 @@ export default function UnitSelect({
   ]
 
   return (
-    <div className="unit-select-wrap">
+    <div className={fromLegacy("unit-select-wrap")}>
       <Select
         value={preset}
         onChange={onPresetChange}
@@ -48,7 +49,7 @@ export default function UnitSelect({
       />
       {preset === CUSTOM_UNIT_VALUE && (
         <input
-          className="unit-select-custom"
+          className={fromLegacy("unit-select-custom")}
           value={customValue}
           onChange={(e) => onCustomChange(e.target.value)}
           placeholder="واحد را بنویسید…"

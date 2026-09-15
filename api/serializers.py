@@ -118,6 +118,9 @@ def sale_to_dict(sale, include_installments=False, include_lines=False, user=Non
         "delivery_date": sale.delivery_date.isoformat() if sale.delivery_date else None,
         "is_deleted": getattr(sale, "is_deleted", False),
     }
+    from logic.order_cycle import sale_fulfillment_payload
+
+    data.update(sale_fulfillment_payload(sale))
     if include_installments:
         data["installments"] = [
             installment_to_dict(i, user=user) for i in sale.installments.filter(is_deleted=False)
@@ -206,6 +209,9 @@ def office_order_to_dict(order, include_installments=False, include_lines=False,
         "can_edit": bool(user and can_edit_sale(user, order.source_sale)),
         "created_at": order.created_at.isoformat(),
     }
+    from logic.order_cycle import sale_fulfillment_payload
+
+    data.update(sale_fulfillment_payload(order))
     if include_installments:
         data["installments"] = [
             {
@@ -289,6 +295,9 @@ def factory_order_to_dict(order, include_lines=False, user=None):
         "final_amount": None,
         "created_at": order.created_at.isoformat(),
     }
+    from logic.order_cycle import sale_fulfillment_payload
+
+    data.update(sale_fulfillment_payload(order))
     if show_customer and order.customer_id:
         customer = order.customer
         data.update(

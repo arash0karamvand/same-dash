@@ -7,6 +7,7 @@ import { useConfirm } from '../context/ConfirmContext'
 import MoneyInput from '../components/MoneyInput'
 import { Badge, Button, Card, EmptyState, Field, Modal } from '../components/ui'
 import { formatMoney } from '../utils/format'
+import { fromLegacy } from '../styles/tw.js'
 
 const EMPTY_FORM = {
   name: '',
@@ -98,21 +99,21 @@ export default function Levels() {
   }
 
   return (
-    <div className="page">
+    <div className={fromLegacy("page")}>
       <Card title="سطوح باشگاه مشتریان" actions={<Button onClick={openCreate}>+ سطح جدید</Button>}>
-        {error && <div className="alert-error">{error}</div>}
-        <p className="muted">
+        {error && <div className={fromLegacy("alert-error")}>{error}</div>}
+        <p className={fromLegacy("muted")}>
           بازه هر سطح را مشخص کنید (مثلاً برنز از ۰ تا ۱۰ میلیون). سطح هر مشتری به‌صورت خودکار بر
           اساس همین بازه‌ها و مجموع خریدش تعیین می‌شود. «حداکثر خرید» را برای بالاترین سطح خالی بگذارید.
         </p>
         {loading ? (
-          <div className="loading">در حال بارگذاری…</div>
+          <div className={fromLegacy("loading")}>در حال بارگذاری…</div>
         ) : levels.length === 0 ? (
           <EmptyState text="سطحی تعریف نشده است." />
         ) : (
           <>
-            <div className="table-wrap levels-table-desktop">
-              <table className="table">
+            <div className={fromLegacy("table-wrap levels-table-desktop")}>
+              <table className={fromLegacy("table")}>
                 <thead>
                   <tr>
                     <th>سطح</th>
@@ -131,30 +132,30 @@ export default function Levels() {
                       <td>{t.max_purchase === null ? 'بدون سقف' : formatMoney(t.max_purchase)}</td>
                       <td>{t.points}</td>
                       <td>{t.is_active ? 'فعال' : 'غیرفعال'}</td>
-                      <td className="row-actions">
-                        <button className="link" onClick={() => openEdit(t)}>ویرایش</button>
-                        <button className="link danger" onClick={() => remove(t)}>حذف</button>
+                      <td className={fromLegacy("row-actions")}>
+                        <button className={fromLegacy("link")} onClick={() => openEdit(t)}>ویرایش</button>
+                        <button className={fromLegacy("link danger")} onClick={() => remove(t)}>حذف</button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <div className="levels-cards-mobile">
+            <div className={fromLegacy("levels-cards-mobile")}>
               {levels.map((t) => (
-                <div key={t.id} className="m-card">
-                  <div className="m-card-head">
+                <div key={t.id} className={fromLegacy("m-card")}>
+                  <div className={fromLegacy("m-card-head")}>
                     <Badge color={t.color}>{t.name}</Badge>
-                    <span className="muted">{t.is_active ? 'فعال' : 'غیرفعال'}</span>
+                    <span className={fromLegacy("muted")}>{t.is_active ? 'فعال' : 'غیرفعال'}</span>
                   </div>
-                  <div className="m-card-grid">
-                    <div><span className="muted">حداقل خرید</span>{formatMoney(t.min_purchase)}</div>
-                    <div><span className="muted">حداکثر خرید</span>{t.max_purchase === null ? 'بدون سقف' : formatMoney(t.max_purchase)}</div>
-                    <div><span className="muted">امتیاز</span>{t.points}</div>
+                  <div className={fromLegacy("m-card-grid")}>
+                    <div><span className={fromLegacy("muted")}>حداقل خرید</span>{formatMoney(t.min_purchase)}</div>
+                    <div><span className={fromLegacy("muted")}>حداکثر خرید</span>{t.max_purchase === null ? 'بدون سقف' : formatMoney(t.max_purchase)}</div>
+                    <div><span className={fromLegacy("muted")}>امتیاز</span>{t.points}</div>
                   </div>
-                  <div className="m-card-actions">
-                    <button type="button" className="link" onClick={() => openEdit(t)}>ویرایش</button>
-                    <button type="button" className="link danger" onClick={() => remove(t)}>حذف</button>
+                  <div className={fromLegacy("m-card-actions")}>
+                    <button type="button" className={fromLegacy("link")} onClick={() => openEdit(t)}>ویرایش</button>
+                    <button type="button" className={fromLegacy("link danger")} onClick={() => remove(t)}>حذف</button>
                   </div>
                 </div>
               ))}
@@ -164,7 +165,7 @@ export default function Levels() {
       </Card>
 
       <Modal title={editing ? 'ویرایش سطح' : 'سطح جدید'} open={modalOpen} onClose={() => setModalOpen(false)}>
-        <form onSubmit={save} className="form">
+        <form onSubmit={save} className={fromLegacy("form")}>
           <Field label="نام سطح">
             <input value={form.name} onChange={update('name')} placeholder="مثلاً طلایی" required />
           </Field>
@@ -175,7 +176,7 @@ export default function Levels() {
             <MoneyInput min="0" value={form.max_purchase} onChange={(e) => update('max_purchase')(e)} placeholder="برای بالاترین سطح خالی بگذارید" />
           </Field>
           <Field label="امتیاز سطح">
-            <input className="ltr" type="number" min="0" value={form.points} onChange={update('points')} />
+            <input className={fromLegacy("ltr")} type="number" min="0" value={form.points} onChange={update('points')} />
           </Field>
           <Field label="رنگ">
             <input type="color" value={form.color} onChange={update('color')} />

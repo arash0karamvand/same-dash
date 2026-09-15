@@ -73,8 +73,36 @@ def create_factory_order_from_office(office, user):
         accounting_approved_by_id=user.pk if user else None,
         factory_released_at=now,
         order_status=Sale.ORDER_STATUS_CONFIRMED,
+        fulfillment_route=Sale.FULFILLMENT_ROUTE_FACTORY,
     )
     return as_factory_order(sale)
+
+
+@transaction.atomic
+def route_office_order(office, user, fields, note=""):
+    """Send an office-approved sale to warehouse, pickup, or merchant."""
+    from django.utils import timezone
+    from backend.models import Sale
+
+    now = timezone.now()
+    warehouse = fields.get("fulfillment_warehouse")
+    source = fields.get("fulfillment_source_branch")
+    merchant = fields.get("merchant_user")
+    sale = transition_order(
+        office,
+        fields["workflow_stage_id"],
+        user,
+        note=note,
+        accounting_approved_at=now,
+        accounting_approved_by_id=user.pk if user else None,
+        factory_released_at=now,
+        order_status=Sale.ORDER_STATUS_CONFIRMED,
+        fulfillment_route=fields["fulfillment_route"],
+        fulfillment_warehouse_id=warehouse.pk if warehouse else None,
+        fulfillment_source_branch_id=source.code if source else None,
+        merchant_user_id=merchant.pk if merchant else None,
+    )
+    return sale
 
 
 def soft_delete_workflow_orders_for_sale(sale):
@@ -89,6 +117,7 @@ def migrate_sale_to_office_if_needed(sale):
 def migrate_office_to_factory_if_needed(office):
     factory_stages = {
         Sale.WORKFLOW_STAGE_ACCOUNTING_APPROVED,
+        Sale.WORKFLOW_STAGE_MERCHANT_ASSIGNED,
         Sale.WORKFLOW_STAGE_IN_PRODUCTION,
         Sale.WORKFLOW_STAGE_PRODUCTION_DONE,
         Sale.WORKFLOW_STAGE_IN_FREIGHT,

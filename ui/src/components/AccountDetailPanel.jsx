@@ -1,6 +1,7 @@
 import { Button, Field } from './ui'
 import { TERMS } from '../config/accountingTerms'
 import { accountLevelLabel } from '../utils/accountHelpers'
+import { fromLegacy } from '../styles/tw.js'
 
 export default function AccountDetailPanel({
   selected,
@@ -24,33 +25,33 @@ export default function AccountDetailPanel({
 }) {
   if (!selected || !editForm) {
     return (
-      <div className="chart-account-detail-empty">
-        <h3 className="chart-account-detail-title">{emptyTitle}</h3>
-        <p className="muted">{emptyText}</p>
-        {emptyHint && <p className="muted small">{emptyHint}</p>}
+      <div className={fromLegacy("chart-account-detail-empty")}>
+        <h3 className={fromLegacy("chart-account-detail-title")}>{emptyTitle}</h3>
+        <p className={fromLegacy("muted")}>{emptyText}</p>
+        {emptyHint && <p className={fromLegacy("muted small")}>{emptyHint}</p>}
       </div>
     )
   }
 
   return (
     <>
-      <div className="chart-account-detail-head">
-        <h3 className="chart-account-detail-title">{accountLevelLabel(selected.level)}</h3>
+      <div className={fromLegacy("chart-account-detail-head")}>
+        <h3 className={fromLegacy("chart-account-detail-title")}>{accountLevelLabel(selected.level)}</h3>
         {showClose && onClose && (
-          <button type="button" className="chart-account-detail-close link" onClick={onClose} aria-label="بستن">
+          <button type="button" className={fromLegacy("chart-account-detail-close link")} onClick={onClose} aria-label="بستن">
             ×
           </button>
         )}
       </div>
 
-      <p className="chart-account-detail-path muted small">
+      <p className={fromLegacy("chart-account-detail-path muted small")}>
         {editForm.full_code ? editForm.full_code : editForm.code}
         {' — '}
         {editForm.name}
       </p>
 
       {canCreate && selected.level !== 'detailed' && (
-        <div className="chart-account-detail-tabs" role="tablist">
+        <div className={fromLegacy("chart-account-detail-tabs")} role="tablist">
           <button
             type="button"
             role="tab"
@@ -75,7 +76,7 @@ export default function AccountDetailPanel({
       )}
 
       {panelTab === 'edit' || selected.level === 'detailed' ? (
-        <form onSubmit={onSaveEdit} className="form chart-account-detail-form">
+        <form onSubmit={onSaveEdit} className={fromLegacy("form chart-account-detail-form")}>
           {selected.level === 'general' ? (
             <Field label={TERMS.accountCode}>
               <input value={editForm.code} readOnly disabled />
@@ -99,15 +100,15 @@ export default function AccountDetailPanel({
             />
           </Field>
           {editForm.class_label && (
-            <p className="muted small chart-account-detail-hint">طبقه: {editForm.class_label}</p>
+            <p className={fromLegacy("muted small chart-account-detail-hint")}>طبقه: {editForm.class_label}</p>
           )}
           {editForm.general_name && selected.level !== 'general' && (
-            <p className="muted small chart-account-detail-hint">{TERMS.generalAccount}: {editForm.general_name}</p>
+            <p className={fromLegacy("muted small chart-account-detail-hint")}>{TERMS.generalAccount}: {editForm.general_name}</p>
           )}
           {editForm.subsidiary_name && (
-            <p className="muted small chart-account-detail-hint">{TERMS.subsidiaryAccount}: {editForm.subsidiary_name}</p>
+            <p className={fromLegacy("muted small chart-account-detail-hint")}>{TERMS.subsidiaryAccount}: {editForm.subsidiary_name}</p>
           )}
-          <label className="checkbox-field">
+          <label className={fromLegacy("checkbox-field")}>
             <input
               type="checkbox"
               checked={editForm.is_active}
@@ -121,18 +122,18 @@ export default function AccountDetailPanel({
               {editSaving ? 'در حال ذخیره…' : 'ذخیره تغییرات'}
             </Button>
           ) : (
-            <p className="muted small">برای ویرایش، مجوز «ویرایش حسابداری» لازم است.</p>
+            <p className={fromLegacy("muted small")}>برای ویرایش، مجوز «ویرایش حسابداری» لازم است.</p>
           )}
         </form>
       ) : (
-        <form onSubmit={onSaveChild} className="form chart-account-detail-form">
-          <p className="muted small chart-account-detail-hint">
+        <form onSubmit={onSaveChild} className={fromLegacy("form chart-account-detail-form")}>
+          <p className={fromLegacy("muted small chart-account-detail-hint")}>
             زیرمجموعه برای{' '}
             <strong>
               {editForm.full_code || editForm.code} — {editForm.name}
             </strong>
           </p>
-          <div className="form-grid-2">
+          <div className={fromLegacy("form-grid-2")}>
             <Field label={TERMS.accountCode}>
               <input
                 value={childForm.code}

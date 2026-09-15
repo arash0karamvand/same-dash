@@ -2,6 +2,7 @@
 
 import { createPortal } from 'react-dom'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { fromLegacy } from '../styles/tw.js'
 
 const PANEL_WIDTH = { date: 380, month: 320, select: 220, menu: 280 }
 const PANEL_HEIGHT = { date: 300, month: 300, select: 320, menu: 240 }
@@ -117,11 +118,11 @@ export default function JcalPanel({
   const panel = (
     <div
       ref={panelRef}
-      className={[
+      className={fromLegacy(
         'jcal-panel',
         mobileSheet ? 'jcal-panel--sheet' : 'jcal-panel--floating',
         !mobileSheet && !style ? 'jcal-panel--pending' : '',
-      ].filter(Boolean).join(' ')}
+      )}
       style={style || undefined}
       role="dialog"
       aria-label={ariaLabel}

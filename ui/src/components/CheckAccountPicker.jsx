@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { accountingApi } from '../api/client'
 import Select from './Select'
 import { Field } from './ui'
+import { fromLegacy } from '../styles/tw.js'
 
 function accountLabel(acc) {
   if (!acc) return '—'
@@ -56,11 +57,11 @@ export default function CheckAccountPicker({
   const depAcc = accounts.find((a) => String(a.id) === String(depositAccountId))
 
   if (loading) {
-    return <p className="muted loading">در حال بارگذاری حساب‌ها…</p>
+    return <p className={fromLegacy("muted loading")}>در حال بارگذاری حساب‌ها…</p>
   }
 
   return (
-    <div className="check-account-picker">
+    <div className={fromLegacy("check-account-picker")}>
       <Field label="ثبت چک در حساب">
         {pickRegistration ? (
           <Select
@@ -75,11 +76,11 @@ export default function CheckAccountPicker({
         ) : (
           <button
             type="button"
-            className="check-account-summary"
+            className={fromLegacy("check-account-summary")}
             onClick={() => setPickRegistration(true)}
           >
             {accountLabel(regAcc) || prefs?.default_check_registration_account_label || 'انتخاب حساب…'}
-            <span className="muted"> (کلیک برای تغییر)</span>
+            <span className={fromLegacy("muted")}> (کلیک برای تغییر)</span>
           </button>
         )}
       </Field>
@@ -98,16 +99,16 @@ export default function CheckAccountPicker({
         ) : (
           <button
             type="button"
-            className="check-account-summary"
+            className={fromLegacy("check-account-summary")}
             onClick={() => setPickDeposit(true)}
           >
             {accountLabel(depAcc) || prefs?.default_check_deposit_account_label || 'انتخاب حساب…'}
-            <span className="muted"> (کلیک برای تغییر)</span>
+            <span className={fromLegacy("muted")}> (کلیک برای تغییر)</span>
           </button>
         )}
       </Field>
 
-      <label className="check-account-save-default">
+      <label className={fromLegacy("check-account-save-default")}>
         <input
           type="checkbox"
           checked={Boolean(saveAsDefault)}

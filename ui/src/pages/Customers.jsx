@@ -16,6 +16,7 @@ import { useConfirm } from '../context/ConfirmContext'
 import { formatDate, formatMoney } from '../utils/format'
 import { todayIso } from '../utils/jalali'
 import { hasAnyPermission } from '../utils/permissions'
+import { fromLegacy } from '../styles/tw.js'
 
 const EMPTY_FORM = { full_name: '', phone: '', email: '', address: '', notes: '', birthday: '' }
 const EMPTY_WALLET_FORM = { action: 'deposit', amount: '', description: '' }
@@ -176,19 +177,19 @@ export default function Customers({ portal }) {
   }
 
   const renderActions = (c) => (
-    <div className="row-actions">
-      <button type="button" className="link" onClick={() => openWallet(c)}>
+    <div className={fromLegacy("row-actions")}>
+      <button type="button" className={fromLegacy("link")} onClick={() => openWallet(c)}>
         کیف پول
       </button>
-      <button type="button" className="link" onClick={() => openHistory(c)}>
+      <button type="button" className={fromLegacy("link")} onClick={() => openHistory(c)}>
         تاریخچه
       </button>
       {canEdit && (
         <>
-          <button type="button" className="link" onClick={() => openEdit(c)}>
+          <button type="button" className={fromLegacy("link")} onClick={() => openEdit(c)}>
             ویرایش
           </button>
-          <button type="button" className="link danger" onClick={() => remove(c)}>
+          <button type="button" className={fromLegacy("link danger")} onClick={() => remove(c)}>
             حذف
           </button>
         </>
@@ -197,11 +198,11 @@ export default function Customers({ portal }) {
   )
 
   return (
-    <div className="page customers-page">
+    <div className={fromLegacy("page customers-page")}>
       {topBuyers?.results?.length > 0 && (
-        <Card title="مشتریان وفادار — ۱ سال اخیر" className="top-buyers-card analytics-card">
-          <div className="table-wrap">
-            <table className="table table-compact">
+        <Card title="مشتریان وفادار — ۱ سال اخیر" className={fromLegacy("top-buyers-card analytics-card")}>
+          <div className={fromLegacy("table-wrap")}>
+            <table className={fromLegacy("table table-compact")}>
               <thead>
                 <tr>
                   <th>#</th>
@@ -216,7 +217,7 @@ export default function Customers({ portal }) {
                   <tr key={c.customer_id}>
                     <td>{idx + 1}</td>
                     <td><strong>{c.full_name}</strong></td>
-                    <td className="ltr">{c.phone}</td>
+                    <td className={fromLegacy("ltr")}>{c.phone}</td>
                     <td>{c.purchase_count_year}</td>
                     <td>{formatMoney(c.year_purchases_total)}</td>
                   </tr>
@@ -236,10 +237,10 @@ export default function Customers({ portal }) {
         title="فهرست مشتریان"
         actions={canEdit ? <Button onClick={openCreate}>+ مشتری جدید</Button> : null}
       >
-        <FilterBar className="page-filters--toolbar">
+        <FilterBar className={fromLegacy("page-filters--toolbar")}>
           <Field label="جستجو">
             <input
-              className="search-input"
+              className={fromLegacy("search-input")}
               placeholder="جستجو بر اساس نام، موبایل یا کد باشگاه…"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
@@ -269,19 +270,19 @@ export default function Customers({ portal }) {
               placeholder="همه"
             />
           </Field>
-          <div className="page-filters-actions">
+          <div className={fromLegacy("page-filters-actions")}>
             <Button variant="ghost" type="button" onClick={() => load()}>اعمال فیلتر</Button>
           </div>
         </FilterBar>
-        {error && <div className="alert-error">{error}</div>}
+        {error && <div className={fromLegacy("alert-error")}>{error}</div>}
         {loading ? (
-          <div className="loading">در حال بارگذاری…</div>
+          <div className={fromLegacy("loading")}>در حال بارگذاری…</div>
         ) : customers.length === 0 ? (
           <EmptyState text="مشتری‌ای یافت نشد." />
         ) : (
           <>
-            <div className="table-wrap customers-table-desktop">
-              <table className="table">
+            <div className={fromLegacy("table-wrap customers-table-desktop")}>
+              <table className={fromLegacy("table")}>
                 <thead>
                   <tr>
                     <th>نام</th>
@@ -299,12 +300,12 @@ export default function Customers({ portal }) {
                   {customers.map((c) => (
                     <tr key={c.id}>
                       <td>{c.full_name}</td>
-                      <td className="ltr">{c.phone}</td>
-                      <td className="customer-address-cell">{c.address || '—'}</td>
-                      <td className="ltr">{c.membership_code || '—'}</td>
+                      <td className={fromLegacy("ltr")}>{c.phone}</td>
+                      <td className={fromLegacy("customer-address-cell")}>{c.address || '—'}</td>
+                      <td className={fromLegacy("ltr")}>{c.membership_code || '—'}</td>
                       <td>{c.level ? <Badge color={c.level.color}>{c.level.name}</Badge> : '—'}</td>
                       <td>
-                        <button type="button" className="link wallet-balance-link" onClick={() => openWallet(c)}>
+                        <button type="button" className={fromLegacy("link wallet-balance-link")} onClick={() => openWallet(c)}>
                           {formatMoney(c.wallet_balance || 0)}
                         </button>
                       </td>
@@ -317,34 +318,34 @@ export default function Customers({ portal }) {
               </table>
             </div>
 
-            <div className="customers-cards-mobile">
+            <div className={fromLegacy("customers-cards-mobile")}>
               {customers.map((c) => (
-                <div key={c.id} className="customer-card">
-                  <div className="customer-card-head">
+                <div key={c.id} className={fromLegacy("customer-card")}>
+                  <div className={fromLegacy("customer-card-head")}>
                     <div>
                       <strong>{c.full_name}</strong>
-                      <span className="ltr muted"> — {c.phone}</span>
+                      <span className={fromLegacy("ltr muted")}> — {c.phone}</span>
                     </div>
                     {c.level ? <Badge color={c.level.color}>{c.level.name}</Badge> : null}
                   </div>
-                  <div className="customer-card-stats">
+                  <div className={fromLegacy("customer-card-stats")}>
                     <div>
-                      <span className="muted">کیف پول</span>
-                      <button type="button" className="link wallet-balance-link" onClick={() => openWallet(c)}>
+                      <span className={fromLegacy("muted")}>کیف پول</span>
+                      <button type="button" className={fromLegacy("link wallet-balance-link")} onClick={() => openWallet(c)}>
                         {formatMoney(c.wallet_balance || 0)}
                       </button>
                     </div>
                     <div>
-                      <span className="muted">مجموع خرید</span>
+                      <span className={fromLegacy("muted")}>مجموع خرید</span>
                       <strong>{formatMoney(c.total_purchases)}</strong>
                     </div>
                     <div>
-                      <span className="muted">آخرین خرید</span>
+                      <span className={fromLegacy("muted")}>آخرین خرید</span>
                       <span>{c.last_purchase_at ? formatDate(c.last_purchase_at) : '—'}</span>
                     </div>
                     {c.address && (
-                      <div className="customer-card-address">
-                        <span className="muted">آدرس</span>
+                      <div className={fromLegacy("customer-card-address")}>
+                        <span className={fromLegacy("muted")}>آدرس</span>
                         <span>{c.address}</span>
                       </div>
                     )}
@@ -364,18 +365,18 @@ export default function Customers({ portal }) {
       )}
 
       <Modal title={editing ? 'ویرایش مشتری' : 'مشتری جدید'} open={modalOpen} onClose={() => setModalOpen(false)}>
-        <form onSubmit={save} className="form">
+        <form onSubmit={save} className={fromLegacy("form")}>
           <Field label="نام کامل">
             <input value={form.full_name} onChange={update('full_name')} required />
           </Field>
           <Field label="موبایل">
-            <input className="ltr" value={form.phone} onChange={update('phone')} required />
+            <input className={fromLegacy("ltr")} value={form.phone} onChange={update('phone')} required />
           </Field>
           <Field label="آدرس">
             <textarea value={form.address} onChange={update('address')} rows={2} placeholder="آدرس منزل یا محل تحویل" />
           </Field>
           <Field label="ایمیل">
-            <input className="ltr" value={form.email} onChange={update('email')} />
+            <input className={fromLegacy("ltr")} value={form.email} onChange={update('email')} />
           </Field>
           <Field label="یادداشت">
             <textarea value={form.notes} onChange={update('notes')} rows={3} />
@@ -391,7 +392,7 @@ export default function Customers({ portal }) {
                 />
                 <button
                   type="button"
-                  className="link"
+                  className={fromLegacy("link")}
                   style={{ marginTop: 6 }}
                   onClick={() => setForm({ ...form, birthday: '' })}
                 >
@@ -414,17 +415,17 @@ export default function Customers({ portal }) {
         onClose={() => setWalletFor(null)}
       >
         {!walletData ? (
-          <div className="loading">در حال بارگذاری…</div>
+          <div className={fromLegacy("loading")}>در حال بارگذاری…</div>
         ) : (
-          <div className="wallet-panel">
-            <div className="wallet-balance-banner">
-              <span className="muted">موجودی فعلی</span>
+          <div className={fromLegacy("wallet-panel")}>
+            <div className={fromLegacy("wallet-balance-banner")}>
+              <span className={fromLegacy("muted")}>موجودی فعلی</span>
               <strong>{formatMoney(walletData.balance)}</strong>
             </div>
 
-            {walletInfo && <div className="alert-info">{walletInfo}</div>}
+            {walletInfo && <div className={fromLegacy("alert-info")}>{walletInfo}</div>}
 
-            <form onSubmit={submitWallet} className="form wallet-form">
+            <form onSubmit={submitWallet} className={fromLegacy("form wallet-form")}>
               <Field label="نوع تراکنش">
                 <Select
                   value={walletForm.action}
@@ -455,13 +456,13 @@ export default function Customers({ portal }) {
               </Button>
             </form>
 
-            <h4 className="wallet-tx-title">تراکنش‌های اخیر</h4>
+            <h4 className={fromLegacy("wallet-tx-title")}>تراکنش‌های اخیر</h4>
             {walletData.transactions.length === 0 ? (
               <EmptyState text="تراکنشی ثبت نشده." />
             ) : (
               <>
-                <div className="table-wrap wallet-table-desktop">
-                  <table className="table">
+                <div className={fromLegacy("table-wrap wallet-table-desktop")}>
+                  <table className={fromLegacy("table")}>
                     <thead>
                       <tr>
                         <th>نوع</th>
@@ -489,10 +490,10 @@ export default function Customers({ portal }) {
                     </tbody>
                   </table>
                 </div>
-                <div className="wallet-cards-mobile">
+                <div className={fromLegacy("wallet-cards-mobile")}>
                   {walletData.transactions.map((tx) => (
-                    <div key={tx.id} className="wallet-tx-card">
-                      <div className="wallet-tx-card-head">
+                    <div key={tx.id} className={fromLegacy("wallet-tx-card")}>
+                      <div className={fromLegacy("wallet-tx-card-head")}>
                         <Badge color={tx.amount >= 0 ? 'var(--success)' : 'var(--danger)'}>
                           {tx.transaction_type_display}
                         </Badge>
@@ -501,8 +502,8 @@ export default function Customers({ portal }) {
                           {formatMoney(tx.amount)}
                         </span>
                       </div>
-                      <p className="muted">{tx.description || 'بدون شرح'}</p>
-                      <div className="wallet-tx-card-meta">
+                      <p className={fromLegacy("muted")}>{tx.description || 'بدون شرح'}</p>
+                      <div className={fromLegacy("wallet-tx-card-meta")}>
                         <span>موجودی: {formatMoney(tx.balance_after)}</span>
                         <span>{formatDate(tx.created_at)}</span>
                       </div>
@@ -522,22 +523,22 @@ export default function Customers({ portal }) {
         wide
       >
         {!history ? (
-          <div className="loading">در حال بارگذاری…</div>
+          <div className={fromLegacy("loading")}>در حال بارگذاری…</div>
         ) : (
-          <div className="history purchase-history">
+          <div className={fromLegacy("history purchase-history")}>
             <h4>فروش‌ها و محصولات</h4>
             {history.sales.length === 0 ? (
               <EmptyState text="فروشی ثبت نشده." />
             ) : (
-              <div className="purchase-history-list">
+              <div className={fromLegacy("purchase-history-list")}>
                 {history.sales.map((s) => (
-                  <article key={s.id} className="purchase-history-sale">
-                    <div className="purchase-history-sale-head">
+                  <article key={s.id} className={fromLegacy("purchase-history-sale")}>
+                    <div className={fromLegacy("purchase-history-sale-head")}>
                       <div>
                         <strong>فاکتور {s.invoice_number || s.id}</strong>
-                        <span className="muted small"> — {formatDate(s.sold_at)}</span>
+                        <span className={fromLegacy("muted small")}> — {formatDate(s.sold_at)}</span>
                       </div>
-                      <div className="purchase-history-sale-totals">
+                      <div className={fromLegacy("purchase-history-sale-totals")}>
                         <span>{formatMoney(s.final_amount)}</span>
                         <Badge color={s.payment_status === 'paid' ? 'var(--success)' : 'var(--warning)'}>
                           {s.payment_status_display}
@@ -545,8 +546,8 @@ export default function Customers({ portal }) {
                       </div>
                     </div>
                     {s.line_items?.length ? (
-                      <div className="table-wrap">
-                        <table className="table purchase-history-items">
+                      <div className={fromLegacy("table-wrap")}>
+                        <table className={fromLegacy("table purchase-history-items")}>
                           <thead>
                             <tr>
                               <th>محصول</th>
@@ -566,9 +567,9 @@ export default function Customers({ portal }) {
                                 <td>{item.fabric || '—'}</td>
                                 <td>
                                   {item.color_name ? (
-                                    <span className="history-color-cell">
+                                    <span className={fromLegacy("history-color-cell")}>
                                       {item.color_hex && (
-                                        <span className="color-swatch small" style={{ background: item.color_hex }} />
+                                        <span className={fromLegacy("color-swatch small")} style={{ background: item.color_hex }} />
                                       )}
                                       {item.color_name}
                                     </span>
@@ -583,7 +584,7 @@ export default function Customers({ portal }) {
                         </table>
                       </div>
                     ) : (
-                      <p className="muted small">جزئیات محصول ثبت نشده.</p>
+                      <p className={fromLegacy("muted small")}>جزئیات محصول ثبت نشده.</p>
                     )}
                   </article>
                 ))}
@@ -593,8 +594,8 @@ export default function Customers({ portal }) {
             {history.level_history.length === 0 ? (
               <EmptyState text="تغییر سطحی ثبت نشده." />
             ) : (
-              <div className="table-wrap">
-                <table className="table">
+              <div className={fromLegacy("table-wrap")}>
+                <table className={fromLegacy("table")}>
                   <thead>
                     <tr>
                       <th>سطح قبلی</th>

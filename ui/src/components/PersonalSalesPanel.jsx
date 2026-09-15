@@ -8,6 +8,7 @@ import { Button, Card, Field } from './ui'
 import { salesApi } from '../api/client'
 import { formatMoney } from '../utils/format'
 import { currentJalali, formatJalali, jalaliToIso, PERSIAN_MONTHS, todayIso, toPersianDigits } from '../utils/jalali'
+import { fromLegacy } from '../styles/tw.js'
 
 const PERIOD_OPTIONS = [
   { value: 'day', label: 'روز' },
@@ -94,17 +95,17 @@ export default function PersonalSalesPanel({
 
   return (
     <Card
-      className={`personal-sales-panel ${collapsed ? 'is-collapsed' : ''}`}
+      className={fromLegacy(`personal-sales-panel ${collapsed ? 'is-collapsed' : ''}`)}
       title={monthOnly ? 'فروش ماهانه من' : 'فروش من'}
       actions={
-        <button type="button" className="link collapse-toggle" onClick={onToggleCollapse}>
+        <button type="button" className={fromLegacy("link collapse-toggle")} onClick={onToggleCollapse}>
           {collapsed ? 'نمایش ▼' : 'بستن ▲'}
         </button>
       }
     >
       {!collapsed && (
         <>
-          <div className="personal-sales-filters">
+          <div className={fromLegacy("personal-sales-filters")}>
             {!monthOnly && (
             <Field label="بازه">
               <Select
@@ -142,7 +143,7 @@ export default function PersonalSalesPanel({
                 />
               </Field>
             )}
-            <div className="page-filters-actions">
+            <div className={fromLegacy("page-filters-actions")}>
               <Button type="button" onClick={loadStats} disabled={loading}>
                 {loading ? '…' : 'بروزرسانی'}
               </Button>
@@ -153,18 +154,18 @@ export default function PersonalSalesPanel({
               )}
             </div>
           </div>
-          {error && <div className="alert-error">{error}</div>}
-          <div className="personal-sales-stats">
+          {error && <div className={fromLegacy("alert-error")}>{error}</div>}
+          <div className={fromLegacy("personal-sales-stats")}>
             <div>
-              <span className="muted">بازه</span>
+              <span className={fromLegacy("muted")}>بازه</span>
               <strong>{periodLabel()}</strong>
             </div>
             <div>
-              <span className="muted">مبلغ</span>
-              <strong className="stat-value">{formatMoney(stats?.total_final || 0)}</strong>
+              <span className={fromLegacy("muted")}>مبلغ</span>
+              <strong className={fromLegacy("stat-value")}>{formatMoney(stats?.total_final || 0)}</strong>
             </div>
             <div>
-              <span className="muted">تعداد</span>
+              <span className={fromLegacy("muted")}>تعداد</span>
               <strong>{stats?.count || 0} فقره</strong>
             </div>
           </div>

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { fromLegacy } from '../styles/tw.js'
 
 import { materialsApi } from '../api/client'
 
@@ -388,13 +389,13 @@ export default function Materials() {
 
   return (
 
-    <div className="page materials-page">
+    <div className={fromLegacy("page materials-page")}>
 
-      <div className="products-page-header">
+      <div className={fromLegacy("products-page-header")}>
 
         <div>
 
-          <h1 className="page-title">{isOffice ? 'تایید متریال' : 'متریال'}</h1>
+          <h1 className={fromLegacy("page-title")}>{isOffice ? 'تایید متریال' : 'متریال'}</h1>
 
         </div>
 
@@ -414,7 +415,7 @@ export default function Materials() {
 
 
 
-      {error && <div className="alert-error">{error}</div>}
+      {error && <div className={fromLegacy("alert-error")}>{error}</div>}
 
 
 
@@ -426,7 +427,7 @@ export default function Materials() {
 
             <input
 
-              className="search-input"
+              className={fromLegacy("search-input")}
 
               value={search}
 
@@ -442,7 +443,7 @@ export default function Materials() {
 
             <Field label="وضعیت تایید">
 
-              <div className="workflow-filter-tabs">
+              <div className={fromLegacy("workflow-filter-tabs")}>
 
                 {[
 
@@ -462,7 +463,7 @@ export default function Materials() {
 
                     type="button"
 
-                    className={`workflow-filter-tab ${statusFilter === opt.value ? 'active' : ''}`}
+                    className={fromLegacy(`workflow-filter-tab ${statusFilter === opt.value ? 'active' : ''}`)}
 
                     onClick={() => setStatusFilter(opt.value)}
 
@@ -486,7 +487,7 @@ export default function Materials() {
 
         {loading ? (
 
-          <div className="loading">در حال بارگذاری…</div>
+          <div className={fromLegacy("loading")}>در حال بارگذاری…</div>
 
         ) : materials.length === 0 ? (
 
@@ -495,9 +496,9 @@ export default function Materials() {
         ) : (
 
           <>
-          <div className="table-wrap materials-table-desktop">
+          <div className={fromLegacy("table-wrap materials-table-desktop")}>
 
-            <table className="table">
+            <table className={fromLegacy("table")}>
 
               <thead>
 
@@ -533,9 +534,9 @@ export default function Materials() {
 
                       <strong>{m.name}</strong>
 
-                      {m.sku && <div className="muted small ltr">SKU: {m.sku}</div>}
+                      {m.sku && <div className={fromLegacy("muted small ltr")}>SKU: {m.sku}</div>}
 
-                      {m.submitted_by && <div className="muted small">ثبت: {m.submitted_by}</div>}
+                      {m.submitted_by && <div className={fromLegacy("muted small")}>ثبت: {m.submitted_by}</div>}
 
                     </td>
 
@@ -543,11 +544,11 @@ export default function Materials() {
 
                       {m.color_name ? (
 
-                        <span className="material-color-cell">
+                        <span className={fromLegacy("material-color-cell")}>
 
                           <span
 
-                            className="color-swatch inline"
+                            className={fromLegacy("color-swatch inline")}
 
                             style={{
 
@@ -585,7 +586,7 @@ export default function Materials() {
 
                       {m.rejection_reason && (
 
-                        <div className="muted small">{m.rejection_reason}</div>
+                        <div className={fromLegacy("muted small")}>{m.rejection_reason}</div>
 
                       )}
 
@@ -593,15 +594,15 @@ export default function Materials() {
 
                     {showActions && (
 
-                      <td className="row-actions">
+                      <td className={fromLegacy("row-actions")}>
 
                         {canApprove && m.approval_status === 'pending' && (
 
                           <>
 
-                            <button type="button" className="link link-success" onClick={() => approveMaterial(m)}>تایید</button>
+                            <button type="button" className={fromLegacy("link link-success")} onClick={() => approveMaterial(m)}>تایید</button>
 
-                            <button type="button" className="link danger" onClick={() => rejectMaterial(m)}>رد</button>
+                            <button type="button" className={fromLegacy("link danger")} onClick={() => rejectMaterial(m)}>رد</button>
 
                           </>
 
@@ -611,9 +612,9 @@ export default function Materials() {
 
                           <>
 
-                            <button type="button" className="link" onClick={() => openEdit(m)}>ویرایش</button>
+                            <button type="button" className={fromLegacy("link")} onClick={() => openEdit(m)}>ویرایش</button>
 
-                            <button type="button" className="link danger" onClick={() => removeMaterial(m)}>حذف</button>
+                            <button type="button" className={fromLegacy("link danger")} onClick={() => removeMaterial(m)}>حذف</button>
 
                           </>
 
@@ -632,46 +633,46 @@ export default function Materials() {
             </table>
 
           </div>
-          <div className="materials-cards-mobile">
+          <div className={fromLegacy("materials-cards-mobile")}>
             {materials.map((m) => (
-              <div key={m.id} className="m-card">
-                <div className="m-card-head">
+              <div key={m.id} className={fromLegacy("m-card")}>
+                <div className={fromLegacy("m-card-head")}>
                   <div>
                     <strong>{m.name}</strong>
-                    {m.sku && <div className="muted small ltr">SKU: {m.sku}</div>}
+                    {m.sku && <div className={fromLegacy("muted small ltr")}>SKU: {m.sku}</div>}
                   </div>
                   <Badge color={APPROVAL_COLORS[m.approval_status] || '#94a3b8'}>
                     {m.approval_status_display || m.approval_status}
                   </Badge>
                 </div>
-                <div className="m-card-grid">
+                <div className={fromLegacy("m-card-grid")}>
                   <div>
-                    <span className="muted">رنگ</span>
+                    <span className={fromLegacy("muted")}>رنگ</span>
                     {m.color_name ? (
-                      <span className="material-color-cell">
-                        <span className="color-swatch inline" style={{ background: m.color_hex, borderColor: m.color_hex === '#f8fafc' ? '#cbd5e1' : m.color_hex }} />
+                      <span className={fromLegacy("material-color-cell")}>
+                        <span className={fromLegacy("color-swatch inline")} style={{ background: m.color_hex, borderColor: m.color_hex === '#f8fafc' ? '#cbd5e1' : m.color_hex }} />
                         {m.color_name}
                       </span>
                     ) : '—'}
                   </div>
-                  <div><span className="muted">واحد</span>{m.unit}</div>
-                  <div><span className="muted">قیمت واحد</span>{formatMoney(m.unit_cost)}</div>
-                  <div><span className="muted">موجودی</span>{m.stock != null ? m.stock : '—'}</div>
-                  <div><span className="muted">ارزش موجودی</span>{m.inventory_value != null ? formatMoney(m.inventory_value) : '—'}</div>
+                  <div><span className={fromLegacy("muted")}>واحد</span>{m.unit}</div>
+                  <div><span className={fromLegacy("muted")}>قیمت واحد</span>{formatMoney(m.unit_cost)}</div>
+                  <div><span className={fromLegacy("muted")}>موجودی</span>{m.stock != null ? m.stock : '—'}</div>
+                  <div><span className={fromLegacy("muted")}>ارزش موجودی</span>{m.inventory_value != null ? formatMoney(m.inventory_value) : '—'}</div>
                 </div>
-                {m.rejection_reason && <p className="muted small">{m.rejection_reason}</p>}
+                {m.rejection_reason && <p className={fromLegacy("muted small")}>{m.rejection_reason}</p>}
                 {showActions && (
-                  <div className="m-card-actions">
+                  <div className={fromLegacy("m-card-actions")}>
                     {canApprove && m.approval_status === 'pending' && (
                       <>
-                        <button type="button" className="link link-success" onClick={() => approveMaterial(m)}>تایید</button>
-                        <button type="button" className="link danger" onClick={() => rejectMaterial(m)}>رد</button>
+                        <button type="button" className={fromLegacy("link link-success")} onClick={() => approveMaterial(m)}>تایید</button>
+                        <button type="button" className={fromLegacy("link danger")} onClick={() => rejectMaterial(m)}>رد</button>
                       </>
                     )}
                     {canApprove && (
                       <>
-                        <button type="button" className="link" onClick={() => openEdit(m)}>ویرایش</button>
-                        <button type="button" className="link danger" onClick={() => removeMaterial(m)}>حذف</button>
+                        <button type="button" className={fromLegacy("link")} onClick={() => openEdit(m)}>ویرایش</button>
+                        <button type="button" className={fromLegacy("link danger")} onClick={() => removeMaterial(m)}>حذف</button>
                       </>
                     )}
                   </div>
@@ -702,7 +703,7 @@ export default function Materials() {
 
       >
 
-        <form onSubmit={saveMaterial} className="form">
+        <form onSubmit={saveMaterial} className={fromLegacy("form")}>
 
           <Field label="نام متریال">
 
@@ -710,7 +711,7 @@ export default function Materials() {
 
           </Field>
 
-          <div className="variant-color-presets">
+          <div className={fromLegacy("variant-color-presets")}>
 
             {COLOR_PRESETS.map((preset) => (
 
@@ -720,7 +721,7 @@ export default function Materials() {
 
                 type="button"
 
-                className="color-preset-btn"
+                className={fromLegacy("color-preset-btn")}
 
                 title={preset.name}
 
@@ -734,7 +735,7 @@ export default function Materials() {
 
           </div>
 
-          <div className="form-grid-2">
+          <div className={fromLegacy("form-grid-2")}>
 
             <Field label="نام رنگ">
 
@@ -744,13 +745,13 @@ export default function Materials() {
 
             <Field label="کد رنگ">
 
-              <input className="ltr" type="color" value={form.color_hex} onChange={(e) => setForm({ ...form, color_hex: e.target.value })} />
+              <input className={fromLegacy("ltr")} type="color" value={form.color_hex} onChange={(e) => setForm({ ...form, color_hex: e.target.value })} />
 
             </Field>
 
             <Field label="کد (SKU)">
 
-              <input className="ltr" value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} />
+              <input className={fromLegacy("ltr")} value={form.sku} onChange={(e) => setForm({ ...form, sku: e.target.value })} />
 
             </Field>
 
@@ -778,15 +779,15 @@ export default function Materials() {
 
             <Field label="موجودی">
 
-              <input className="ltr" type="number" min="0" step="0.01" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} placeholder="—" />
+              <input className={fromLegacy("ltr")} type="number" min="0" step="0.01" value={form.stock} onChange={(e) => setForm({ ...form, stock: e.target.value })} placeholder="—" />
 
             </Field>
 
           </div>
 
           {previewInventoryValue != null && (
-            <div className="material-value-preview">
-              <span className="muted">ارزش موجودی (موجودی × قیمت واحد):</span>
+            <div className={fromLegacy("material-value-preview")}>
+              <span className={fromLegacy("muted")}>ارزش موجودی (موجودی × قیمت واحد):</span>
               <strong>{formatMoney(previewInventoryValue)}</strong>
             </div>
           )}
@@ -799,7 +800,7 @@ export default function Materials() {
 
           {isOffice && (
 
-            <label className="checkbox-row">
+            <label className={fromLegacy("checkbox-row")}>
 
               <input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} />
 
@@ -809,7 +810,7 @@ export default function Materials() {
 
           )}
 
-          <div className="form-actions">
+          <div className={fromLegacy("form-actions")}>
 
             <Button type="button" variant="ghost" onClick={() => setModal(false)} disabled={saving}>انصراف</Button>
 

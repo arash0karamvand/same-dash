@@ -9,6 +9,7 @@ import { approvalColor } from '../config/statusColors'
 import { formatDate, formatMoney, formatNumber } from '../utils/format'
 import { hasPermission, isSystemAdmin } from '../utils/permissions'
 import { formatJalali, jalaliToIso, PERSIAN_MONTHS, toPersianDigits } from '../utils/jalali'
+import { fromLegacy } from '../styles/tw.js'
 
 function formatJalaliParts(jy, jm, jd) {
   if (!jy) return '—'
@@ -31,14 +32,14 @@ export default function Dashboard() {
     dashboardApi.stats().then(setStats)
   }
 
-  if (error) return <div className="alert-error">{error}</div>
-  if (!stats) return <div className="loading">در حال بارگذاری…</div>
+  if (error) return <div className={fromLegacy("alert-error")}>{error}</div>
+  if (!stats) return <div className={fromLegacy("loading")}>در حال بارگذاری…</div>
 
   // بیشینه تعداد برای مقیاس‌بندی نمودار میله‌ای ساده
   const maxCount = Math.max(1, ...stats.level_distribution.map((t) => t.count))
 
   return (
-    <div className="page">
+    <div className={fromLegacy("page")}>
       {showCheckIn && <AttendanceWidget />}
 
       {showTodayAttendance && (
@@ -47,8 +48,8 @@ export default function Dashboard() {
             <EmptyState text="امروز حضوری ثبت نشده است." />
           ) : (
             <>
-              <div className="table-wrap dashboard-table-desktop">
-                <table className="table">
+              <div className={fromLegacy("table-wrap dashboard-table-desktop")}>
+                <table className={fromLegacy("table")}>
                   <thead>
                     <tr>
                       <th>کارمند</th>
@@ -71,14 +72,14 @@ export default function Dashboard() {
                         </td>
                         <td>{r.check_in_at ? formatDate(r.check_in_at) : '—'}</td>
                         <td>{r.check_out_at ? formatDate(r.check_out_at) : '—'}</td>
-                        <td className="row-actions">
+                        <td className={fromLegacy("row-actions")}>
                           {r.approval_status === 'pending' ? (
                             <>
                               <LinkAction variant="success" onClick={() => approve(r.id, 'approved')}>تایید</LinkAction>
                               <LinkAction variant="danger" onClick={() => approve(r.id, 'rejected')}>رد</LinkAction>
                             </>
                           ) : (
-                            <span className="muted">—</span>
+                            <span className={fromLegacy("muted")}>—</span>
                           )}
                         </td>
                       </tr>
@@ -86,21 +87,21 @@ export default function Dashboard() {
                   </tbody>
                 </table>
               </div>
-              <div className="dashboard-cards-mobile">
+              <div className={fromLegacy("dashboard-cards-mobile")}>
                 {stats.attendance_today.results.map((r) => (
-                  <div key={r.id} className="m-card">
-                    <div className="m-card-head">
+                  <div key={r.id} className={fromLegacy("m-card")}>
+                    <div className={fromLegacy("m-card-head")}>
                       <strong>{r.seller_name}</strong>
                       <Badge color={approvalColor(r.approval_status)}>{r.approval_status_display}</Badge>
                     </div>
-                    <div className="muted small">{r.work_branch_label}</div>
-                    <div className="muted small">
+                    <div className={fromLegacy("muted small")}>{r.work_branch_label}</div>
+                    <div className={fromLegacy("muted small")}>
                       ورود: {r.check_in_at ? formatDate(r.check_in_at) : '—'}
                       {' · '}
                       خروج: {r.check_out_at ? formatDate(r.check_out_at) : '—'}
                     </div>
                     {r.approval_status === 'pending' && (
-                      <div className="m-card-actions">
+                      <div className={fromLegacy("m-card-actions")}>
                         <LinkAction variant="success" onClick={() => approve(r.id, 'approved')}>تایید</LinkAction>
                         <LinkAction variant="danger" onClick={() => approve(r.id, 'rejected')}>رد</LinkAction>
                       </div>
@@ -113,9 +114,9 @@ export default function Dashboard() {
         </Card>
       )}
 
-      <div className="stat-grid dashboard-sales-stats">
+      <div className={fromLegacy("stat-grid dashboard-sales-stats")}>
         <StatCard
-          className="stat-card--amount"
+          className={fromLegacy("stat-card--amount")}
           label="فروش امروز"
           value={formatMoney(stats.sales_today?.total ?? 0)}
           hint={
@@ -130,7 +131,7 @@ export default function Dashboard() {
           accent="var(--success)"
         />
         <StatCard
-          className="stat-card--amount"
+          className={fromLegacy("stat-card--amount")}
           label="فروش این هفته"
           value={formatMoney(stats.sales_this_week?.total ?? 0)}
           hint={
@@ -149,7 +150,7 @@ export default function Dashboard() {
           accent="var(--info)"
         />
         <StatCard
-          className="stat-card--amount"
+          className={fromLegacy("stat-card--amount")}
           label="فروش این ماه"
           value={formatMoney(stats.sales_this_month?.total ?? 0)}
           hint={
@@ -165,28 +166,28 @@ export default function Dashboard() {
         />
       </div>
 
-      <div className="stat-grid dashboard-meta-stats">
+      <div className={fromLegacy("stat-grid dashboard-meta-stats")}>
         <StatCard label="تعداد مشتریان" value={formatNumber(stats.customers_count)} accent="var(--accent)" />
-        <StatCard className="stat-card--amount" label="مجموع فروش" value={formatMoney(stats.total_sales_amount)} accent="var(--warning)" />
+        <StatCard className={fromLegacy("stat-card--amount")} label="مجموع فروش" value={formatMoney(stats.total_sales_amount)} accent="var(--warning)" />
         <StatCard label="پیامک‌های ارسالی" value={formatNumber(stats.sms_sent)} accent="var(--info)" />
       </div>
 
-      <div className="grid-2">
+      <div className={fromLegacy("grid-2")}>
         <Card title="توزیع مشتریان در سطوح">
           {stats.level_distribution.length === 0 ? (
             <EmptyState text="هنوز سطحی تعریف نشده است." />
           ) : (
-            <div className="bar-chart">
+            <div className={fromLegacy("bar-chart")}>
               {stats.level_distribution.map((level) => (
-                <div key={level.name} className="bar-row">
-                  <span className="bar-label">{level.name}</span>
-                  <div className="bar-track">
+                <div key={level.name} className={fromLegacy("bar-row")}>
+                  <span className={fromLegacy("bar-label")}>{level.name}</span>
+                  <div className={fromLegacy("bar-track")}>
                     <div
-                      className="bar-fill"
+                      className={fromLegacy("bar-fill")}
                       style={{ width: `${(level.count / maxCount) * 100}%`, background: level.color }}
                     />
                   </div>
-                  <span className="bar-value">{formatNumber(level.count)}</span>
+                  <span className={fromLegacy("bar-value")}>{formatNumber(level.count)}</span>
                 </div>
               ))}
             </div>
@@ -198,8 +199,8 @@ export default function Dashboard() {
             <EmptyState text="فروشی ثبت نشده است." />
           ) : (
             <>
-              <div className="table-wrap dashboard-table-desktop">
-                <table className="table">
+              <div className={fromLegacy("table-wrap dashboard-table-desktop")}>
+                <table className={fromLegacy("table")}>
                   <thead>
                     <tr>
                       <th>مشتری</th>
@@ -218,14 +219,14 @@ export default function Dashboard() {
                   </tbody>
                 </table>
               </div>
-              <div className="dashboard-cards-mobile">
+              <div className={fromLegacy("dashboard-cards-mobile")}>
                 {stats.recent_sales.map((sale) => (
-                  <div key={sale.id} className="m-card">
-                    <div className="m-card-head">
+                  <div key={sale.id} className={fromLegacy("m-card")}>
+                    <div className={fromLegacy("m-card-head")}>
                       <strong>{sale.customer_name}</strong>
                       <strong>{formatMoney(sale.amount)}</strong>
                     </div>
-                    <div className="muted small">{formatDate(sale.created_at)}</div>
+                    <div className={fromLegacy("muted small")}>{formatDate(sale.created_at)}</div>
                   </div>
                 ))}
               </div>
@@ -237,8 +238,8 @@ export default function Dashboard() {
       {stats.pending_attendance?.length > 0 && (
         <Card title="حضور در انتظار تایید">
           <>
-            <div className="table-wrap dashboard-table-desktop">
-              <table className="table">
+            <div className={fromLegacy("table-wrap dashboard-table-desktop")}>
+              <table className={fromLegacy("table")}>
                 <thead>
                   <tr><th>فروشنده</th><th>شعبه</th><th>تاریخ</th><th>عملیات</th></tr>
                 </thead>
@@ -248,7 +249,7 @@ export default function Dashboard() {
                       <td>{r.seller_name}</td>
                       <td>{r.work_branch_label}</td>
                       <td>{formatDate(r.date)}</td>
-                      <td className="row-actions">
+                      <td className={fromLegacy("row-actions")}>
                         <LinkAction variant="success" onClick={() => approve(r.id, 'approved')}>تایید</LinkAction>
                         <LinkAction variant="danger" onClick={() => approve(r.id, 'rejected')}>رد</LinkAction>
                       </td>
@@ -257,15 +258,15 @@ export default function Dashboard() {
                 </tbody>
               </table>
             </div>
-            <div className="dashboard-cards-mobile">
+            <div className={fromLegacy("dashboard-cards-mobile")}>
               {stats.pending_attendance.map((r) => (
-                <div key={r.id} className="m-card">
-                  <div className="m-card-head">
+                <div key={r.id} className={fromLegacy("m-card")}>
+                  <div className={fromLegacy("m-card-head")}>
                     <strong>{r.seller_name}</strong>
-                    <span className="muted">{r.work_branch_label}</span>
+                    <span className={fromLegacy("muted")}>{r.work_branch_label}</span>
                   </div>
-                  <div className="muted small">{formatDate(r.date)}</div>
-                  <div className="m-card-actions">
+                  <div className={fromLegacy("muted small")}>{formatDate(r.date)}</div>
+                  <div className={fromLegacy("m-card-actions")}>
                     <LinkAction variant="success" onClick={() => approve(r.id, 'approved')}>تایید</LinkAction>
                     <LinkAction variant="danger" onClick={() => approve(r.id, 'rejected')}>رد</LinkAction>
                   </div>

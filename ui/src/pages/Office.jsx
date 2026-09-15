@@ -1,7 +1,7 @@
 // اداری — تایید، اصلاح کامل فاکتور و ارسال به کارخانه
 
-import { useState } from 'react'
-import { officeApi, salesApi } from '../api/client'
+import { useEffect, useState } from 'react'
+import { cycleApi, officeApi, salesApi } from '../api/client'
 import { useConfig } from '../context/ConfigContext'
 import CheckAccountPicker from '../components/CheckAccountPicker'
 import InstallmentLines, { EMPTY_INSTALLMENT } from '../components/InstallmentLines'
@@ -15,6 +15,7 @@ import Select from '../components/Select'
 import { Button, Field, Modal } from '../components/ui'
 import { formatDate, formatMoney } from '../utils/format'
 import WorkflowOrdersPage from './WorkflowOrdersPage'
+import { fromLegacy } from '../styles/tw.js'
 
 const ORDER_KINDS = [
   { value: 'normal', label: 'فروش عادی' },
@@ -26,6 +27,13 @@ const PAYMENT_STATUSES = [
   { value: 'paid', label: 'پرداخت‌شده' },
   { value: 'unpaid', label: 'پرداخت‌نشده' },
   { value: 'installment', label: 'قسطی' },
+]
+
+const ROUTE_OPTIONS = [
+  { value: 'factory', label: 'کارخانه' },
+  { value: 'warehouse', label: 'انبار' },
+  { value: 'customer_pickup', label: 'تحویل به مشتری' },
+  { value: 'merchant', label: 'بازرگان' },
 ]
 
 const OFFICE_QUEUE_FILTER_DEFAULTS = OFFICE_APPROVE_FILTER.initialFilters
@@ -76,7 +84,7 @@ function mapLineItemsFromSale(items = []) {
 }
 
 export default function Office() {
-  const { choices } = useConfig()
+  const { choices, branches } = useConfig()
   const paymentMethods = choices('payment_method')
   const [editOrder, setEditOrder] = useState(null)
   const [rejectOrder, setRejectOrder] = useState(null)
@@ -99,12 +107,32 @@ export default function Office() {
   const [regAccountId, setRegAccountId] = useState('')
   const [depAccountId, setDepAccountId] = useState('')
   const [saveCheckDefault, setSaveCheckDefault] = useState(true)
+  const [cycleMe, setCycleMe] = useState({ enabled_routes: ['factory'], warehouses: [], colleagues: [] })
+  const [fulfillmentRoute, setFulfillmentRoute] = useState('factory')
+  const [warehouseId, setWarehouseId] = useState('')
+  const [sourceBranch, setSourceBranch] = useState('')
+  const [merchantUserId, setMerchantUserId] = useState('')
+  const [warehouseSourceKind, setWarehouseSourceKind] = useState('warehouse')
   const [listFilterQuery, setListFilterQuery] = useState(() =>
     buildOfficeListQuery({ ...OFFICE_QUEUE_FILTER_DEFAULTS, model: 'office_order' }),
   )
 
   const showInstallments = form.payment_status === 'installment' || form.payment_method === 'check'
   const balanceDue = saleBalanceDue(form)
+  const enabledRoutes = cycleMe.enabled_routes?.length ? cycleMe.enabled_routes : ['factory']
+  const routeOptions = ROUTE_OPTIONS.filter((opt) => enabledRoutes.includes(opt.value))
+
+  useEffect(() => {
+    cycleApi.me().then((data) => {
+      setCycleMe({
+        enabled_routes: data.enabled_routes || ['factory'],
+        warehouses: data.warehouses || [],
+        colleagues: data.colleagues || [],
+      })
+      const routes = data.enabled_routes || ['factory']
+      if (routes.length === 1) setFulfillmentRoute(routes[0])
+    }).catch(() => {})
+  }, [])
 
   const openEdit = async (order) => {
     setEditLoading(true)
@@ -253,44 +281,64 @@ export default function Office() {
   }
 
   const openApprove = async (order) => {
-    if (!order?.has_pending_checks) {
-      try {
-        await officeApi.approve(order.id)
-        setReloadKey((k) => k + 1)
-      } catch (err) {
-        setApproveError(err.message)
-      }
-      return
-    }
     setApproveError('')
     setRegAccountId('')
     setDepAccountId('')
     setSaveCheckDefault(true)
+    setWarehouseId('')
+    setSourceBranch('')
+    setMerchantUserId('')
+    setWarehouseSourceKind('warehouse')
+    const routes = cycleMe.enabled_routes?.length ? cycleMe.enabled_routes : ['factory']
+    setFulfillmentRoute(routes.includes('factory') ? 'factory' : routes[0])
     setApproveOrder(order)
-    setApproveDetail(null)
-    try {
-      const detail = await officeApi.get(order.id)
-      setApproveDetail(detail)
-    } catch (err) {
-      setApproveError(err.message)
+    setApproveDetail(order.has_pending_checks ? null : order)
+    if (order?.has_pending_checks) {
+      try {
+        const detail = await officeApi.get(order.id)
+        setApproveDetail(detail)
+      } catch (err) {
+        setApproveError(err.message)
+      }
     }
   }
 
   const confirmApprove = async (e) => {
     e.preventDefault()
     if (!approveOrder) return
-    if (!regAccountId) {
+    if (approveOrder.has_pending_checks && !regAccountId) {
       setApproveError('حساب ثبت چک را انتخاب کنید.')
+      return
+    }
+    if (fulfillmentRoute === 'warehouse') {
+      if (warehouseSourceKind === 'warehouse' && !warehouseId) {
+        setApproveError('انبار را انتخاب کنید.')
+        return
+      }
+      if (warehouseSourceKind === 'branch' && !sourceBranch) {
+        setApproveError('شعبه مبدأ را انتخاب کنید.')
+        return
+      }
+    }
+    if (fulfillmentRoute === 'merchant' && !merchantUserId) {
+      setApproveError('همکار بازرگان را انتخاب کنید.')
       return
     }
     setApproveLoading(true)
     setApproveError('')
     try {
-      await officeApi.approve(approveOrder.id, {
-        check_registration_account_id: Number(regAccountId),
-        check_deposit_account_id: depAccountId ? Number(depAccountId) : undefined,
-        save_as_default: saveCheckDefault,
-      })
+      const payload = { fulfillment_route: fulfillmentRoute }
+      if (approveOrder.has_pending_checks) {
+        payload.check_registration_account_id = Number(regAccountId)
+        if (depAccountId) payload.check_deposit_account_id = Number(depAccountId)
+        payload.save_as_default = saveCheckDefault
+      }
+      if (fulfillmentRoute === 'warehouse') {
+        if (warehouseSourceKind === 'warehouse') payload.warehouse_id = Number(warehouseId)
+        else payload.source_branch = sourceBranch
+      }
+      if (fulfillmentRoute === 'merchant') payload.merchant_user_id = Number(merchantUserId)
+      await officeApi.approve(approveOrder.id, payload)
       setApproveOrder(null)
       setApproveDetail(null)
       setReloadKey((k) => k + 1)
@@ -327,7 +375,7 @@ export default function Office() {
           actions={[
           {
             key: 'approve',
-            label: 'تایید و ارسال به کارخانه',
+            label: 'تایید و انتخاب مسیر',
             variant: 'success',
             permission: 'approve_sale_accounting',
             when: (o) => o.status === 'pending_accounting',
@@ -380,11 +428,11 @@ export default function Office() {
         wide
       >
         {editLoading ? (
-          <p className="muted loading">در حال بارگذاری فاکتور…</p>
+          <p className={fromLegacy("muted loading")}>در حال بارگذاری فاکتور…</p>
         ) : editOrder && (
-          <form onSubmit={saveEdit} className="form office-invoice-form">
-            <p className="muted">مشتری: {editOrder.customer_name}</p>
-            {editError && <div className="alert alert-error">{editError}</div>}
+          <form onSubmit={saveEdit} className={fromLegacy("form office-invoice-form")}>
+            <p className={fromLegacy("muted")}>مشتری: {editOrder.customer_name}</p>
+            {editError && <div className={fromLegacy("alert alert-error")}>{editError}</div>}
 
             <Field label="شماره فاکتور">
               <input
@@ -475,7 +523,7 @@ export default function Office() {
               />
             </Field>
 
-            <div className="form-actions">
+            <div className={fromLegacy("form-actions")}>
               <Button type="button" variant="ghost" onClick={() => setEditOrder(null)}>انصراف</Button>
               <Button type="submit" disabled={saving}>{saving ? 'در حال ذخیره…' : 'ذخیره اصلاحیه'}</Button>
             </div>
@@ -489,11 +537,11 @@ export default function Office() {
         onClose={() => { if (!rejecting) setRejectOrder(null) }}
       >
         {rejectOrder && (
-          <form onSubmit={confirmReject} className="form">
-            <p className="muted">
+          <form onSubmit={confirmReject} className={fromLegacy("form")}>
+            <p className={fromLegacy("muted")}>
               سفارش مشتری {rejectOrder.customer_name} به صف فروشگاه بازگردانده می‌شود تا اصلاح و ارسال مجدد شود.
             </p>
-            {rejectError && <div className="alert alert-error">{rejectError}</div>}
+            {rejectError && <div className={fromLegacy("alert alert-error")}>{rejectError}</div>}
             <Field label="دلیل عدم تایید (اختیاری)">
               <textarea
                 rows={3}
@@ -502,7 +550,7 @@ export default function Office() {
                 placeholder="مثلاً: اطلاعات مشتری ناقص است"
               />
             </Field>
-            <div className="form-actions">
+            <div className={fromLegacy("form-actions")}>
               <Button type="button" variant="ghost" onClick={() => setRejectOrder(null)} disabled={rejecting}>
                 انصراف
               </Button>
@@ -520,17 +568,17 @@ export default function Office() {
         onClose={() => { if (!rollingBack) setRollbackOrder(null) }}
       >
         {rollbackOrder && (
-          <form onSubmit={confirmRollback} className="form">
-            <p className="muted">
+          <form onSubmit={confirmRollback} className={fromLegacy("form")}>
+            <p className={fromLegacy("muted")}>
               وضعیت فعلی: <strong>{rollbackOrder.workflow_stage_display}</strong>
               {rollbackOrder.holder_department && (
                 <> — دست <strong>{rollbackOrder.holder_department}</strong></>
               )}
             </p>
-            <p className="muted">
+            <p className={fromLegacy("muted")}>
               با این عملیات سفارش یک مرحله به عقب برمی‌گردد تا در صورت اشتباه اصلاح شود.
             </p>
-            {rollbackError && <div className="alert alert-error">{rollbackError}</div>}
+            {rollbackError && <div className={fromLegacy("alert alert-error")}>{rollbackError}</div>}
             <Field label="دلیل برگشت (اختیاری)">
               <textarea
                 rows={3}
@@ -539,7 +587,7 @@ export default function Office() {
                 placeholder="مثلاً: اشتباه در ارسال به کارخانه"
               />
             </Field>
-            <div className="form-actions">
+            <div className={fromLegacy("form-actions")}>
               <Button type="button" variant="ghost" onClick={() => setRollbackOrder(null)} disabled={rollingBack}>
                 انصراف
               </Button>
@@ -552,45 +600,107 @@ export default function Office() {
       </Modal>
 
       <Modal
-        title={approveOrder ? `تایید و ثبت چک — ${approveOrder.invoice_number || approveOrder.id}` : 'تایید اداری'}
+        title={approveOrder ? `تایید اداری — ${approveOrder.invoice_number || approveOrder.id}` : 'تایید اداری'}
         open={Boolean(approveOrder)}
         onClose={() => { if (!approveLoading) { setApproveOrder(null); setApproveDetail(null) } }}
         wide
       >
         {approveOrder && (
-          <form onSubmit={confirmApprove} className="form">
-            <p className="muted">مشتری: {approveOrder.customer_name}</p>
-            {approveError && <div className="alert alert-error">{approveError}</div>}
+          <form onSubmit={confirmApprove} className={fromLegacy("form")}>
+            <p className={fromLegacy("muted")}>مشتری: {approveOrder.customer_name}</p>
+            {approveError && <div className={fromLegacy("alert alert-error")}>{approveError}</div>}
+            <Field label="مسیر بعد از CRM">
+              <Select
+                value={fulfillmentRoute}
+                onChange={setFulfillmentRoute}
+                options={routeOptions}
+              />
+            </Field>
+            {fulfillmentRoute === 'warehouse' && (
+              <>
+                <Field label="مبدأ ارسال">
+                  <Select
+                    value={warehouseSourceKind}
+                    onChange={(value) => {
+                      setWarehouseSourceKind(value)
+                      setWarehouseId('')
+                      setSourceBranch('')
+                    }}
+                    options={[
+                      { value: 'warehouse', label: 'انبار' },
+                      { value: 'branch', label: 'شعبه' },
+                    ]}
+                  />
+                </Field>
+                {warehouseSourceKind === 'warehouse' ? (
+                  <Field label="انبار">
+                    <Select
+                      value={warehouseId}
+                      onChange={setWarehouseId}
+                      options={[
+                        { value: '', label: 'انتخاب انبار…' },
+                        ...(cycleMe.warehouses || []).map((w) => ({ value: String(w.id), label: w.label })),
+                      ]}
+                    />
+                  </Field>
+                ) : (
+                  <Field label="شعبه مبدأ">
+                    <Select
+                      value={sourceBranch}
+                      onChange={setSourceBranch}
+                      options={[
+                        { value: '', label: 'انتخاب شعبه…' },
+                        ...(branches || []).map((b) => ({ value: b.code, label: b.label })),
+                      ]}
+                    />
+                  </Field>
+                )}
+              </>
+            )}
+            {fulfillmentRoute === 'merchant' && (
+              <Field label="همکار بازرگان">
+                <Select
+                  value={merchantUserId}
+                  onChange={setMerchantUserId}
+                  options={[
+                    { value: '', label: 'انتخاب همکار…' },
+                    ...(cycleMe.colleagues || []).map((c) => ({ value: String(c.id), label: c.full_name })),
+                  ]}
+                />
+              </Field>
+            )}
             {checkItems.length > 0 && (
-              <div className="check-approve-list">
+              <div className={fromLegacy("check-approve-list")}>
                 <h4>چک‌های سفارش</h4>
-                <ul className="check-approve-items">
+                <ul className={fromLegacy("check-approve-items")}>
                   {checkItems.map((c) => (
                     <li key={c.id}>
                       <strong>{formatMoney(c.amount)}</strong>
                       {' — '}
                       سررسید {formatDate(c.due_date)}
-                      {c.check_number && <> — <span className="ltr">{c.check_number}</span></>}
+                      {c.check_number && <> — <span className={fromLegacy("ltr")}>{c.check_number}</span></>}
                       {c.bank_name && <> — {c.bank_name}</>}
                     </li>
                   ))}
                 </ul>
               </div>
             )}
-            <CheckAccountPicker
-              registrationAccountId={regAccountId}
-              depositAccountId={depAccountId}
-              saveAsDefault={saveCheckDefault}
-              onRegistrationChange={setRegAccountId}
-              onDepositChange={setDepAccountId}
-              onSaveAsDefaultChange={setSaveCheckDefault}
-            />
-            <div className="form-actions">
+            {checkItems.length > 0 && (
+              <CheckAccountPicker
+                registrationAccountId={regAccountId}
+                depositAccountId={depAccountId}
+                saveAsDefault={saveCheckDefault}
+                onRegistrationChange={setRegAccountId}
+                onDepositChange={setDepAccountId}
+                onSaveAsDefaultChange={setSaveCheckDefault}
+              />
+            )}
+            <div className={fromLegacy("form-actions")}>
               <Button type="button" variant="ghost" onClick={() => setApproveOrder(null)} disabled={approveLoading}>
                 انصراف
               </Button>
               <Button type="submit" variant="success" disabled={approveLoading}>
-                {approveLoading ? 'در حال تایید…' : 'تایید و ارسال به کارخانه'}
+                {approveLoading ? 'در حال تایید…' : 'تایید و ارسال'}
               </Button>
             </div>
           </form>

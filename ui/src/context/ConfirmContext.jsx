@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
 import { Button } from '../components/ui'
 import Icon from '../components/icons/Icon'
+import { tw } from '../styles/tw'
 
 const ConfirmContext = createContext(null)
 
@@ -37,27 +38,27 @@ function ConfirmDialog({ state, onConfirm, onCancel }) {
 
   return (
     <div
-      className="confirm-overlay"
+      className={tw.confirmOverlay}
       role="presentation"
       onClick={onCancel}
     >
       <div
-        className={`confirm-dialog liquid-glass liquid-glass--strong liquid-glass--panel confirm-dialog-${variant}`}
+        className={tw.confirmDialog}
         role="alertdialog"
         aria-modal="true"
         aria-labelledby="confirm-dialog-title"
         aria-describedby="confirm-dialog-message"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className={`confirm-icon confirm-icon-${variant}`} aria-hidden="true">
+        <div className={tw.confirmIcon} aria-hidden="true">
           <Icon
             name={variant === 'danger' ? 'warning' : variant === 'warning' ? 'warning' : 'info'}
             size={24}
           />
         </div>
-        <h3 id="confirm-dialog-title" className="confirm-title">{title}</h3>
-        <p id="confirm-dialog-message" className="confirm-message">{message}</p>
-        <div className="confirm-actions">
+        <h3 id="confirm-dialog-title" className={tw.confirmTitle}>{title}</h3>
+        <p id="confirm-dialog-message" className={tw.confirmMessage}>{message}</p>
+        <div className={tw.confirmActions}>
           <Button type="button" variant="ghost" onClick={onCancel}>
             {cancelText}
           </Button>

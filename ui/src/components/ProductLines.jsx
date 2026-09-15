@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { productsApi } from '../api/client'
 import { Button, Field, Modal } from './ui'
 import { formatMoney } from '../utils/format'
+import { fromLegacy } from '../styles/tw.js'
 
 const EMPTY_LINE = {
   product_id: '',
@@ -109,27 +110,27 @@ export default function ProductLines({ lines, onChange }) {
   )
 
   return (
-    <div className="product-lines">
+    <div className={fromLegacy("product-lines")}>
       {lines.map((line, idx) => (
-        <div key={idx} className="sale-line-card">
-          <div className="sale-line-head">
+        <div key={idx} className={fromLegacy("sale-line-card")}>
+          <div className={fromLegacy("sale-line-head")}>
             <strong>ردیف {idx + 1}</strong>
             {line.color_hex && (
-              <span className="line-color-badge" style={{ background: line.color_hex }} title={line.color_name} />
+              <span className={fromLegacy("line-color-badge")} style={{ background: line.color_hex }} title={line.color_name} />
             )}
           </div>
-          <div className="sale-line-body">
+          <div className={fromLegacy("sale-line-body")}>
             {line.product_id ? (
-              <div className="sale-line-product-readonly">
-                <div className="sale-line-product-name">
+              <div className={fromLegacy("sale-line-product-readonly")}>
+                <div className={fromLegacy("sale-line-product-name")}>
                   <strong>{line.product_name}</strong>
-                  {line.color_name && <span className="muted"> — {line.color_name}</span>}
+                  {line.color_name && <span className={fromLegacy("muted")}> — {line.color_name}</span>}
                 </div>
-                <div className="sale-line-meta-grid">
-                  {line.product_model && <span><em className="muted">مدل:</em> {line.product_model}</span>}
-                  {line.fabric && <span><em className="muted">پارچه:</em> {line.fabric}</span>}
+                <div className={fromLegacy("sale-line-meta-grid")}>
+                  {line.product_model && <span><em className={fromLegacy("muted")}>مدل:</em> {line.product_model}</span>}
+                  {line.fabric && <span><em className={fromLegacy("muted")}>پارچه:</em> {line.fabric}</span>}
                   {line.unit_price && (
-                    <span><em className="muted">قیمت واحد:</em> {formatMoney(line.unit_price)}</span>
+                    <span><em className={fromLegacy("muted")}>قیمت واحد:</em> {formatMoney(line.unit_price)}</span>
                   )}
                 </div>
                 <Button type="button" variant="ghost" onClick={() => openPicker(idx)}>تغییر محصول</Button>
@@ -140,33 +141,33 @@ export default function ProductLines({ lines, onChange }) {
               </Field>
             )}
             <Field label="تعداد">
-              <input className="ltr" type="number" min="1" value={line.quantity} onChange={(e) => updateLine(idx, { quantity: e.target.value })} />
+              <input className={fromLegacy("ltr")} type="number" min="1" value={line.quantity} onChange={(e) => updateLine(idx, { quantity: e.target.value })} />
             </Field>
             {line.product_id && line.unit_price && (
-              <p className="muted small">جمع ردیف: {formatMoney(Number(line.unit_price) * Number(line.quantity || 1))}</p>
+              <p className={fromLegacy("muted small")}>جمع ردیف: {formatMoney(Number(line.unit_price) * Number(line.quantity || 1))}</p>
             )}
           </div>
         </div>
       ))}
 
       <Button type="button" variant="ghost" onClick={addLine}>+ ردیف محصول</Button>
-      {lines.length > 0 && <p className="muted">جمع محصولات: {formatMoney(total)}</p>}
+      {lines.length > 0 && <p className={fromLegacy("muted")}>جمع محصولات: {formatMoney(total)}</p>}
 
       <Modal title="انتخاب محصول" open={pickerOpen} onClose={() => setPickerOpen(false)} wide>
-        <div className="product-picker">
-          <div className="product-picker-filters">
+        <div className={fromLegacy("product-picker")}>
+          <div className={fromLegacy("product-picker-filters")}>
             <input
-              className="search-input"
+              className={fromLegacy("search-input")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="جستجوی محصول…"
             />
-            <div className="category-scroll compact">
+            <div className={fromLegacy("category-scroll compact")}>
               {filteredCategories.map((c) => (
                 <button
                   key={c.id || 'all'}
                   type="button"
-                  className={`category-chip${String(categoryFilter) === String(c.id || '') ? ' active' : ''}`}
+                  className={fromLegacy(`category-chip${String(categoryFilter) === String(c.id || '') ? ' active' : ''}`)}
                   onClick={() => setCategoryFilter(c.id ? String(c.id) : '')}
                 >
                   {c.icon ? `${c.icon} ` : ''}{c.name}
@@ -176,29 +177,29 @@ export default function ProductLines({ lines, onChange }) {
           </div>
 
           {loading ? (
-            <p className="muted">در حال جستجو…</p>
+            <p className={fromLegacy("muted")}>در حال جستجو…</p>
           ) : products.length === 0 ? (
-            <p className="muted">محصولی یافت نشد.</p>
+            <p className={fromLegacy("muted")}>محصولی یافت نشد.</p>
           ) : (
-            <div className="product-picker-grid">
+            <div className={fromLegacy("product-picker-grid")}>
               {products.map((p) => (
                 <button
                   key={p.id}
                   type="button"
-                  className={`product-picker-item${selectedProduct?.id === p.id ? ' selected' : ''}`}
+                  className={fromLegacy(`product-picker-item${selectedProduct?.id === p.id ? ' selected' : ''}`)}
                   onClick={() => {
                     setSelectedProduct(p)
                     setSelectedVariant(p.variants?.[0] || null)
                   }}
                 >
                   <strong>{p.name}</strong>
-                  <span className="muted">{formatMoney(catalogPrice(p))}</span>
-                  {p.product_model && <span className="muted small">مدل: {p.product_model}</span>}
-                  {p.fabric && <span className="muted small">پارچه: {p.fabric}</span>}
+                  <span className={fromLegacy("muted")}>{formatMoney(catalogPrice(p))}</span>
+                  {p.product_model && <span className={fromLegacy("muted small")}>مدل: {p.product_model}</span>}
+                  {p.fabric && <span className={fromLegacy("muted small")}>پارچه: {p.fabric}</span>}
                   {p.variants?.length > 0 && (
-                    <div className="product-color-swatches small">
+                    <div className={fromLegacy("product-color-swatches small")}>
                       {p.variants.map((v) => (
-                        <span key={v.id} className="color-swatch" style={{ background: v.color_hex }} title={v.color_name} />
+                        <span key={v.id} className={fromLegacy("color-swatch")} style={{ background: v.color_hex }} title={v.color_name} />
                       ))}
                     </div>
                   )}
@@ -208,36 +209,36 @@ export default function ProductLines({ lines, onChange }) {
           )}
 
           {selectedProduct && (
-            <div className="variant-picker-panel">
+            <div className={fromLegacy("variant-picker-panel")}>
               <h4>{selectedProduct.name}</h4>
-              <div className="sale-line-meta-grid">
-                {selectedProduct.product_model && <span><em className="muted">مدل:</em> {selectedProduct.product_model}</span>}
-                {selectedProduct.fabric && <span><em className="muted">پارچه:</em> {selectedProduct.fabric}</span>}
+              <div className={fromLegacy("sale-line-meta-grid")}>
+                {selectedProduct.product_model && <span><em className={fromLegacy("muted")}>مدل:</em> {selectedProduct.product_model}</span>}
+                {selectedProduct.fabric && <span><em className={fromLegacy("muted")}>پارچه:</em> {selectedProduct.fabric}</span>}
               </div>
               {selectedProduct.variants?.length ? (
-                <div className="variant-picker-options">
+                <div className={fromLegacy("variant-picker-options")}>
                   {selectedProduct.variants.map((v) => (
                     <button
                       key={v.id}
                       type="button"
-                      className={`variant-option${selectedVariant?.id === v.id ? ' active' : ''}`}
+                      className={fromLegacy(`variant-option${selectedVariant?.id === v.id ? ' active' : ''}`)}
                       onClick={() => setSelectedVariant(v)}
                     >
-                      <span className="color-swatch" style={{ background: v.color_hex }} />
+                      <span className={fromLegacy("color-swatch")} style={{ background: v.color_hex }} />
                       <span>{v.color_name}</span>
                     </button>
                   ))}
                 </div>
               ) : null}
               {pickerPrice > 0 ? (
-                <p className="muted">قیمت: <strong>{formatMoney(pickerPrice)}</strong></p>
+                <p className={fromLegacy("muted")}>قیمت: <strong>{formatMoney(pickerPrice)}</strong></p>
               ) : (
-                <p className="alert-error" style={{ marginTop: 8 }}>این محصول قیمت ندارد — ابتدا در بخش محصولات قیمت را تنظیم کنید.</p>
+                <p className={fromLegacy("alert-error")} style={{ marginTop: 8 }}>این محصول قیمت ندارد — ابتدا در بخش محصولات قیمت را تنظیم کنید.</p>
               )}
             </div>
           )}
 
-          <div className="form-actions">
+          <div className={fromLegacy("form-actions")}>
             <Button type="button" variant="ghost" onClick={() => setPickerOpen(false)}>انصراف</Button>
             <Button
               type="button"

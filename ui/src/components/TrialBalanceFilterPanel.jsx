@@ -1,5 +1,6 @@
 import { Button, Field, FilterBar } from './ui'
 import { formatNumber } from '../utils/format'
+import { fromLegacy } from '../styles/tw.js'
 
 export const EMPTY_TRIAL_BALANCE_FILTER = {
   code: '',
@@ -56,11 +57,11 @@ export default function TrialBalanceFilterPanel({
   const filtered = shownCount != null && totalCount != null && shownCount !== totalCount
 
   return (
-    <div className="trial-balance-filter-panel">
+    <div className={fromLegacy("trial-balance-filter-panel")}>
       <FilterBar>
         <Field label={codeLabel}>
           <input
-            className="search-input"
+            className={fromLegacy("search-input")}
             value={value.code}
             onChange={(e) => onChange({ ...value, code: e.target.value })}
             placeholder="جستجوی زنده…"
@@ -68,20 +69,20 @@ export default function TrialBalanceFilterPanel({
         </Field>
         <Field label={nameLabel}>
           <input
-            className="search-input"
+            className={fromLegacy("search-input")}
             value={value.name}
             onChange={(e) => onChange({ ...value, name: e.target.value })}
             placeholder="جستجوی زنده…"
           />
         </Field>
-        <div className="page-filters-actions">
+        <div className={fromLegacy("page-filters-actions")}>
           <Button type="button" variant="ghost" onClick={onReset}>
             پاک کردن فیلترها
           </Button>
         </div>
       </FilterBar>
       {filtered && (
-        <p className="record-filter-count muted">
+        <p className={fromLegacy("record-filter-count muted")}>
           <strong>{formatNumber(shownCount)}</strong> از {formatNumber(totalCount)} حساب
         </p>
       )}

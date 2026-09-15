@@ -5,6 +5,7 @@ import JcalPanel from './JcalPanel'
 import { Button, Field } from './ui'
 import { formatMoney } from '../utils/format'
 import { formatJalali } from '../utils/jalali'
+import { fromLegacy } from '../styles/tw.js'
 
 export default function CustomerSearch({ value, onSelect, onCreateNew }) {
   const anchorRef = useRef(null)
@@ -98,10 +99,12 @@ export default function CustomerSearch({ value, onSelect, onCreateNew }) {
   }, [results, registerOpen])
 
   return (
-    <div className="customer-search">
+    <div className={fromLegacy("customer-search")}>
       <Field label="مشتری">
-        <div className="customer-search-anchor" ref={anchorRef}>
+        <div className={fromLegacy("customer-search-anchor")} ref={anchorRef}>
           <input
+            type="search"
+            className={fromLegacy('search-input')}
             value={query}
             onChange={(e) => {
               setQuery(e.target.value)
@@ -117,7 +120,7 @@ export default function CustomerSearch({ value, onSelect, onCreateNew }) {
           />
         </div>
       </Field>
-      {loading && <p className="muted">در حال جستجو…</p>}
+      {loading && <p className={fromLegacy("muted")}>در حال جستجو…</p>}
       <JcalPanel
         open={dropdownOpen}
         onClose={() => setDropdownOpen(false)}
@@ -125,29 +128,29 @@ export default function CustomerSearch({ value, onSelect, onCreateNew }) {
         variant="menu"
         ariaLabel="نتایج جستجوی مشتری"
       >
-        <ul className="search-dropdown">
+        <ul className={fromLegacy("search-dropdown")}>
           {results.map((c) => (
             <li key={c.id}>
               <button type="button" onClick={() => pick(c)}>
-                {c.full_name} <span className="ltr muted">{c.phone}</span>
+                {c.full_name} <span className={fromLegacy("ltr muted")}>{c.phone}</span>
               </button>
             </li>
           ))}
-          <li className="search-dropdown-divider" aria-hidden />
+          <li className={fromLegacy("search-dropdown-divider")} aria-hidden />
           <li>
-            <button type="button" className="search-dropdown-new" onClick={openRegister}>
+            <button type="button" className={fromLegacy("search-dropdown-new")} onClick={openRegister}>
               + ثبت مشتری جدید
             </button>
           </li>
         </ul>
       </JcalPanel>
       {active?.id && (
-        <div className="customer-selected-info">
-          <p className="muted">
+        <div className={fromLegacy("customer-selected-info")}>
+          <p className={fromLegacy("muted")}>
             <strong>{active.full_name}</strong>
           </p>
           <Field label="شماره تماس">
-            <input className="ltr" value={active.phone || ''} readOnly disabled />
+            <input className={fromLegacy("ltr")} value={active.phone || ''} readOnly disabled />
           </Field>
           <Field label="آدرس">
             <textarea value={active.address || ''} readOnly disabled rows={2} />
@@ -158,21 +161,21 @@ export default function CustomerSearch({ value, onSelect, onCreateNew }) {
             </Field>
           )}
           {active.wallet_balance > 0 && (
-            <p className="muted small">موجودی کیف پول: {formatMoney(active.wallet_balance)}</p>
+            <p className={fromLegacy("muted small")}>موجودی کیف پول: {formatMoney(active.wallet_balance)}</p>
           )}
         </div>
       )}
       {query.trim() && !loading && results.length === 0 && !active?.id && !registerOpen && (
-        <div className="customer-new-inline">
-          <p className="muted small">مشتری با این مشخصات یافت نشد.</p>
+        <div className={fromLegacy("customer-new-inline")}>
+          <p className={fromLegacy("muted small")}>مشتری با این مشخصات یافت نشد.</p>
           <Button type="button" variant="ghost" onClick={openRegister}>
             + ثبت مشتری جدید
           </Button>
         </div>
       )}
       {registerOpen && !active?.id && (
-        <div className="customer-new-inline">
-          <p className="muted small">ثبت مشتری جدید (همراه با ثبت فروش)</p>
+        <div className={fromLegacy("customer-new-inline")}>
+          <p className={fromLegacy("muted small")}>ثبت مشتری جدید (همراه با ثبت فروش)</p>
           <Field label="نام">
             <input
               value={newName}
@@ -183,7 +186,7 @@ export default function CustomerSearch({ value, onSelect, onCreateNew }) {
           </Field>
           <Field label="شماره تماس">
             <input
-              className="ltr"
+              className={fromLegacy("ltr")}
               value={newPhone}
               onChange={(e) => setNewPhone(e.target.value)}
               placeholder="09xxxxxxxxx"
@@ -204,9 +207,9 @@ export default function CustomerSearch({ value, onSelect, onCreateNew }) {
               value={newBirthday}
               onChange={setNewBirthday}
             />
-            <span className="muted">اختیاری</span>
+            <span className={fromLegacy("muted")}>اختیاری</span>
           </Field>
-          <div className="customer-new-inline-actions">
+          <div className={fromLegacy("customer-new-inline-actions")}>
             <Button
               type="button"
               onClick={addNew}
@@ -230,13 +233,13 @@ export default function CustomerSearch({ value, onSelect, onCreateNew }) {
         </div>
       )}
       {active && !active.id && (
-        <div className="customer-selected-info">
-          <p className="muted small">مشتری جدید (ثبت هنگام فروش)</p>
+        <div className={fromLegacy("customer-selected-info")}>
+          <p className={fromLegacy("muted small")}>مشتری جدید (ثبت هنگام فروش)</p>
           <Field label="نام">
             <input value={active.full_name} readOnly disabled />
           </Field>
           <Field label="شماره تماس">
-            <input className="ltr" value={active.phone} readOnly disabled />
+            <input className={fromLegacy("ltr")} value={active.phone} readOnly disabled />
           </Field>
           <Field label="آدرس">
             <textarea value={active.address || ''} readOnly disabled rows={2} />

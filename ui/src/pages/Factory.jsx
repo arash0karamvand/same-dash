@@ -3,11 +3,13 @@
 import { useState } from 'react'
 import { factoryApi } from '../api/client'
 import WorkflowOrdersPage from './WorkflowOrdersPage'
+import { fromLegacy } from '../styles/tw.js'
 
 const QUEUE_OPTIONS = [
   { value: 'all', label: 'همه سفارش‌ها' },
   { value: 'needs_build', label: 'منتظر ساخت' },
   { value: 'in_production', label: 'در حال ساخت' },
+  { value: 'merchant', label: 'بازرگان' },
 ]
 
 export default function Factory() {
@@ -15,11 +17,13 @@ export default function Factory() {
 
   const extraParams = {
     section: 'production',
-    ...(queue !== 'all' ? { queue } : {}),
+    ...(queue === 'merchant' ? { workflow_stage: 'merchant_assigned' } : {}),
+    ...(queue !== 'all' && queue !== 'merchant' ? { queue } : {}),
   }
 
   return (
     <WorkflowOrdersPage
+      key={queue}
       title="ساخت کارخانه"
       subtitle="سفارش‌هایی که باید ساخته شوند — بدون نمایش قیمت"
       emptyTitle="سفارشی برای ساخت نیست"
@@ -30,14 +34,14 @@ export default function Factory() {
       showAmounts={false}
       showMaterials
       filters={(
-        <div className="workflow-filter-bar">
-          <span className="workflow-filter-label">فیلتر ساخت:</span>
-          <div className="workflow-filter-tabs">
+        <div className={fromLegacy("workflow-filter-bar")}>
+          <span className={fromLegacy("workflow-filter-label")}>فیلتر ساخت:</span>
+          <div className={fromLegacy("workflow-filter-tabs")}>
             {QUEUE_OPTIONS.map((opt) => (
               <button
                 key={opt.value}
                 type="button"
-                className={`workflow-filter-tab ${queue === opt.value ? 'active' : ''}`}
+                className={fromLegacy(`workflow-filter-tab ${queue === opt.value ? 'active' : ''}`)}
                 onClick={() => setQueue(opt.value)}
               >
                 {opt.label}
@@ -52,7 +56,7 @@ export default function Factory() {
           label: 'دریافت سفارش',
           variant: 'success',
           permission: 'manage_factory_orders',
-          when: (o) => o.workflow_stage === 'accounting_approved',
+          when: (o) => o.workflow_stage === 'accounting_approved' || o.workflow_stage === 'merchant_assigned',
           run: (id) => factoryApi.receive(id),
         },
         {

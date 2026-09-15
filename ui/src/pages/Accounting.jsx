@@ -62,6 +62,7 @@ import {
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { formatDate, formatNumber, formatRial } from '../utils/format'
 import { hasPermission } from '../utils/permissions'
+import { fromLegacy } from '../styles/tw.js'
 
 const TRIAL_TABS = ['trial-balance', 'subsidiary-trial', 'detailed-trial']
 
@@ -109,26 +110,26 @@ function renderAmount(value) {
 
 function TrialBalanceAmountGrid({ row }) {
   return (
-    <div className="accounting-amount-sections">
-      <div className="accounting-amount-section">
-        <span className="accounting-amount-section-label">{TERMS.openingBalance}</span>
-        <div className="m-card-grid">
-          <div><span className="muted">{TERMS.debit}</span><strong>{renderAmount(row.opening_debit)}</strong></div>
-          <div><span className="muted">{TERMS.credit}</span><strong>{renderAmount(row.opening_credit)}</strong></div>
+    <div className={fromLegacy("accounting-amount-sections")}>
+      <div className={fromLegacy("accounting-amount-section")}>
+        <span className={fromLegacy("accounting-amount-section-label")}>{TERMS.openingBalance}</span>
+        <div className={fromLegacy("m-card-grid")}>
+          <div><span className={fromLegacy("muted")}>{TERMS.debit}</span><strong>{renderAmount(row.opening_debit)}</strong></div>
+          <div><span className={fromLegacy("muted")}>{TERMS.credit}</span><strong>{renderAmount(row.opening_credit)}</strong></div>
         </div>
       </div>
-      <div className="accounting-amount-section">
-        <span className="accounting-amount-section-label">{TERMS.turnover}</span>
-        <div className="m-card-grid">
-          <div><span className="muted">{TERMS.debit}</span><strong>{renderAmount(row.turnover_debit)}</strong></div>
-          <div><span className="muted">{TERMS.credit}</span><strong>{renderAmount(row.turnover_credit)}</strong></div>
+      <div className={fromLegacy("accounting-amount-section")}>
+        <span className={fromLegacy("accounting-amount-section-label")}>{TERMS.turnover}</span>
+        <div className={fromLegacy("m-card-grid")}>
+          <div><span className={fromLegacy("muted")}>{TERMS.debit}</span><strong>{renderAmount(row.turnover_debit)}</strong></div>
+          <div><span className={fromLegacy("muted")}>{TERMS.credit}</span><strong>{renderAmount(row.turnover_credit)}</strong></div>
         </div>
       </div>
-      <div className="accounting-amount-section">
-        <span className="accounting-amount-section-label">{TERMS.balance}</span>
-        <div className="m-card-grid">
-          <div><span className="muted">{TERMS.debit}</span><strong>{renderAmount(row.balance_debit)}</strong></div>
-          <div><span className="muted">{TERMS.credit}</span><strong>{renderAmount(row.balance_credit)}</strong></div>
+      <div className={fromLegacy("accounting-amount-section")}>
+        <span className={fromLegacy("accounting-amount-section-label")}>{TERMS.balance}</span>
+        <div className={fromLegacy("m-card-grid")}>
+          <div><span className={fromLegacy("muted")}>{TERMS.debit}</span><strong>{renderAmount(row.balance_debit)}</strong></div>
+          <div><span className={fromLegacy("muted")}>{TERMS.credit}</span><strong>{renderAmount(row.balance_credit)}</strong></div>
         </div>
       </div>
     </div>
@@ -136,22 +137,22 @@ function TrialBalanceAmountGrid({ row }) {
 }
 
 function TrialBalanceTable({ rows, totals, loading, onRowClick, selectedKey, getRowKey }) {
-  if (loading) return <div className="loading">در حال بارگذاری…</div>
+  if (loading) return <div className={fromLegacy("loading")}>در حال بارگذاری…</div>
   if (!rows.length) return <EmptyState text="ردیفی یافت نشد." />
 
   const balanced = totals.turnover_balanced !== false
 
   return (
     <>
-      <div className="table-wrap accounting-ledger-wrap accounting-table-desktop">
-        <table className="table accounting-ledger-table">
+      <div className={fromLegacy("table-wrap accounting-ledger-wrap accounting-table-desktop")}>
+        <table className={fromLegacy("table accounting-ledger-table")}>
           <thead>
             <tr>
               <th rowSpan={2}>{TERMS.accountCode}</th>
               <th rowSpan={2}>{TERMS.accountTitle}</th>
-              <th colSpan={2} className="ledger-group-head">{TERMS.openingBalance}</th>
-              <th colSpan={2} className="ledger-group-head">{TERMS.turnover}</th>
-              <th colSpan={2} className="ledger-group-head">{TERMS.balance}</th>
+              <th colSpan={2} className={fromLegacy("ledger-group-head")}>{TERMS.openingBalance}</th>
+              <th colSpan={2} className={fromLegacy("ledger-group-head")}>{TERMS.turnover}</th>
+              <th colSpan={2} className={fromLegacy("ledger-group-head")}>{TERMS.balance}</th>
             </tr>
             <tr>
               <th>{TERMS.debit}</th>
@@ -173,7 +174,7 @@ function TrialBalanceTable({ rows, totals, loading, onRowClick, selectedKey, get
                   onClick={() => onRowClick?.(row)}
                 >
                   <td><strong>{row.account_code}</strong></td>
-                  <td className="text-cell">{row.account_name}</td>
+                  <td className={fromLegacy("text-cell")}>{row.account_name}</td>
                   <td>{renderAmount(row.opening_debit)}</td>
                   <td>{renderAmount(row.opening_credit)}</td>
                   <td>{renderAmount(row.turnover_debit)}</td>
@@ -186,7 +187,7 @@ function TrialBalanceTable({ rows, totals, loading, onRowClick, selectedKey, get
           </tbody>
           {totals && Object.keys(totals).length > 0 && (
             <tfoot>
-              <tr className="ledger-totals-row">
+              <tr className={fromLegacy("ledger-totals-row")}>
                 <td colSpan={2}><strong>{TERMS.total}</strong></td>
                 <td>{renderAmount(totals.opening_debit)}</td>
                 <td>{renderAmount(totals.opening_credit)}</td>
@@ -200,23 +201,23 @@ function TrialBalanceTable({ rows, totals, loading, onRowClick, selectedKey, get
         </table>
       </div>
 
-      <div className="accounting-cards-mobile">
+      <div className={fromLegacy("accounting-cards-mobile")}>
         {rows.map((row) => {
           const key = getRowKey ? getRowKey(row) : `${row.account_code}-${row.account_name}`
           const selected = selectedKey != null && selectedKey === key
           return (
             <div
               key={key}
-              className={`m-card accounting-trial-card${onRowClick ? ' entry-row-clickable' : ''}${selected ? ' drill-row-selected' : ''}`}
+              className={fromLegacy(`m-card accounting-trial-card${onRowClick ? ' entry-row-clickable' : ''}${selected ? ' drill-row-selected' : ''}`)}
               onClick={() => onRowClick?.(row)}
               onKeyDown={onRowClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onRowClick(row) } } : undefined}
               role={onRowClick ? 'button' : undefined}
               tabIndex={onRowClick ? 0 : undefined}
             >
-              <div className="m-card-head accounting-entry-card-head">
+              <div className={fromLegacy("m-card-head accounting-entry-card-head")}>
                 <div>
                   <strong>{row.account_code}</strong>
-                  <p className="accounting-entry-desc">{row.account_name}</p>
+                  <p className={fromLegacy("accounting-entry-desc")}>{row.account_name}</p>
                 </div>
               </div>
               <TrialBalanceAmountGrid row={row} />
@@ -224,8 +225,8 @@ function TrialBalanceTable({ rows, totals, loading, onRowClick, selectedKey, get
           )
         })}
         {totals && Object.keys(totals).length > 0 && (
-          <div className="m-card accounting-trial-card accounting-totals-card">
-            <div className="m-card-head">
+          <div className={fromLegacy("m-card accounting-trial-card accounting-totals-card")}>
+            <div className={fromLegacy("m-card-head")}>
               <strong>{TERMS.total}</strong>
             </div>
             <TrialBalanceAmountGrid row={totals} />
@@ -234,7 +235,7 @@ function TrialBalanceTable({ rows, totals, loading, onRowClick, selectedKey, get
       </div>
 
       {totals?.turnover_balanced != null && (
-        <p className={`accounting-footer-summary ${balanced ? 'doc-balanced' : 'doc-unbalanced'}`}>
+        <p className={fromLegacy(`accounting-footer-summary ${balanced ? 'doc-balanced' : 'doc-unbalanced'}`)}>
           گردش دوره: {TERMS.debit} {formatRial(totals.raw_turnover_debit || totals.turnover_debit)}
           {' / '}
           {TERMS.credit} {formatRial(totals.raw_turnover_credit || totals.turnover_credit)}
@@ -329,7 +330,7 @@ function DetailLedgerTable({ ledger, loading, compact = false, onEditEntry, onDe
 
   const setCol = (key) => (e) => setColFilters({ ...colFilters, [key]: e.target.value })
 
-  if (loading) return <div className="loading">در حال بارگذاری…</div>
+  if (loading) return <div className={fromLegacy("loading")}>در حال بارگذاری…</div>
   if (!ledger) return <EmptyState text="حساب تفصیلی را انتخاب کنید." />
 
   const total = ledger.lines.length
@@ -337,40 +338,40 @@ function DetailLedgerTable({ ledger, loading, compact = false, onEditEntry, onDe
 
   return (
     <>
-      <div className={`detail-ledger-header${compact ? ' detail-ledger-header-compact' : ''}`}>
+      <div className={fromLegacy(`detail-ledger-header${compact ? ' detail-ledger-header-compact' : ''}`)}>
         {compact ? (
-          <p className="detail-ledger-header-inline">
-            <span className="muted">{TERMS.generalAccount}:</span> {ledger.header.general_name}
+          <p className={fromLegacy("detail-ledger-header-inline")}>
+            <span className={fromLegacy("muted")}>{TERMS.generalAccount}:</span> {ledger.header.general_name}
             {' · '}
-            <span className="muted">{TERMS.subsidiaryAccount}:</span> {ledger.header.subsidiary_name}
+            <span className={fromLegacy("muted")}>{TERMS.subsidiaryAccount}:</span> {ledger.header.subsidiary_name}
             {' · '}
-            <span className="muted">{TERMS.detailedAccount}:</span> {ledger.header.detailed_code} — {ledger.header.detailed_name}
+            <span className={fromLegacy("muted")}>{TERMS.detailedAccount}:</span> {ledger.header.detailed_code} — {ledger.header.detailed_name}
             {' · '}
             <strong>{formatNumber(shown)}</strong> از {formatNumber(total)} ردیف
           </p>
         ) : (
           <>
-            <p><span className="muted">{TERMS.generalAccount}:</span> {ledger.header.general_name}</p>
-            <p><span className="muted">{TERMS.subsidiaryAccount}:</span> {ledger.header.subsidiary_name}</p>
-            <p><span className="muted">{TERMS.detailedAccount}:</span> {ledger.header.detailed_code} — {ledger.header.detailed_name}</p>
-            <p className="record-filter-count muted">
+            <p><span className={fromLegacy("muted")}>{TERMS.generalAccount}:</span> {ledger.header.general_name}</p>
+            <p><span className={fromLegacy("muted")}>{TERMS.subsidiaryAccount}:</span> {ledger.header.subsidiary_name}</p>
+            <p><span className={fromLegacy("muted")}>{TERMS.detailedAccount}:</span> {ledger.header.detailed_code} — {ledger.header.detailed_name}</p>
+            <p className={fromLegacy("record-filter-count muted")}>
               <strong>{formatNumber(shown)}</strong> از {formatNumber(total)} ردیف
             </p>
           </>
         )}
       </div>
       {compactView && (
-        <div className="accounting-mobile-ledger-search">
+        <div className={fromLegacy("accounting-mobile-ledger-search")}>
           <input
-            className="search-input"
+            className={fromLegacy("search-input")}
             value={mobileQuery}
             onChange={(e) => setMobileQuery(e.target.value)}
             placeholder="جستجو در شرح، شماره سند، ع یا تاریخ…"
           />
         </div>
       )}
-      <div className={`table-wrap accounting-ledger-wrap accounting-table-desktop${compact ? ' ledger-table-compact' : ''}`}>
-        <table className="table accounting-ledger-table">
+      <div className={fromLegacy(`table-wrap accounting-ledger-wrap accounting-table-desktop${compact ? ' ledger-table-compact' : ''}`)}>
+        <table className={fromLegacy("table accounting-ledger-table")}>
           <thead>
             <tr>
               <th>تاریخ</th>
@@ -383,35 +384,35 @@ function DetailLedgerTable({ ledger, loading, compact = false, onEditEntry, onDe
               <th>{TERMS.side}</th>
               {(onEditEntry || onDeleteEntry) && <th>عملیات</th>}
             </tr>
-            <tr className="ledger-search-row">
+            <tr className={fromLegacy("ledger-search-row")}>
               <th>
-                <input className="ledger-col-search" value={colFilters.date} onChange={setCol('date')} placeholder="فیلتر…" />
+                <input className={fromLegacy("ledger-col-search")} value={colFilters.date} onChange={setCol('date')} placeholder="فیلتر…" />
               </th>
               <th>
-                <input className="ledger-col-search" value={colFilters.document_number} onChange={setCol('document_number')} placeholder="فیلتر…" />
+                <input className={fromLegacy("ledger-col-search")} value={colFilters.document_number} onChange={setCol('document_number')} placeholder="فیلتر…" />
               </th>
               <th>
-                <input className="ledger-col-search" value={colFilters.attach_code} onChange={setCol('attach_code')} placeholder="فیلتر…" />
+                <input className={fromLegacy("ledger-col-search")} value={colFilters.attach_code} onChange={setCol('attach_code')} placeholder="فیلتر…" />
               </th>
               <th>
-                <input className="ledger-col-search" value={colFilters.description} onChange={setCol('description')} placeholder="فیلتر…" />
+                <input className={fromLegacy("ledger-col-search")} value={colFilters.description} onChange={setCol('description')} placeholder="فیلتر…" />
               </th>
               <th>
-                <div className="ledger-col-search-range">
-                  <input className="ledger-col-search" value={colFilters.debit_min} onChange={setCol('debit_min')} placeholder="از" inputMode="numeric" />
-                  <input className="ledger-col-search" value={colFilters.debit_max} onChange={setCol('debit_max')} placeholder="تا" inputMode="numeric" />
+                <div className={fromLegacy("ledger-col-search-range")}>
+                  <input className={fromLegacy("ledger-col-search")} value={colFilters.debit_min} onChange={setCol('debit_min')} placeholder="از" inputMode="numeric" />
+                  <input className={fromLegacy("ledger-col-search")} value={colFilters.debit_max} onChange={setCol('debit_max')} placeholder="تا" inputMode="numeric" />
                 </div>
               </th>
               <th>
-                <div className="ledger-col-search-range">
-                  <input className="ledger-col-search" value={colFilters.credit_min} onChange={setCol('credit_min')} placeholder="از" inputMode="numeric" />
-                  <input className="ledger-col-search" value={colFilters.credit_max} onChange={setCol('credit_max')} placeholder="تا" inputMode="numeric" />
+                <div className={fromLegacy("ledger-col-search-range")}>
+                  <input className={fromLegacy("ledger-col-search")} value={colFilters.credit_min} onChange={setCol('credit_min')} placeholder="از" inputMode="numeric" />
+                  <input className={fromLegacy("ledger-col-search")} value={colFilters.credit_max} onChange={setCol('credit_max')} placeholder="تا" inputMode="numeric" />
                 </div>
               </th>
               <th>
-                <div className="ledger-col-search-range">
-                  <input className="ledger-col-search" value={colFilters.balance_min} onChange={setCol('balance_min')} placeholder="از" inputMode="numeric" />
-                  <input className="ledger-col-search" value={colFilters.balance_max} onChange={setCol('balance_max')} placeholder="تا" inputMode="numeric" />
+                <div className={fromLegacy("ledger-col-search-range")}>
+                  <input className={fromLegacy("ledger-col-search")} value={colFilters.balance_min} onChange={setCol('balance_min')} placeholder="از" inputMode="numeric" />
+                  <input className={fromLegacy("ledger-col-search")} value={colFilters.balance_max} onChange={setCol('balance_max')} placeholder="تا" inputMode="numeric" />
                 </div>
               </th>
               <th />
@@ -421,7 +422,7 @@ function DetailLedgerTable({ ledger, loading, compact = false, onEditEntry, onDe
           <tbody>
             {filteredLines.length === 0 ? (
               <tr>
-                <td colSpan={(onEditEntry || onDeleteEntry) ? 9 : 8} className="muted text-center">ردیفی با این فیلتر یافت نشد.</td>
+                <td colSpan={(onEditEntry || onDeleteEntry) ? 9 : 8} className={fromLegacy("muted text-center")}>ردیفی با این فیلتر یافت نشد.</td>
               </tr>
             ) : (
               filteredLines.map((line, idx) => (
@@ -429,10 +430,10 @@ function DetailLedgerTable({ ledger, loading, compact = false, onEditEntry, onDe
                   <td>{formatDate(line.entry_date)}</td>
                   <td>{line.document_number ? formatNumber(line.document_number) : '—'}</td>
                   <td>{line.attach_code || '—'}</td>
-                  <td className="text-cell">
+                  <td className={fromLegacy("text-cell")}>
                     {line.description}
                     {line.transferred_to_office_at && (
-                      <span className="accounting-transfer-badge" title={line.office_document_code || ''}>
+                      <span className={fromLegacy("accounting-transfer-badge")} title={line.office_document_code || ''}>
                         {' '}منتقل‌شده به اداری
                       </span>
                     )}
@@ -442,17 +443,17 @@ function DetailLedgerTable({ ledger, loading, compact = false, onEditEntry, onDe
                   <td>{formatRial(line.balance)}</td>
                   <td>{line.balance_side_label}</td>
                   {(onEditEntry || onDeleteEntry) && (
-                    <td className="ledger-entry-actions">
+                    <td className={fromLegacy("ledger-entry-actions")}>
                       {!line.is_opening && line.id && (
                         <>
                           {line.can_edit && onEditEntry && (
-                            <button type="button" className="link" onClick={() => onEditEntry(line)} title="ویرایش">✎</button>
+                            <button type="button" className={fromLegacy("link")} onClick={() => onEditEntry(line)} title="ویرایش">✎</button>
                           )}
                           {line.can_delete && onDeleteEntry && (
-                            <button type="button" className="link danger" onClick={() => onDeleteEntry(line)} title="حذف">×</button>
+                            <button type="button" className={fromLegacy("link danger")} onClick={() => onDeleteEntry(line)} title="حذف">×</button>
                           )}
                           {canApprove && line.is_approved === false && (
-                            <span className="muted small" title="تایید نشده">○</span>
+                            <span className={fromLegacy("muted small")} title="تایید نشده">○</span>
                           )}
                         </>
                       )}
@@ -464,40 +465,40 @@ function DetailLedgerTable({ ledger, loading, compact = false, onEditEntry, onDe
           </tbody>
         </table>
       </div>
-      <div className="accounting-cards-mobile">
+      <div className={fromLegacy("accounting-cards-mobile")}>
         {filteredLines.map((line, idx) => (
-          <div key={line.id || `opening-${idx}`} className="m-card">
-            <div className="m-card-head accounting-entry-card-head">
+          <div key={line.id || `opening-${idx}`} className={fromLegacy("m-card")}>
+            <div className={fromLegacy("m-card-head accounting-entry-card-head")}>
               <div>
                 <strong>{formatDate(line.entry_date)}</strong>
-                <p className="accounting-entry-meta muted">
+                <p className={fromLegacy("accounting-entry-meta muted")}>
                   {TERMS.documentNumber}: {line.document_number ? formatNumber(line.document_number) : '—'}
                   {line.attach_code ? ` · ${TERMS.attachCode}: ${line.attach_code}` : ''}
                 </p>
               </div>
-              <span className="accounting-entry-amount">{line.balance_side_label}</span>
+              <span className={fromLegacy("accounting-entry-amount")}>{line.balance_side_label}</span>
             </div>
-            {line.description && <p className="accounting-entry-desc">{line.description}</p>}
+            {line.description && <p className={fromLegacy("accounting-entry-desc")}>{line.description}</p>}
             {line.transferred_to_office_at && (
-              <p className="accounting-transfer-badge muted small">
+              <p className={fromLegacy("accounting-transfer-badge muted small")}>
                 منتقل‌شده به اداری{line.office_document_code ? ` (${line.office_document_code})` : ''}
               </p>
             )}
-            <div className="m-card-grid">
-              <div><span className="muted">{TERMS.debit}</span><strong>{renderAmount(line.debit)}</strong></div>
-              <div><span className="muted">{TERMS.credit}</span><strong>{renderAmount(line.credit)}</strong></div>
-              <div><span className="muted">{TERMS.balance}</span><strong>{formatRial(line.balance)}</strong></div>
+            <div className={fromLegacy("m-card-grid")}>
+              <div><span className={fromLegacy("muted")}>{TERMS.debit}</span><strong>{renderAmount(line.debit)}</strong></div>
+              <div><span className={fromLegacy("muted")}>{TERMS.credit}</span><strong>{renderAmount(line.credit)}</strong></div>
+              <div><span className={fromLegacy("muted")}>{TERMS.balance}</span><strong>{formatRial(line.balance)}</strong></div>
             </div>
             {(onEditEntry || onDeleteEntry) && !line.is_opening && line.id && (
-              <div className="accounting-doc-list-actions ledger-entry-actions">
+              <div className={fromLegacy("accounting-doc-list-actions ledger-entry-actions")}>
                 {line.can_edit && onEditEntry && (
-                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => onEditEntry(line)} title="ویرایش">✎ ویرایش</button>
+                  <button type="button" className={fromLegacy("btn btn-ghost btn-sm")} onClick={() => onEditEntry(line)} title="ویرایش">✎ ویرایش</button>
                 )}
                 {line.can_delete && onDeleteEntry && (
-                  <button type="button" className="btn btn-ghost btn-sm danger" onClick={() => onDeleteEntry(line)} title="حذف">× حذف</button>
+                  <button type="button" className={fromLegacy("btn btn-ghost btn-sm danger")} onClick={() => onDeleteEntry(line)} title="حذف">× حذف</button>
                 )}
                 {canApprove && line.is_approved === false && (
-                  <span className="muted small accounting-doc-list-pending" title="تایید نشده">○ در انتظار تایید</span>
+                  <span className={fromLegacy("muted small accounting-doc-list-pending")} title="تایید نشده">○ در انتظار تایید</span>
                 )}
               </div>
             )}
@@ -1640,7 +1641,7 @@ export default function Accounting({
       onResizeHeight={resizeDrillRowHeight}
     >
       {detailLoading ? (
-        <div className="loading">در حال بارگذاری…</div>
+        <div className={fromLegacy("loading")}>در حال بارگذاری…</div>
       ) : detailLedger ? (
         <DetailLedgerTable
           ledger={detailLedger}
@@ -2171,7 +2172,7 @@ export default function Accounting({
       )}
 
       {TRIAL_TABS.includes(activeTab) && trialFilterConfig && (
-        <Card title={trialFilterConfig.title} className="section-record-filter accounting-section-filter">
+        <Card title={trialFilterConfig.title} className={fromLegacy("section-record-filter accounting-section-filter")}>
           <TrialBalanceFilterPanel
             codeLabel={trialFilterConfig.codeLabel}
             nameLabel={trialFilterConfig.nameLabel}
@@ -2225,14 +2226,14 @@ export default function Accounting({
         </AccountingFiltersCollapsible>
       )}
 
-      {error && <div className="alert-error">{error}</div>}
+      {error && <div className={fromLegacy("alert-error")}>{error}</div>}
 
       {TRIAL_TABS.includes(activeTab) && (
         <Card title={`${ACCOUNTING_TABS.find((t) => t.id === activeTab)?.label} — ${reportMeta}`}>
-          <div className="accounting-record-strip">
+          <div className={fromLegacy("accounting-record-strip")}>
             <span><strong>{formatNumber(filteredTrialRows.length)}</strong> حساب نمایش داده می‌شود</span>
             {trialFilterOn && filteredTrialRows.length !== trialRows.length && (
-              <span className="muted">از {formatNumber(trialRows.length)} حساب</span>
+              <span className={fromLegacy("muted")}>از {formatNumber(trialRows.length)} حساب</span>
             )}
             {displayTrialTotals?.turnover_balanced != null && (
               <span className={displayTrialTotals.turnover_balanced ? 'doc-balanced' : 'doc-unbalanced'}>
@@ -2246,7 +2247,7 @@ export default function Accounting({
             loading={trialLoading}
             onRowClick={openDetailFromTrial}
           />
-          <p className="accounting-footer-summary muted">
+          <p className={fromLegacy("accounting-footer-summary muted")}>
             {formatNumber(filteredTrialRows.length)} حساب
             {trialFilterOn && filteredTrialRows.length !== trialRows.length
               ? ` (از ${formatNumber(trialRows.length)})`
@@ -2258,12 +2259,12 @@ export default function Accounting({
       {activeTab === 'documents' && docView === 'list' && (
         <Card
           title={ACCOUNTING_MENU.documents}
-          actions={docListTotal > 0 ? <span className="muted small">{formatNumber(docListTotal)} سند</span> : null}
+          actions={docListTotal > 0 ? <span className={fromLegacy("muted small")}>{formatNumber(docListTotal)} سند</span> : null}
         >
-          <div className="accounting-doc-list-toolbar">
+          <div className={fromLegacy("accounting-doc-list-toolbar")}>
             <Field label="جستجو">
               <input
-                className="search-input"
+                className={fromLegacy("search-input")}
                 value={docListSearch}
                 onChange={(e) => setDocListSearch(e.target.value)}
                 placeholder="شرح، کد یا شماره سند…"
@@ -2280,21 +2281,21 @@ export default function Accounting({
             />
           </div>
           {docListRows.length > 0 && (
-            <div className="accounting-record-strip">
+            <div className={fromLegacy("accounting-record-strip")}>
               <span><strong>{formatNumber(docListRows.length)}</strong> سند بارگذاری شده</span>
               {docListRows.length < docListTotal && (
-                <span className="muted">از {formatNumber(docListTotal)} سند</span>
+                <span className={fromLegacy("muted")}>از {formatNumber(docListTotal)} سند</span>
               )}
             </div>
           )}
           {docListLoading ? (
-            <div className="loading">در حال بارگذاری…</div>
+            <div className={fromLegacy("loading")}>در حال بارگذاری…</div>
           ) : !docListRows.length ? (
             <EmptyState text="سندی یافت نشد." />
           ) : (
             <>
-              <div className="table-wrap accounting-ledger-wrap accounting-doc-list-table-desktop">
-                <table className="table accounting-ledger-table">
+              <div className={fromLegacy("table-wrap accounting-ledger-wrap accounting-doc-list-table-desktop")}>
+                <table className={fromLegacy("table accounting-ledger-table")}>
                   <thead>
                     <tr>
                       <th>{TERMS.documentNumber}</th>
@@ -2314,15 +2315,15 @@ export default function Accounting({
                         <td>{doc.document_number ? formatNumber(doc.document_number) : '—'}</td>
                         <td>{doc.entry_date ? formatDate(doc.entry_date) : '—'}</td>
                         <td><strong>{doc.document_code}</strong></td>
-                        <td className="text-cell">
+                        <td className={fromLegacy("text-cell")}>
                           {doc.description}
                           {doc.is_transferred && (
-                            <span className="accounting-transfer-badge" title={doc.office_document_code || ''}>
+                            <span className={fromLegacy("accounting-transfer-badge")} title={doc.office_document_code || ''}>
                               {' '}منتقل‌شده
                             </span>
                           )}
                           {doc.has_system_entries && (
-                            <span className="muted small"> (سیستمی)</span>
+                            <span className={fromLegacy("muted small")}> (سیستمی)</span>
                           )}
                         </td>
                         <td>{formatRial(doc.total_debit)}</td>
@@ -2330,18 +2331,18 @@ export default function Accounting({
                         <td>{formatNumber(doc.line_count)}</td>
                         <td>
                           {doc.is_approved ? '✓ تایید' : '○ در انتظار'}
-                          {!doc.balanced && <span className="doc-unbalanced"> · {TERMS.unbalanced}</span>}
+                          {!doc.balanced && <span className={fromLegacy("doc-unbalanced")}> · {TERMS.unbalanced}</span>}
                         </td>
-                        <td className="ledger-entry-actions">
-                          <button type="button" className="link" onClick={() => openEditDocument(doc.document_code)} title="مشاهده/ویرایش">✎</button>
+                        <td className={fromLegacy("ledger-entry-actions")}>
+                          <button type="button" className={fromLegacy("link")} onClick={() => openEditDocument(doc.document_code)} title="مشاهده/ویرایش">✎</button>
                           {canDelete && !doc.is_transferred && !doc.has_system_entries && (
-                            <button type="button" className="link danger" onClick={() => deleteDocumentByCode(doc.document_code)} title="حذف">×</button>
+                            <button type="button" className={fromLegacy("link danger")} onClick={() => deleteDocumentByCode(doc.document_code)} title="حذف">×</button>
                           )}
                           {canApprove && !doc.is_transferred && (
                             doc.is_approved ? (
-                              <button type="button" className="link link-warning" onClick={() => toggleDocumentApproval(doc, false)} title="لغو تایید">↩</button>
+                              <button type="button" className={fromLegacy("link link-warning")} onClick={() => toggleDocumentApproval(doc, false)} title="لغو تایید">↩</button>
                             ) : (
-                              <button type="button" className="link link-success" onClick={() => toggleDocumentApproval(doc, true)} title="تایید">✓</button>
+                              <button type="button" className={fromLegacy("link link-success")} onClick={() => toggleDocumentApproval(doc, true)} title="تایید">✓</button>
                             )
                           )}
                         </td>
@@ -2350,11 +2351,11 @@ export default function Accounting({
                   </tbody>
                 </table>
               </div>
-              <div className="accounting-doc-list-cards-mobile">
+              <div className={fromLegacy("accounting-doc-list-cards-mobile")}>
                 {docListRows.map((doc) => (
                   <div
                     key={doc.document_code}
-                    className="m-card accounting-doc-list-card accounting-doc-list-card--clickable"
+                    className={fromLegacy("m-card accounting-doc-list-card accounting-doc-list-card--clickable")}
                     role="button"
                     tabIndex={0}
                     onClick={() => openEditDocument(doc.document_code)}
@@ -2365,47 +2366,47 @@ export default function Accounting({
                       }
                     }}
                   >
-                    <p className="accounting-doc-list-card-hint">برای مشاهده/ویرایش ضربه بزنید</p>
-                    <div className="m-card-head accounting-entry-card-head">
+                    <p className={fromLegacy("accounting-doc-list-card-hint")}>برای مشاهده/ویرایش ضربه بزنید</p>
+                    <div className={fromLegacy("m-card-head accounting-entry-card-head")}>
                       <div>
                         <strong>{doc.document_code}</strong>
-                        <p className="accounting-entry-meta muted">
+                        <p className={fromLegacy("accounting-entry-meta muted")}>
                           {TERMS.documentNumber}: {doc.document_number ? formatNumber(doc.document_number) : '—'}
                           {' · '}
                           {doc.entry_date ? formatDate(doc.entry_date) : '—'}
                         </p>
                       </div>
-                      <span className={`accounting-doc-list-status-badge${doc.is_approved ? ' is-approved' : ' is-pending'}`}>
+                      <span className={fromLegacy(`accounting-doc-list-status-badge${doc.is_approved ? ' is-approved' : ' is-pending'}`)}>
                         {doc.is_approved ? '✓ تایید' : '○ در انتظار'}
                       </span>
                     </div>
-                    <p className="accounting-entry-desc">{doc.description}</p>
+                    <p className={fromLegacy("accounting-entry-desc")}>{doc.description}</p>
                     {(doc.is_transferred || doc.has_system_entries || !doc.balanced) && (
-                      <p className="accounting-entry-meta muted">
+                      <p className={fromLegacy("accounting-entry-meta muted")}>
                         {doc.is_transferred && (
-                          <span className="accounting-transfer-badge" title={doc.office_document_code || ''}>
+                          <span className={fromLegacy("accounting-transfer-badge")} title={doc.office_document_code || ''}>
                             منتقل‌شده
                           </span>
                         )}
                         {doc.has_system_entries && <span> (سیستمی)</span>}
-                        {!doc.balanced && <span className="doc-unbalanced"> · {TERMS.unbalanced}</span>}
+                        {!doc.balanced && <span className={fromLegacy("doc-unbalanced")}> · {TERMS.unbalanced}</span>}
                       </p>
                     )}
-                    <div className="m-card-grid">
-                      <div><span className="muted">{TERMS.debit}</span><strong>{formatRial(doc.total_debit)}</strong></div>
-                      <div><span className="muted">{TERMS.credit}</span><strong>{formatRial(doc.total_credit)}</strong></div>
-                      <div><span className="muted">ردیف</span><strong>{formatNumber(doc.line_count)}</strong></div>
+                    <div className={fromLegacy("m-card-grid")}>
+                      <div><span className={fromLegacy("muted")}>{TERMS.debit}</span><strong>{formatRial(doc.total_debit)}</strong></div>
+                      <div><span className={fromLegacy("muted")}>{TERMS.credit}</span><strong>{formatRial(doc.total_credit)}</strong></div>
+                      <div><span className={fromLegacy("muted")}>ردیف</span><strong>{formatNumber(doc.line_count)}</strong></div>
                     </div>
-                    <div className="accounting-doc-list-actions ledger-entry-actions" onClick={(e) => e.stopPropagation()}>
-                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => openEditDocument(doc.document_code)} title="مشاهده/ویرایش">✎ ویرایش</button>
+                    <div className={fromLegacy("accounting-doc-list-actions ledger-entry-actions")} onClick={(e) => e.stopPropagation()}>
+                      <button type="button" className={fromLegacy("btn btn-ghost btn-sm")} onClick={() => openEditDocument(doc.document_code)} title="مشاهده/ویرایش">✎ ویرایش</button>
                       {canDelete && !doc.is_transferred && !doc.has_system_entries && (
-                        <button type="button" className="btn btn-ghost btn-sm danger" onClick={() => deleteDocumentByCode(doc.document_code)} title="حذف">× حذف</button>
+                        <button type="button" className={fromLegacy("btn btn-ghost btn-sm danger")} onClick={() => deleteDocumentByCode(doc.document_code)} title="حذف">× حذف</button>
                       )}
                       {canApprove && !doc.is_transferred && (
                         doc.is_approved ? (
-                          <button type="button" className="btn btn-warning btn-sm" onClick={() => toggleDocumentApproval(doc, false)} title="لغو تایید">↩ لغو تایید</button>
+                          <button type="button" className={fromLegacy("btn btn-warning btn-sm")} onClick={() => toggleDocumentApproval(doc, false)} title="لغو تایید">↩ لغو تایید</button>
                         ) : (
-                          <button type="button" className="btn btn-success btn-sm" onClick={() => toggleDocumentApproval(doc, true)} title="تایید">✓ تایید</button>
+                          <button type="button" className={fromLegacy("btn btn-success btn-sm")} onClick={() => toggleDocumentApproval(doc, true)} title="تایید">✓ تایید</button>
                         )
                       )}
                     </div>
@@ -2425,15 +2426,15 @@ export default function Accounting({
       {activeTab === 'documents' && docView === 'form' && (
         <Card title={docEditCode ? (docCanEdit ? `ویرایش ${TERMS.document}` : `مشاهده ${TERMS.document}`) : ACCOUNTING_MENU.documents}>
           {!docCanEdit && docEditCode && (
-            <div className="alert-error">این سند قابل ویرایش نیست (سیستمی یا منتقل‌شده).</div>
+            <div className={fromLegacy("alert-error")}>این سند قابل ویرایش نیست (سیستمی یا منتقل‌شده).</div>
           )}
-          {docSuccess && <div className="alert-success">{docSuccess}</div>}
-          {docError && <div className="alert-error">{docError}</div>}
-          <form onSubmit={saveDocument} className="form accounting-doc-form">
-            <div className="accounting-doc-header form-grid-2">
+          {docSuccess && <div className={fromLegacy("alert-success")}>{docSuccess}</div>}
+          {docError && <div className={fromLegacy("alert-error")}>{docError}</div>}
+          <form onSubmit={saveDocument} className={fromLegacy("form accounting-doc-form")}>
+            <div className={fromLegacy("accounting-doc-header form-grid-2")}>
               <Field label={TERMS.attachCode}>
                 <input
-                  className="attach-code-input"
+                  className={fromLegacy("attach-code-input")}
                   value={docHeader.attach_code}
                   onChange={(e) => setDocHeader({ ...docHeader, attach_code: e.target.value })}
                   placeholder="اختیاری"
@@ -2465,8 +2466,8 @@ export default function Accounting({
                 />
               </Field>
             </div>
-            <div className="table-wrap accounting-ledger-wrap accounting-doc-table-desktop">
-              <table className="table accounting-ledger-table accounting-doc-table">
+            <div className={fromLegacy("table-wrap accounting-ledger-wrap accounting-doc-table-desktop")}>
+              <table className={fromLegacy("table accounting-ledger-table accounting-doc-table")}>
                 <thead>
                   <tr>
                     <th>{TERMS.generalAccount}</th>
@@ -2511,27 +2512,27 @@ export default function Accounting({
                         <MoneyInput min="0" value={line.credit} onChange={(e) => updateDocLine(index, 'credit', e.target.value)} unit={TERMS.currency} />
                       </td>
                       <td>
-                        <button type="button" className="link danger" onClick={() => removeDocLine(index)}>×</button>
+                        <button type="button" className={fromLegacy("link danger")} onClick={() => removeDocLine(index)}>×</button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
                 <tfoot>
-                  <tr className="ledger-totals-row">
+                  <tr className={fromLegacy("ledger-totals-row")}>
                     <td colSpan={3}><strong>{TERMS.total}</strong></td>
                     <td>{formatRial(docTotals.debit)}</td>
                     <td>{formatRial(docTotals.credit)}</td>
-                    <td>{docTotals.balanced ? <span className="doc-balanced">✓ {TERMS.balanced}</span> : <span className="doc-unbalanced">{TERMS.unbalanced}</span>}</td>
+                    <td>{docTotals.balanced ? <span className={fromLegacy("doc-balanced")}>✓ {TERMS.balanced}</span> : <span className={fromLegacy("doc-unbalanced")}>{TERMS.unbalanced}</span>}</td>
                   </tr>
                 </tfoot>
               </table>
             </div>
 
-            <div className="accounting-doc-cards-mobile">
-              <div className="accounting-doc-header-mobile form">
+            <div className={fromLegacy("accounting-doc-cards-mobile")}>
+              <div className={fromLegacy("accounting-doc-header-mobile form")}>
                 <Field label={TERMS.attachCode}>
                   <input
-                    className="attach-code-input"
+                    className={fromLegacy("attach-code-input")}
                     value={docHeader.attach_code}
                     onChange={(e) => setDocHeader({ ...docHeader, attach_code: e.target.value })}
                     placeholder="اختیاری"
@@ -2547,12 +2548,12 @@ export default function Accounting({
                 </Field>
               </div>
               {docLines.map((line, index) => (
-                <div key={index} className="m-card accounting-doc-line-card">
-                  <div className="m-card-head accounting-entry-card-head">
+                <div key={index} className={fromLegacy("m-card accounting-doc-line-card")}>
+                  <div className={fromLegacy("m-card-head accounting-entry-card-head")}>
                     <strong>ردیف {formatNumber(index + 1)}</strong>
-                    <button type="button" className="link danger" onClick={() => removeDocLine(index)}>حذف</button>
+                    <button type="button" className={fromLegacy("link danger")} onClick={() => removeDocLine(index)}>حذف</button>
                   </div>
-                  <div className="form accounting-doc-line-fields">
+                  <div className={fromLegacy("form accounting-doc-line-fields")}>
                     <Field label={TERMS.generalAccount}>
                       <Select
                         value={line.account_id}
@@ -2577,7 +2578,7 @@ export default function Accounting({
                         placeholder={TERMS.detailedAccount}
                       />
                     </Field>
-                    <div className="form-grid-2 entry-amount-grid">
+                    <div className={fromLegacy("form-grid-2 entry-amount-grid")}>
                       <Field label={TERMS.debit}>
                         <MoneyInput min="0" value={line.debit} onChange={(e) => updateDocLine(index, 'debit', e.target.value)} unit={TERMS.currency} />
                       </Field>
@@ -2588,18 +2589,18 @@ export default function Accounting({
                   </div>
                 </div>
               ))}
-              <div className={`m-card accounting-doc-mobile-totals ${docTotals.balanced ? 'doc-balanced' : 'doc-unbalanced'}`}>
-                <div className="m-card-grid">
-                  <div><span className="muted">{TERMS.debit}</span><strong>{formatRial(docTotals.debit)}</strong></div>
-                  <div><span className="muted">{TERMS.credit}</span><strong>{formatRial(docTotals.credit)}</strong></div>
+              <div className={fromLegacy(`m-card accounting-doc-mobile-totals ${docTotals.balanced ? 'doc-balanced' : 'doc-unbalanced'}`)}>
+                <div className={fromLegacy("m-card-grid")}>
+                  <div><span className={fromLegacy("muted")}>{TERMS.debit}</span><strong>{formatRial(docTotals.debit)}</strong></div>
+                  <div><span className={fromLegacy("muted")}>{TERMS.credit}</span><strong>{formatRial(docTotals.credit)}</strong></div>
                 </div>
-                <p className="accounting-footer-summary">
+                <p className={fromLegacy("accounting-footer-summary")}>
                   {docTotals.balanced ? `✓ ${TERMS.balanced}` : TERMS.unbalanced}
                 </p>
               </div>
             </div>
 
-            <div className="form-actions-row">
+            <div className={fromLegacy("form-actions-row")}>
               <Button type="button" variant="ghost" onClick={addDocLine}>+ ردیف</Button>
               <Button type="submit" disabled={docSaving || !docTotals.hasAmounts || !canCreate || (docEditCode && !docCanEdit)}>
                 {docSaving ? 'در حال ثبت…' : docEditCode ? 'ذخیره تغییرات' : `ثبت ${TERMS.document}`}
@@ -2693,13 +2694,13 @@ export default function Accounting({
       )}
 
       {activeTab === 'chart-of-accounts' && (
-        <Card title={ACCOUNTING_MENU['chart-of-accounts']} className="chart-of-accounts-card">
-          <div className="chart-of-accounts-layout">
-            <div className="chart-of-accounts-main">
+        <Card title={ACCOUNTING_MENU['chart-of-accounts']} className={fromLegacy("chart-of-accounts-card")}>
+          <div className={fromLegacy("chart-of-accounts-layout")}>
+            <div className={fromLegacy("chart-of-accounts-main")}>
               <FilterBar>
                 <Field label="جستجو">
                   <input
-                    className="search-input"
+                    className={fromLegacy("search-input")}
                     value={chartSearch}
                     onChange={(e) => setChartSearch(e.target.value)}
                     placeholder="کد یا عنوان حساب کل، معین یا تفصیلی…"
@@ -2710,16 +2711,16 @@ export default function Accounting({
               {chartListEmpty ? (
                 <EmptyState text="حسابی با این عبارت یافت نشد." />
               ) : (
-                <div className="account-model-list">
+                <div className={fromLegacy("account-model-list")}>
                   {filteredChartGroups.map((group) => (
-                    <div key={group.class} className="account-model-class">
-                      <h3 className="account-model-class-title">{group.class_label}</h3>
+                    <div key={group.class} className={fromLegacy("account-model-class")}>
+                      <h3 className={fromLegacy("account-model-class-title")}>{group.class_label}</h3>
                       {group.accounts.map(({ acc, subs }) => (
-                        <section key={acc.id} className="account-model-panel">
+                        <section key={acc.id} className={fromLegacy("account-model-panel")}>
                           <div
                             role="button"
                             tabIndex={0}
-                            className={`account-model-head chart-account-head entry-row-clickable${chartRowSelected(chartSelected, 'general', acc.id) ? ' drill-row-selected' : ''}`}
+                            className={fromLegacy(`account-model-head chart-account-head entry-row-clickable${chartRowSelected(chartSelected, 'general', acc.id) ? ' drill-row-selected' : ''}`)}
                             onClick={() => selectChartAccount('general', acc)}
                             onKeyDown={(e) => {
                               if (e.key === 'Enter' || e.key === ' ') {
@@ -2729,12 +2730,12 @@ export default function Accounting({
                             }}
                           >
                             <strong>{acc.code} — {acc.name}</strong>
-                            <span className="chart-account-head-actions">
-                              <span className="muted small">{formatNumber(subs.length)} {TERMS.subsidiaryAccount}</span>
+                            <span className={fromLegacy("chart-account-head-actions")}>
+                              <span className={fromLegacy("muted small")}>{formatNumber(subs.length)} {TERMS.subsidiaryAccount}</span>
                               {canCreate && (
                                 <button
                                   type="button"
-                                  className="chart-quick-add"
+                                  className={fromLegacy("chart-quick-add")}
                                   title={`افزودن ${TERMS.subsidiaryAccount}`}
                                   onClick={(e) => {
                                     e.stopPropagation()
@@ -2747,11 +2748,11 @@ export default function Accounting({
                             </span>
                           </div>
                           {subs.map(({ sub, dets }) => (
-                            <div key={sub.id} className="chart-subsidiary-block">
+                            <div key={sub.id} className={fromLegacy("chart-subsidiary-block")}>
                               <div
                                 role="button"
                                 tabIndex={0}
-                                className={`chart-subsidiary-title entry-row-clickable${chartRowSelected(chartSelected, 'subsidiary', sub.id) ? ' drill-row-selected' : ''}`}
+                                className={fromLegacy(`chart-subsidiary-title entry-row-clickable${chartRowSelected(chartSelected, 'subsidiary', sub.id) ? ' drill-row-selected' : ''}`)}
                                 onClick={() => selectChartAccount('subsidiary', sub)}
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter' || e.key === ' ') {
@@ -2761,12 +2762,12 @@ export default function Accounting({
                                 }}
                               >
                                 <strong>{sub.full_code} — {sub.name}</strong>
-                                <span className="chart-account-head-actions">
-                                  <span className="muted small">{formatNumber(dets.length)} {TERMS.detailedAccount}</span>
+                                <span className={fromLegacy("chart-account-head-actions")}>
+                                  <span className={fromLegacy("muted small")}>{formatNumber(dets.length)} {TERMS.detailedAccount}</span>
                                   {canCreate && (
                                     <button
                                       type="button"
-                                      className="chart-quick-add"
+                                      className={fromLegacy("chart-quick-add")}
                                       title={`افزودن ${TERMS.detailedAccount}`}
                                       onClick={(e) => {
                                         e.stopPropagation()
@@ -2779,12 +2780,12 @@ export default function Accounting({
                                 </span>
                               </div>
                               {dets.length > 0 && (
-                                <ul className="chart-detail-list">
+                                <ul className={fromLegacy("chart-detail-list")}>
                                   {dets.map((det) => (
                                     <li key={det.id}>
                                       <button
                                         type="button"
-                                        className={`chart-detail-row${chartRowSelected(chartSelected, 'detailed', det.id) ? ' drill-row-selected' : ''}`}
+                                        className={fromLegacy(`chart-detail-row${chartRowSelected(chartSelected, 'detailed', det.id) ? ' drill-row-selected' : ''}`)}
                                         onClick={() => selectChartAccount('detailed', det)}
                                       >
                                         {det.full_code} — {det.name}
@@ -2803,7 +2804,7 @@ export default function Accounting({
               )}
             </div>
 
-            <aside ref={chartDetailRef} className="chart-account-detail">
+            <aside ref={chartDetailRef} className={fromLegacy("chart-account-detail")}>
               <AccountDetailPanel
                 selected={chartSelected}
                 editForm={chartEditForm}
@@ -2829,15 +2830,15 @@ export default function Accounting({
 
       {activeTab === 'upload-excel' && !canCreate && (
         <Card title={ACCOUNTING_MENU['upload-excel']}>
-          <div className="alert-error">مجوز ثبت {TERMS.entry} برای بارگذاری فایل لازم است.</div>
+          <div className={fromLegacy("alert-error")}>مجوز ثبت {TERMS.entry} برای بارگذاری فایل لازم است.</div>
         </Card>
       )}
 
       {activeTab === 'upload-excel' && canCreate && (
         <Card title={ACCOUNTING_MENU['upload-excel']}>
-          {importSuccess && <div className="alert-success">{importSuccess}</div>}
-          {importError && <div className="alert-error">{importError}</div>}
-          <form onSubmit={runExcelImport} className="form accounting-import-form">
+          {importSuccess && <div className={fromLegacy("alert-success")}>{importSuccess}</div>}
+          {importError && <div className={fromLegacy("alert-error")}>{importError}</div>}
+          <form onSubmit={runExcelImport} className={fromLegacy("form accounting-import-form")}>
             <Field label="فایل اکسل (.xlsx)">
               <input
                 type="file"
@@ -2849,9 +2850,9 @@ export default function Accounting({
                   setImportSuccess('')
                 }}
               />
-              {importFile && <p className="muted small">{importFile.name}</p>}
+              {importFile && <p className={fromLegacy("muted small")}>{importFile.name}</p>}
             </Field>
-            <label className="checkbox-field accounting-import-options">
+            <label className={fromLegacy("checkbox-field accounting-import-options")}>
               <input
                 type="checkbox"
                 checked={importDryRun}
@@ -2865,15 +2866,15 @@ export default function Accounting({
           </form>
 
           {importResult && (
-            <div className="accounting-import-report">
-              <h3 className="accounting-import-report-title">
+            <div className={fromLegacy("accounting-import-report")}>
+              <h3 className={fromLegacy("accounting-import-report-title")}>
                 {importResult.committed
                   ? '✓ بارگذاری با موفقیت انجام شد'
                   : importResult.dry_run
                     ? 'گزارش اعتبارسنجی'
                     : 'بارگذاری انجام نشد'}
               </h3>
-              <div className="accounting-import-meta">
+              <div className={fromLegacy("accounting-import-meta")}>
                 {importResult.metadata?.date_from && (
                   <span>{TERMS.dateFrom} {importResult.metadata.date_from}</span>
                 )}
@@ -2887,14 +2888,14 @@ export default function Accounting({
                   <span>{TERMS.docTo} {formatNumber(importResult.metadata.doc_to)}</span>
                 )}
               </div>
-              <ul className="accounting-import-stats-list">
+              <ul className={fromLegacy("accounting-import-stats-list")}>
                 <li>{TERMS.generalAccount}: {formatNumber(importResult.counts?.general_rows || 0)}</li>
                 <li>{TERMS.subsidiaryAccount}: {formatNumber(importResult.counts?.subsidiary_rows || 0)}</li>
                 <li>{TERMS.detailedAccount}: {formatNumber(importResult.counts?.detailed_rows || 0)}</li>
                 <li>{TERMS.ledger}: {formatNumber(importResult.counts?.detail_ledger_rows || 0)} ردیف</li>
               </ul>
               {importResult.stats && Object.keys(importResult.stats).length > 0 && (
-                <ul className="accounting-import-stats-list">
+                <ul className={fromLegacy("accounting-import-stats-list")}>
                   {importResult.stats.subsidiaries_created > 0 && <li>{formatNumber(importResult.stats.subsidiaries_created)} {TERMS.subsidiaryAccount} جدید</li>}
                   {importResult.stats.details_created > 0 && <li>{formatNumber(importResult.stats.details_created)} {TERMS.detailedAccount} جدید</li>}
                   {importResult.stats.entries_created > 0 && <li>{formatNumber(importResult.stats.entries_created)} {TERMS.entry} ثبت شد</li>}
@@ -2902,7 +2903,7 @@ export default function Accounting({
                 </ul>
               )}
               {importResult.trial_totals && (
-                <p className={`accounting-footer-summary ${importResult.trial_totals.turnover_balanced ? 'doc-balanced' : 'doc-unbalanced'}`}>
+                <p className={fromLegacy(`accounting-footer-summary ${importResult.trial_totals.turnover_balanced ? 'doc-balanced' : 'doc-unbalanced'}`)}>
                   {TERMS.turnover} {TERMS.trialBalance}: {TERMS.debit} {formatRial(importResult.trial_totals.turnover_debit)}
                   {' / '}
                   {TERMS.credit} {formatRial(importResult.trial_totals.turnover_credit)}
@@ -2910,16 +2911,16 @@ export default function Accounting({
                 </p>
               )}
               {importResult.detail_ledger_account && (
-                <p className="muted">{TERMS.ledger}: {importResult.detail_ledger_account}</p>
+                <p className={fromLegacy("muted")}>{TERMS.ledger}: {importResult.detail_ledger_account}</p>
               )}
               {importResult.warnings?.length > 0 && (
-                <div className="accounting-import-warnings">
+                <div className={fromLegacy("accounting-import-warnings")}>
                   <strong>هشدارها</strong>
                   <ul>{importResult.warnings.map((w) => <li key={w}>{w}</li>)}</ul>
                 </div>
               )}
               {importResult.errors?.length > 0 && (
-                <div className="alert-error">
+                <div className={fromLegacy("alert-error")}>
                   <ul>{importResult.errors.map((err) => <li key={err}>{err}</li>)}</ul>
                 </div>
               )}
@@ -2930,13 +2931,13 @@ export default function Accounting({
 
       {activeTab === 'transfer-to-office' && canTransfer && (
         <Card title="انتقال سند به حسابداری اداری">
-          <p className="muted small">
+          <p className={fromLegacy("muted small")}>
             سند کارخانه را با کد (F-*) یا شماره سند وارد کنید. انتقال فقط وقتی ممکن است که همه حساب‌های سند در هر دو دفتر مشترک باشند.
           </p>
-          {transferSuccess && <div className="alert-success">{transferSuccess}</div>}
-          {transferError && <div className="alert-error">{transferError}</div>}
-          <form onSubmit={runTransferPreview} className="form accounting-transfer-form">
-            <div className="form-grid-2">
+          {transferSuccess && <div className={fromLegacy("alert-success")}>{transferSuccess}</div>}
+          {transferError && <div className={fromLegacy("alert-error")}>{transferError}</div>}
+          <form onSubmit={runTransferPreview} className={fromLegacy("form accounting-transfer-form")}>
+            <div className={fromLegacy("form-grid-2")}>
               <Field label="کد سند کارخانه">
                 <input
                   value={transferDocCode}
@@ -2953,7 +2954,7 @@ export default function Accounting({
                 />
               </Field>
             </div>
-            <div className="form-actions-row">
+            <div className={fromLegacy("form-actions-row")}>
               <Button type="submit" disabled={transferLoading}>
                 {transferLoading ? 'در حال بررسی…' : 'بررسی امکان انتقال'}
               </Button>
@@ -2966,31 +2967,31 @@ export default function Accounting({
           </form>
 
           {transferPreview && (
-            <div className="accounting-transfer-preview">
-              <p className="accounting-footer-summary">
+            <div className={fromLegacy("accounting-transfer-preview")}>
+              <p className={fromLegacy("accounting-footer-summary")}>
                 سند {transferPreview.factory_document_code}
                 {transferPreview.document_number != null ? ` — شماره ${formatNumber(transferPreview.document_number)}` : ''}
                 {' · '}
                 {formatNumber(transferPreview.lines?.length || 0)} ردیف
               </p>
               {transferPreview.already_transferred && (
-                <div className="alert-error">
+                <div className={fromLegacy("alert-error")}>
                   این سند قبلاً منتقل شده است
                   {transferPreview.office_document_code ? ` (${transferPreview.office_document_code})` : ''}.
                 </div>
               )}
               {transferPreview.unmappable_count > 0 && (
-                <div className="alert-error">
+                <div className={fromLegacy("alert-error")}>
                   حساب‌های غیرمشترک: {transferPreview.unmappable_accounts.join('، ')}
                 </div>
               )}
               {transferPreview.can_transfer && (
-                <p className="alert-success">همه ردیف‌ها قابل انتقال هستند.</p>
+                <p className={fromLegacy("alert-success")}>همه ردیف‌ها قابل انتقال هستند.</p>
               )}
               {transferPreview.lines?.length > 0 && (
                 <>
-                  <div className="table-wrap accounting-transfer-table-desktop">
-                    <table className="data-table">
+                  <div className={fromLegacy("table-wrap accounting-transfer-table-desktop")}>
+                    <table className={fromLegacy("data-table")}>
                       <thead>
                         <tr>
                           <th>حساب</th>
@@ -3011,14 +3012,14 @@ export default function Accounting({
                       </tbody>
                     </table>
                   </div>
-                  <div className="accounting-transfer-cards-mobile">
+                  <div className={fromLegacy("accounting-transfer-cards-mobile")}>
                     {transferPreview.lines.map((line) => (
-                      <div key={line.entry_id} className="m-card accounting-transfer-line-card">
-                        <p className="accounting-entry-desc"><strong>{line.account_label}</strong></p>
-                        <div className="m-card-grid">
-                          <div><span className="muted">{TERMS.debit}</span><strong>{renderAmount(line.debit)}</strong></div>
-                          <div><span className="muted">{TERMS.credit}</span><strong>{renderAmount(line.credit)}</strong></div>
-                          <div><span className="muted">وضعیت</span><strong>{line.mappable ? '✓ مشترک' : line.error}</strong></div>
+                      <div key={line.entry_id} className={fromLegacy("m-card accounting-transfer-line-card")}>
+                        <p className={fromLegacy("accounting-entry-desc")}><strong>{line.account_label}</strong></p>
+                        <div className={fromLegacy("m-card-grid")}>
+                          <div><span className={fromLegacy("muted")}>{TERMS.debit}</span><strong>{renderAmount(line.debit)}</strong></div>
+                          <div><span className={fromLegacy("muted")}>{TERMS.credit}</span><strong>{renderAmount(line.credit)}</strong></div>
+                          <div><span className={fromLegacy("muted")}>وضعیت</span><strong>{line.mappable ? '✓ مشترک' : line.error}</strong></div>
                         </div>
                       </div>
                     ))}
@@ -3032,7 +3033,7 @@ export default function Accounting({
 
       <Modal title="ویرایش ردیف" open={Boolean(entryEdit)} onClose={() => setEntryEdit(null)}>
         {entryEdit && (
-          <form onSubmit={saveEntryEdit} className="form">
+          <form onSubmit={saveEntryEdit} className={fromLegacy("form")}>
             <Field label={TERMS.description}>
               <input
                 value={entryEdit.description}
@@ -3048,7 +3049,7 @@ export default function Accounting({
                 clearLabel="پاک کردن"
               />
             </Field>
-            <div className="form-grid-2">
+            <div className={fromLegacy("form-grid-2")}>
               <Field label={TERMS.debit}>
                 <MoneyInput min="0" value={entryEdit.debit} onChange={(e) => setEntryEdit({ ...entryEdit, debit: e.target.value })} unit={TERMS.currency} />
               </Field>
@@ -3066,8 +3067,8 @@ export default function Accounting({
         open={Boolean(lineAccountPick)}
         onClose={() => finishLineAccountPick(null)}
       >
-        {lineAccountPick?.message && <p className="accounting-line-pick-message">{lineAccountPick.message}</p>}
-        <div className="accounting-line-pick-actions">
+        {lineAccountPick?.message && <p className={fromLegacy("accounting-line-pick-message")}>{lineAccountPick.message}</p>}
+        <div className={fromLegacy("accounting-line-pick-actions")}>
           {lineAccountPick?.options?.map((opt) => (
             <Button key={opt.key} type="button" variant="ghost" onClick={() => finishLineAccountPick(opt)}>
               {opt.label}

@@ -2,6 +2,7 @@
 
 import { useEffect, useId, useRef, useState } from 'react'
 import JcalPanel from './JcalPanel'
+import { fromLegacy } from '../styles/tw.js'
 
 export default function Select({
   value,
@@ -33,19 +34,19 @@ export default function Select({
   }
 
   return (
-    <div className="jcal-wrap" ref={wrapRef}>
+    <div className={fromLegacy("jcal-wrap")} ref={wrapRef}>
       <input type="hidden" name={uid} value={strValue} required={required && !strValue} readOnly />
       <button
         type="button"
-        className={`jcal-trigger select-trigger ${!selected || selected.value === '' ? 'placeholder' : ''}`}
+        className={fromLegacy(`jcal-trigger select-trigger ${!selected || selected.value === '' ? 'placeholder' : ''}`)}
         onClick={() => setOpen((o) => !o)}
         disabled={disabled}
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-label={label}
       >
-        <span className="select-trigger-text">{display}</span>
-        <span className="jcal-trigger-chevron" aria-hidden>{open ? '▲' : '▼'}</span>
+        <span className={fromLegacy("select-trigger-text")}>{display}</span>
+        <span className={fromLegacy("jcal-trigger-chevron")} aria-hidden>{open ? '▲' : '▼'}</span>
       </button>
 
       <JcalPanel
@@ -55,7 +56,7 @@ export default function Select({
         variant="select"
         ariaLabel={label || placeholder}
       >
-        <div className="select-options" role="listbox" ref={listRef}>
+        <div className={fromLegacy("select-options")} role="listbox" ref={listRef}>
           {options.map((opt) => {
             const isSel = String(opt.value) === strValue
             return (
@@ -64,11 +65,11 @@ export default function Select({
                 type="button"
                 role="option"
                 aria-selected={isSel}
-                className={`select-option ${isSel ? 'selected' : ''}`}
+                className={fromLegacy(`select-option ${isSel ? 'selected' : ''}`)}
                 onClick={() => pick(opt)}
               >
                 <span>{opt.label}</span>
-                {isSel && <span className="select-check" aria-hidden>✓</span>}
+                {isSel && <span className={fromLegacy("select-check")} aria-hidden>✓</span>}
               </button>
             )
           })}

@@ -8,6 +8,7 @@ import { useConfig } from '../context/ConfigContext'
 import { usePageGuideContext } from '../context/PageGuideContext'
 import { isSystemAdmin } from '../utils/permissions'
 import { Button, Modal } from './ui'
+import { cn, tw } from '../styles/tw'
 
 export default function SiteFooterGuide({ pageKey }) {
   const { user } = useAuth()
@@ -55,22 +56,22 @@ export default function SiteFooterGuide({ pageKey }) {
   return (
     <>
       <footer
-        className={`site-footer-guide${admin ? ' site-footer-guide-editable' : ''}`}
+        className={cn(tw.siteFooterGuide, admin && tw.siteFooterGuideEditable)}
         aria-label="راهنمای صفحه"
         onDoubleClick={openEditor}
         title={admin ? 'دوبار کلیک برای ویرایش راهنما (فقط مدیر سیستم)' : undefined}
       >
-        <span className="site-footer-guide-label">راهنما</span>
-        <p className="site-footer-guide-text">
+        <span className={tw.siteFooterGuideLabel}>راهنما</span>
+        <p className={tw.siteFooterGuideText}>
           {displayText || (admin ? 'برای افزودن توضیحات، دوبار کلیک کنید.' : '')}
         </p>
       </footer>
 
       <Modal title="ویرایش راهنمای صفحه" open={editOpen} onClose={() => setEditOpen(false)}>
-        <form onSubmit={save} className="form">
-          <p className="muted small">این متن در فوتر برای همه کاربران نمایش داده می‌شود.</p>
-          <label className="field">
-            <span className="field-label">توضیحات و راهنما</span>
+        <form onSubmit={save} className={tw.form}>
+          <p className={cn(tw.muted, tw.small)}>این متن در فوتر برای همه کاربران نمایش داده می‌شود.</p>
+          <label className={tw.field}>
+            <span className={tw.fieldLabel}>توضیحات و راهنما</span>
             <textarea
               rows={6}
               value={draft}
@@ -78,8 +79,8 @@ export default function SiteFooterGuide({ pageKey }) {
               placeholder="راهنمای استفاده از این بخش…"
             />
           </label>
-          {error && <div className="alert-error">{error}</div>}
-          <div className="form-actions-row">
+          {error && <div className={tw.alert}>{error}</div>}
+          <div className={tw.formActionsRow}>
             <Button type="button" variant="ghost" onClick={() => setEditOpen(false)}>
               انصراف
             </Button>

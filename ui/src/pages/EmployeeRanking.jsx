@@ -11,6 +11,7 @@ import { PAGE_GUIDE_DEFAULTS } from '../config/pageGuideDefaults'
 import { useRegisterPageGuide } from '../context/PageGuideContext'
 import { formatMoney } from '../utils/format'
 import { currentJalali, isoToJalali, todayIso, toPersianDigits } from '../utils/jalali'
+import { fromLegacy } from '../styles/tw.js'
 
 const PERIOD_OPTIONS = [
   { value: 'day', label: 'روز' },
@@ -93,7 +94,7 @@ export default function EmployeeRanking() {
   }
 
   return (
-    <div className="page employee-ranking-page">
+    <div className={fromLegacy("page employee-ranking-page")}>
       <Card title="رده‌بندی کارکنان">
         <FilterBar>
           <Field label="بازه">
@@ -125,45 +126,45 @@ export default function EmployeeRanking() {
           <Field label="فیلتر رتبه‌بندی">
             <Select value={branch} onChange={setBranch} options={branchFilterOptions} />
           </Field>
-          <div className="page-filters-actions">
+          <div className={fromLegacy("page-filters-actions")}>
             <Button type="button" onClick={load} disabled={loading}>
               {loading ? 'در حال جستجو…' : 'جستجو'}
             </Button>
           </div>
         </FilterBar>
 
-        {error && <div className="alert-error">{error}</div>}
+        {error && <div className={fromLegacy("alert-error")}>{error}</div>}
         {!loading && !error && !data?.results?.length && (
           <EmptyState message="داده‌ای برای این بازه نیست. (برای تست: python manage.py seed_ranking_demo)" />
         )}
         {data?.results?.length > 0 && (
           <>
-            <p className="muted small">مجموع: {formatMoney(data.total_final || 0)}</p>
-            <div className="ranking-list">
+            <p className={fromLegacy("muted small")}>مجموع: {formatMoney(data.total_final || 0)}</p>
+            <div className={fromLegacy("ranking-list")}>
               {data.results.map((row) => (
-                <div key={row.user_id} className="ranking-card">
-                  <button type="button" className="ranking-card-head" onClick={() => toggleRow(row.user_id)}>
+                <div key={row.user_id} className={fromLegacy("ranking-card")}>
+                  <button type="button" className={fromLegacy("ranking-card-head")} onClick={() => toggleRow(row.user_id)}>
                     <Badge color={rankColor(row.rank)}>{toPersianDigits(row.rank)}</Badge>
-                    <div className="ranking-card-main">
+                    <div className={fromLegacy("ranking-card-main")}>
                       <strong>{row.full_name}</strong>
-                      <span className="muted small">
+                      <span className={fromLegacy("muted small")}>
                         شعبه ثابت: {row.home_branch_label || '—'}
                       </span>
                     </div>
-                    <div className="ranking-card-total">
-                      <span className="muted small">فروش</span>
+                    <div className={fromLegacy("ranking-card-total")}>
+                      <span className={fromLegacy("muted small")}>فروش</span>
                       <strong>{formatMoney(row.total_final)}</strong>
-                      <span className="muted small">{toPersianDigits(row.sale_count)} فقره</span>
+                      <span className={fromLegacy("muted small")}>{toPersianDigits(row.sale_count)} فقره</span>
                     </div>
-                    <span className="ranking-expand">{expanded[row.user_id] ? '▲' : '▼'}</span>
+                    <span className={fromLegacy("ranking-expand")}>{expanded[row.user_id] ? '▲' : '▼'}</span>
                   </button>
 
                   {expanded[row.user_id] && (
-                    <div className="ranking-card-body">
-                      <div className="ranking-section">
+                    <div className={fromLegacy("ranking-card-body")}>
+                      <div className={fromLegacy("ranking-section")}>
                         <h4>حضور در بازه</h4>
                         {row.attendance_branches?.length ? (
-                          <ul className="ranking-branch-list">
+                          <ul className={fromLegacy("ranking-branch-list")}>
                             {row.attendance_branches.map((item) => (
                               <li key={`att-${item.branch}`}>
                                 <span>{item.branch_label}</span>
@@ -172,29 +173,29 @@ export default function EmployeeRanking() {
                             ))}
                           </ul>
                         ) : (
-                          <p className="muted small">حضور ثبت‌شده‌ای در این بازه نیست.</p>
+                          <p className={fromLegacy("muted small")}>حضور ثبت‌شده‌ای در این بازه نیست.</p>
                         )}
                       </div>
-                      <div className="ranking-section">
+                      <div className={fromLegacy("ranking-section")}>
                         <h4>فروش به تفکیک شعبه</h4>
                         {row.sales_by_branch?.length ? (
-                          <ul className="ranking-branch-list">
+                          <ul className={fromLegacy("ranking-branch-list")}>
                             {row.sales_by_branch.map((item) => (
                               <li key={`sale-${item.branch}`}>
                                 <span>{item.branch_label}</span>
                                 <span>
                                   {formatMoney(item.total_final)}
                                   {' '}
-                                  <span className="muted">({toPersianDigits(item.sale_count)} فقره)</span>
+                                  <span className={fromLegacy("muted")}>({toPersianDigits(item.sale_count)} فقره)</span>
                                 </span>
                               </li>
                             ))}
                           </ul>
                         ) : (
-                          <p className="muted small">فروشی ثبت نشده.</p>
+                          <p className={fromLegacy("muted small")}>فروشی ثبت نشده.</p>
                         )}
                         {row.sales_by_branch?.length > 1 && (
-                          <p className="muted small ranking-all-total">
+                          <p className={fromLegacy("muted small ranking-all-total")}>
                             جمع همه شعب: {formatMoney(row.total_all_branches)} ({toPersianDigits(row.sale_count_all_branches)} فقره)
                           </p>
                         )}

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { attendanceApi } from '../api/client'
 import { Card } from './ui'
+import { fromLegacy } from '../styles/tw.js'
 
 export default function AttendanceWidget() {
   const [status, setStatus] = useState(null)
@@ -69,13 +70,13 @@ export default function AttendanceWidget() {
 
   return (
     <Card title="حضور و غیاب امروز">
-      {error && <div className="alert-error">{error}</div>}
-      {message && <p className="muted attendance-status-msg">{message}</p>}
-      <div className="attendance-actions">
+      {error && <div className={fromLegacy("alert-error")}>{error}</div>}
+      {message && <p className={fromLegacy("muted attendance-status-msg")}>{message}</p>}
+      <div className={fromLegacy("attendance-actions")}>
         {status?.can_check_in && (
           <button
             type="button"
-            className="attendance-btn attendance-btn-in"
+            className={fromLegacy("attendance-btn attendance-btn-in")}
             onClick={checkIn}
             disabled={busy}
           >
@@ -85,7 +86,7 @@ export default function AttendanceWidget() {
         {status?.can_check_out && (
           <button
             type="button"
-            className="attendance-btn attendance-btn-out"
+            className={fromLegacy("attendance-btn attendance-btn-out")}
             onClick={checkOut}
             disabled={busy}
           >

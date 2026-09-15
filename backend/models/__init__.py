@@ -92,6 +92,11 @@ from .orders import (
     SaleLineItem,
     WorkflowStage,
 )
+from .workflow_cycle import (
+    CycleSlot,
+    OrderCycle,
+    Warehouse,
+)
 from .people import (
     Customer,
     CustomerAttendance,

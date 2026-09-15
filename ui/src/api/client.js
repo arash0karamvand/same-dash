@@ -348,6 +348,21 @@ export const factoryApi = {
   freightComplete: (id) => post(`/api/factory/orders/${id}/freight-complete/`),
 }
 
+export const cycleApi = {
+  get: () => get('/api/cycle/'),
+  save: (data) => put('/api/cycle/', data),
+  me: () => get('/api/cycle/me/'),
+  warehouses: () => get('/api/cycle/warehouses/'),
+  createWarehouse: (data) => post('/api/cycle/warehouses/', data),
+  updateWarehouse: (id, data) => put(`/api/cycle/warehouses/${id}/`, data),
+  removeWarehouse: (id) => del(`/api/cycle/warehouses/${id}/`),
+  watch: (params = '') => get(`/api/cycle/watch/${params ? `?${params}` : ''}`),
+  warehouseOrders: (params = '') => get(`/api/cycle/warehouse-orders/${params ? `?${params}` : ''}`),
+  pickupOrders: (params = '') => get(`/api/cycle/pickup-orders/${params ? `?${params}` : ''}`),
+  warehouseComplete: (id) => post(`/api/sales/${id}/warehouse-complete/`),
+  pickupComplete: (id) => post(`/api/sales/${id}/pickup-complete/`),
+}
+
 export const installmentsApi = {
   list: (params = '') => get(`/api/installments/${params ? `?${params}` : ''}`),
   create: (data) => post('/api/installments/', data),

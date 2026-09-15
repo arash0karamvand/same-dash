@@ -8,6 +8,7 @@ import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmContext'
 import { useConfig } from '../context/ConfigContext'
 import { hasPermission } from '../utils/permissions'
+import { fromLegacy } from '../styles/tw.js'
 
 const EMPTY = { full_name: '', phone: '' }
 
@@ -92,27 +93,27 @@ export default function Sellers() {
 
   if (!canView) {
     return (
-      <div className="page">
+      <div className={fromLegacy("page")}>
         <Card title="فروشندگان">
-          <div className="alert-error">دسترسی مشاهده فروشندگان را ندارید.</div>
+          <div className={fromLegacy("alert-error")}>دسترسی مشاهده فروشندگان را ندارید.</div>
         </Card>
       </div>
     )
   }
 
   return (
-    <div className="page">
+    <div className={fromLegacy("page")}>
       <Card
         title="فروشندگان"
         actions={canManage ? <Button onClick={() => { setForm(EMPTY); setModalOpen(true) }}>+ فروشنده</Button> : null}
       >
-        {error && <div className="alert-error">{error}</div>}
-        <div className="branch-tabs">
+        {error && <div className={fromLegacy("alert-error")}>{error}</div>}
+        <div className={fromLegacy("branch-tabs")}>
           {branchOptions.map((b) => (
             <button
               key={b.value}
               type="button"
-              className={`branch-tab ${branch === b.value ? 'active' : ''}`}
+              className={fromLegacy(`branch-tab ${branch === b.value ? 'active' : ''}`)}
               onClick={() => setBranch(b.value)}
             >
               {b.label}
@@ -122,23 +123,23 @@ export default function Sellers() {
         <FilterBar>
           <Field label="جستجو">
             <input
-              className="search-input"
+              className={fromLegacy("search-input")}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="نام یا موبایل…"
               onKeyDown={(e) => e.key === 'Enter' && load()}
             />
           </Field>
-          <div className="page-filters-actions">
+          <div className={fromLegacy("page-filters-actions")}>
             <Button type="button" variant="ghost" onClick={() => load()}>جستجو</Button>
           </div>
         </FilterBar>
-        {loading ? <div className="loading">در حال بارگذاری…</div> : sellers.length === 0 ? (
+        {loading ? <div className={fromLegacy("loading")}>در حال بارگذاری…</div> : sellers.length === 0 ? (
           <EmptyState text={`فروشنده‌ای در ${branchLabel} ثبت نشده.`} />
         ) : (
           <>
-            <div className="table-wrap staff-table-desktop">
-              <table className="table">
+            <div className={fromLegacy("table-wrap staff-table-desktop")}>
+              <table className={fromLegacy("table")}>
                 <thead>
                   <tr>
                     <th>نام</th>
@@ -151,11 +152,11 @@ export default function Sellers() {
                   {sellers.map((s) => (
                     <tr key={s.id}>
                       <td>{s.full_name}</td>
-                      <td className="ltr">{s.phone || '—'}</td>
+                      <td className={fromLegacy("ltr")}>{s.phone || '—'}</td>
                       <td>{s.branch_label}</td>
                       {canDelete && (
                         <td>
-                          <button type="button" className="link danger" onClick={() => remove(s)}>
+                          <button type="button" className={fromLegacy("link danger")} onClick={() => remove(s)}>
                             حذف
                           </button>
                         </td>
@@ -165,19 +166,19 @@ export default function Sellers() {
                 </tbody>
               </table>
             </div>
-            <div className="staff-cards-mobile">
+            <div className={fromLegacy("staff-cards-mobile")}>
               {sellers.map((s) => (
-                <div key={s.id} className="m-card">
-                  <div className="m-card-head">
+                <div key={s.id} className={fromLegacy("m-card")}>
+                  <div className={fromLegacy("m-card-head")}>
                     <strong>{s.full_name}</strong>
-                    <span className="muted">{s.branch_label}</span>
+                    <span className={fromLegacy("muted")}>{s.branch_label}</span>
                   </div>
-                  <div className="m-card-grid">
-                    <div><span className="muted">موبایل</span><span className="ltr">{s.phone || '—'}</span></div>
+                  <div className={fromLegacy("m-card-grid")}>
+                    <div><span className={fromLegacy("muted")}>موبایل</span><span className={fromLegacy("ltr")}>{s.phone || '—'}</span></div>
                   </div>
                   {canDelete && (
-                    <div className="m-card-actions">
-                      <button type="button" className="link danger" onClick={() => remove(s)}>حذف</button>
+                    <div className={fromLegacy("m-card-actions")}>
+                      <button type="button" className={fromLegacy("link danger")} onClick={() => remove(s)}>حذف</button>
                     </div>
                   )}
                 </div>
@@ -192,14 +193,14 @@ export default function Sellers() {
         )}
       </Card>
       <Modal title={`افزودن فروشنده — ${branchLabel}`} open={modalOpen} onClose={() => setModalOpen(false)}>
-        <form onSubmit={save} className="form">
+        <form onSubmit={save} className={fromLegacy("form")}>
           <Field label="نام کامل">
             <input value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} required />
           </Field>
           <Field label="موبایل (اختیاری)">
-            <input className="ltr" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+            <input className={fromLegacy("ltr")} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
           </Field>
-          <p className="muted">بدون نام کاربری — فقط نام و شعبه ثبت می‌شود.</p>
+          <p className={fromLegacy("muted")}>بدون نام کاربری — فقط نام و شعبه ثبت می‌شود.</p>
           <Button type="submit">ذخیره</Button>
         </form>
       </Modal>

@@ -10,6 +10,7 @@ import { useConfirm } from '../context/ConfirmContext'
 import { useConfig } from '../context/ConfigContext'
 import { formatDate } from '../utils/format'
 import { todayIso } from '../utils/jalali'
+import { fromLegacy } from '../styles/tw.js'
 
 const EMPTY = { seller_id: '', date: todayIso(), status: 'present', notes: '', work_branch: '' }
 
@@ -105,28 +106,28 @@ export default function Attendance() {
   }
 
   return (
-    <div className="page">
+    <div className={fromLegacy("page")}>
       <Card title="حضور و غیاب (مدیر)" actions={
         <Button onClick={() => openCreateForSeller(selectedSellerId)} disabled={!selectedSellerId}>+ ثبت</Button>
       }>
-        {error && <div className="alert-error">{error}</div>}
-        <div className="branch-tabs">
+        {error && <div className={fromLegacy("alert-error")}>{error}</div>}
+        <div className={fromLegacy("branch-tabs")}>
           {branchOptions.map((b) => (
-            <button key={b.value} type="button" className={`branch-tab ${branch === b.value ? 'active' : ''}`} onClick={() => setBranch(b.value)}>
+            <button key={b.value} type="button" className={fromLegacy(`branch-tab ${branch === b.value ? 'active' : ''}`)} onClick={() => setBranch(b.value)}>
               {b.label}
             </button>
           ))}
         </div>
         <Field label={`فروشندگان ${branchLabel}`}>
-          <div className="seller-grid">
+          <div className={fromLegacy("seller-grid")}>
             {sellers.map((s) => (
               <button
                 key={s.id}
                 type="button"
-                className={`seller-card ${selectedSellerId === String(s.id) ? 'selected' : ''}`}
+                className={fromLegacy(`seller-card ${selectedSellerId === String(s.id) ? 'selected' : ''}`)}
                 onClick={() => setSelectedSellerId(String(s.id))}
               >
-                <span className="seller-name">{s.full_name}</span>
+                <span className={fromLegacy("seller-name")}>{s.full_name}</span>
               </button>
             ))}
           </div>
@@ -167,12 +168,12 @@ export default function Attendance() {
             />
           </Field>
         </FilterBar>
-        {loading ? <div className="loading">…</div> : records.length === 0 ? (
+        {loading ? <div className={fromLegacy("loading")}>…</div> : records.length === 0 ? (
           <EmptyState text="رکوردی یافت نشد." />
         ) : (
           <>
-            <div className="table-wrap attendance-table-desktop">
-              <table className="table">
+            <div className={fromLegacy("table-wrap attendance-table-desktop")}>
+              <table className={fromLegacy("table")}>
                 <thead>
                   <tr><th>فروشنده</th><th>شعبه کاری</th><th>تاریخ</th><th>وضعیت</th><th>تایید</th><th>عملیات</th></tr>
                 </thead>
@@ -184,28 +185,28 @@ export default function Attendance() {
                       <td>{formatDate(r.date)}</td>
                       <td><Badge color={r.status === 'present' ? 'var(--success)' : 'var(--danger)'}>{r.status_display}</Badge></td>
                       <td><Badge color={r.approval_status === 'approved' ? 'var(--success)' : 'var(--warning)'}>{r.approval_status_display}</Badge></td>
-                      <td className="row-actions">
-                        <button type="button" className="link danger" onClick={() => remove(r.id)}>حذف</button>
+                      <td className={fromLegacy("row-actions")}>
+                        <button type="button" className={fromLegacy("link danger")} onClick={() => remove(r.id)}>حذف</button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            <div className="attendance-cards-mobile">
+            <div className={fromLegacy("attendance-cards-mobile")}>
               {records.map((r) => (
-                <div key={r.id} className="m-card">
-                  <div className="m-card-head">
+                <div key={r.id} className={fromLegacy("m-card")}>
+                  <div className={fromLegacy("m-card-head")}>
                     <strong>{r.seller_name}</strong>
-                    <span className="muted">{formatDate(r.date)}</span>
+                    <span className={fromLegacy("muted")}>{formatDate(r.date)}</span>
                   </div>
-                  <div className="m-card-grid">
-                    <div><span className="muted">شعبه کاری</span>{r.work_branch_label}</div>
-                    <div><span className="muted">وضعیت</span><Badge color={r.status === 'present' ? 'var(--success)' : 'var(--danger)'}>{r.status_display}</Badge></div>
-                    <div><span className="muted">تایید</span><Badge color={r.approval_status === 'approved' ? 'var(--success)' : 'var(--warning)'}>{r.approval_status_display}</Badge></div>
+                  <div className={fromLegacy("m-card-grid")}>
+                    <div><span className={fromLegacy("muted")}>شعبه کاری</span>{r.work_branch_label}</div>
+                    <div><span className={fromLegacy("muted")}>وضعیت</span><Badge color={r.status === 'present' ? 'var(--success)' : 'var(--danger)'}>{r.status_display}</Badge></div>
+                    <div><span className={fromLegacy("muted")}>تایید</span><Badge color={r.approval_status === 'approved' ? 'var(--success)' : 'var(--warning)'}>{r.approval_status_display}</Badge></div>
                   </div>
-                  <div className="m-card-actions">
-                    <button type="button" className="link danger" onClick={() => remove(r.id)}>حذف</button>
+                  <div className={fromLegacy("m-card-actions")}>
+                    <button type="button" className={fromLegacy("link danger")} onClick={() => remove(r.id)}>حذف</button>
                   </div>
                 </div>
               ))}
@@ -219,7 +220,7 @@ export default function Attendance() {
         )}
       </Card>
       <Modal title="ثبت حضور" open={modalOpen} onClose={() => setModalOpen(false)}>
-        <form onSubmit={save} className="form">
+        <form onSubmit={save} className={fromLegacy("form")}>
           <Field label="فروشنده">
             <Select
               value={form.seller_id}

@@ -70,6 +70,24 @@ PORTAL_MODULE_SPECS = [
                 system_admin=True,
             ),
             _mod(
+                "managers_cycle",
+                "چرخه",
+                "🔁",
+                "cycle",
+                [P.MANAGE_USERS],
+                [P.MANAGE_USERS],
+                system_admin=True,
+            ),
+            _mod(
+                "managers_cycle_watch",
+                "نظارت چرخه",
+                "👁️",
+                "cycle-watch",
+                [P.VIEW_CYCLE_WATCH],
+                [P.VIEW_CYCLE_WATCH],
+                cycle_watch=True,
+            ),
+            _mod(
                 "managers_orgchart",
                 "چارت سازمانی",
                 "🏢",
@@ -193,6 +211,14 @@ PORTAL_MODULE_SPECS = [
                 [P.VIEW_PRODUCTS],
                 [P.VIEW_PRODUCTS, P.MANAGE_PRODUCTS],
             ),
+            _mod(
+                "shop_pickup",
+                "تحویل حضوری",
+                "🏪",
+                "pickup",
+                [P.VIEW_PICKUP_ORDERS, P.MANAGE_PICKUP_ORDERS, P.CREATE_SALE, P.APPROVE_SALE_BRANCH],
+                [P.VIEW_PICKUP_ORDERS, P.MANAGE_PICKUP_ORDERS, P.CREATE_SALE, P.APPROVE_SALE_BRANCH],
+            ),
         ],
     },
     {
@@ -306,6 +332,14 @@ PORTAL_MODULE_SPECS = [
                 [P.VIEW_FREIGHT_ORDERS, P.MANAGE_FREIGHT_ORDERS],
             ),
             _mod(
+                "office_warehouse",
+                "انبار",
+                "📦",
+                "warehouse",
+                [P.VIEW_WAREHOUSE_ORDERS, P.MANAGE_WAREHOUSE_ORDERS, P.APPROVE_SALE_ACCOUNTING],
+                [P.VIEW_WAREHOUSE_ORDERS, P.MANAGE_WAREHOUSE_ORDERS, P.APPROVE_SALE_ACCOUNTING],
+            ),
+            _mod(
                 "office_filter",
                 "فیلتر",
                 "🔍",
@@ -409,6 +443,7 @@ def _module_for_matrix(mod, pool):
         "page_key": mod["page_key"],
         "executive_only": bool(mod.get("executive_only")),
         "system_admin": bool(mod.get("system_admin")),
+        "cycle_watch": bool(mod.get("cycle_watch")),
         "menu_permission_codes": menu_codes,
         "section_permission_codes": section_codes,
         "menu_permissions": [

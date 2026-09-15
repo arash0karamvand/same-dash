@@ -1,4 +1,5 @@
 import { useCallback, useRef } from 'react'
+import { fromLegacy } from '../styles/tw.js'
 
 /** @typedef {'inline-start' | 'inline-end'} ResizeEdge */
 
@@ -66,13 +67,13 @@ export default function ResizeHandle({
       role="separator"
       aria-orientation={direction === 'row' ? 'horizontal' : 'vertical'}
       aria-label={ariaLabel}
-      className={[
+      className={fromLegacy(
         'resize-handle',
         direction === 'row' ? 'resize-handle-row' : 'resize-handle-col',
         grip ? 'resize-handle-grip' : '',
         disabled ? 'resize-handle-disabled' : '',
         className,
-      ].filter(Boolean).join(' ')}
+      )}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={finishDrag}

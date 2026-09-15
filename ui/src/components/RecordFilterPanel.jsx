@@ -6,6 +6,7 @@ import Select from './Select'
 import { Button, EmptyState, Field, FilterBar, LoadMoreButton } from './ui'
 import { formatDate, formatMoney } from '../utils/format'
 import { toPersianDigits } from '../utils/jalali'
+import { fromLegacy } from '../styles/tw.js'
 
 const EMPTY_FILTERS = {
   model: '',
@@ -200,9 +201,9 @@ export default function RecordFilterPanel({
 
   return (
     <div className={`record-filter-panel ${compact ? 'record-filter-panel-compact' : ''} ${unified ? 'record-filter-panel-unified' : ''} ${className}`.trim()}>
-      {error && <div className="alert-error">{error}</div>}
+      {error && <div className={fromLegacy("alert-error")}>{error}</div>}
       {metaLoading ? (
-        <p className="muted loading">در حال بارگذاری…</p>
+        <p className={fromLegacy("muted loading")}>در حال بارگذاری…</p>
       ) : (
         <form onSubmit={runFilter}>
           <FilterBar>
@@ -255,7 +256,7 @@ export default function RecordFilterPanel({
             </Field>
             <Field label={selectedModel?.name_label || 'نام / جستجو'}>
               <input
-                className="search-input"
+                className={fromLegacy("search-input")}
                 value={filters.name}
                 onChange={(e) => setFilters({ ...filters, name: e.target.value })}
                 placeholder="جستجوی زنده…"
@@ -289,15 +290,15 @@ export default function RecordFilterPanel({
               </>
             )}
             {!liveSearch && (
-              <div className="page-filters-actions">
+              <div className={fromLegacy("page-filters-actions")}>
                 <Button type="submit" disabled={loading}>{loading ? 'در حال جستجو…' : 'اعمال فیلتر'}</Button>
                 <Button type="button" variant="ghost" onClick={resetFilters}>پاک کردن</Button>
               </div>
             )}
             {liveSearch && (
-              <div className="page-filters-actions">
+              <div className={fromLegacy("page-filters-actions")}>
                 <Button type="button" variant="ghost" onClick={resetFilters}>پاک کردن فیلترها</Button>
-                {loading && <span className="muted small">در حال جستجو…</span>}
+                {loading && <span className={fromLegacy("muted small")}>در حال جستجو…</span>}
               </div>
             )}
           </FilterBar>
@@ -305,8 +306,8 @@ export default function RecordFilterPanel({
       )}
 
       {applied && !hideResults && (
-        <div className="record-filter-results">
-          <p className="record-filter-count">
+        <div className={fromLegacy("record-filter-results")}>
+          <p className={fromLegacy("record-filter-count")}>
             <strong>{toPersianDigits(applied.total)}</strong> رکورد
             {applied.model_label ? ` — ${applied.model_label}` : ''}
             {applied.total > applied.results.length && (
@@ -318,8 +319,8 @@ export default function RecordFilterPanel({
             <EmptyState text="با این فیلتر رکوردی یافت نشد." />
           ) : (
             <>
-              <div className="table-wrap record-filter-table-desktop">
-                <table className="table">
+              <div className={fromLegacy("table-wrap record-filter-table-desktop")}>
+                <table className={fromLegacy("table")}>
                   <thead>
                     <tr>
                       <th>شناسه</th>
@@ -335,7 +336,7 @@ export default function RecordFilterPanel({
                         <td>{row.id}</td>
                         <td>
                           <div>{row.title}</div>
-                          {row.subtitle && <div className="muted small">{row.subtitle}</div>}
+                          {row.subtitle && <div className={fromLegacy("muted small")}>{row.subtitle}</div>}
                         </td>
                         <td>{row.type_display || '—'}</td>
                         <td>{row.amount != null ? formatMoney(row.amount) : '—'}</td>
@@ -345,18 +346,18 @@ export default function RecordFilterPanel({
                   </tbody>
                 </table>
               </div>
-              <div className="record-filter-cards-mobile">
+              <div className={fromLegacy("record-filter-cards-mobile")}>
                 {applied.results.map((row) => (
-                  <div key={row.id} className="m-card">
-                    <div className="m-card-head">
+                  <div key={row.id} className={fromLegacy("m-card")}>
+                    <div className={fromLegacy("m-card-head")}>
                       <strong>{row.title}</strong>
-                      <span className="muted">#{row.id}</span>
+                      <span className={fromLegacy("muted")}>#{row.id}</span>
                     </div>
-                    {row.subtitle && <p className="muted small">{row.subtitle}</p>}
-                    <div className="m-card-grid">
-                      <div><span className="muted">نوع</span>{row.type_display || '—'}</div>
-                      <div><span className="muted">مبلغ</span>{row.amount != null ? formatMoney(row.amount) : '—'}</div>
-                      <div><span className="muted">تاریخ</span>{row.date ? formatDate(row.date) : '—'}</div>
+                    {row.subtitle && <p className={fromLegacy("muted small")}>{row.subtitle}</p>}
+                    <div className={fromLegacy("m-card-grid")}>
+                      <div><span className={fromLegacy("muted")}>نوع</span>{row.type_display || '—'}</div>
+                      <div><span className={fromLegacy("muted")}>مبلغ</span>{row.amount != null ? formatMoney(row.amount) : '—'}</div>
+                      <div><span className={fromLegacy("muted")}>تاریخ</span>{row.date ? formatDate(row.date) : '—'}</div>
                     </div>
                   </div>
                 ))}
@@ -386,7 +387,7 @@ export default function RecordFilterPanel({
         </div>
       )}
       {hideResults && filters.model && loading && (
-        <p className="record-filter-count muted small">در حال جستجو…</p>
+        <p className={fromLegacy("record-filter-count muted small")}>در حال جستجو…</p>
       )}
     </div>
   )

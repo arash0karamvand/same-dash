@@ -11,6 +11,7 @@ function navItemFromModule(mod) {
   }
   if (mod.executive_only) item.executiveOnly = true
   if (mod.system_admin) item.systemAdmin = true
+  if (mod.cycle_watch) item.cycleWatch = true
   if (menu.length === 1) item.permission = menu[0]
   else if (menu.length > 1) item.anyPermission = menu
   return item
