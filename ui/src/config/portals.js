@@ -46,6 +46,7 @@ export const PORTALS = [
       { key: 'office', label: 'تایید سفارش', icon: 'clipboard', permission: 'approve_sale_accounting' },
       { key: 'office-orders', label: 'سفارش‌ها', icon: 'package', anyPermission: ['approve_sale_accounting', 'view_sales'] },
       { key: 'customers', label: 'مشتریان', icon: 'users', permission: 'view_customers' },
+      { key: 'rfm', label: 'تحلیل RFM', icon: 'chart', permission: 'view_rfm' },
       { key: 'products', label: 'محصولات', icon: 'package', permission: 'view_products' },
       { key: 'materials', label: 'تایید متریال', icon: 'fabric', permission: 'approve_materials' },
       { key: 'accounting', label: 'حسابداری', icon: 'coins', permission: 'view_accounting' },

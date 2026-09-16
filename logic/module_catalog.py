@@ -253,6 +253,14 @@ PORTAL_MODULE_SPECS = [
                 [P.VIEW_CUSTOMERS, P.EDIT_CUSTOMER, P.CREATE_CUSTOMER],
             ),
             _mod(
+                "office_rfm",
+                "تحلیل RFM",
+                "📊",
+                "rfm",
+                [P.VIEW_RFM],
+                [P.VIEW_RFM, P.MANAGE_RFM, P.SEND_SMS],
+            ),
+            _mod(
                 "office_products",
                 "محصولات",
                 "📦",

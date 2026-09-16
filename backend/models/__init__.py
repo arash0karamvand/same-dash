@@ -97,6 +97,12 @@ from .workflow_cycle import (
     OrderCycle,
     Warehouse,
 )
+from .rfm import (
+    CustomerRfmScore,
+    RfmActionLog,
+    RfmSegment,
+    RfmSettings,
+)
 from .people import (
     Customer,
     CustomerAttendance,

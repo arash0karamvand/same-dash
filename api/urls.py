@@ -23,6 +23,7 @@ from api.views import (
     record_filter,
     reminder_sms,
     role_definitions,
+    rfm,
     sales,
     sms,
     sms_club,
@@ -254,6 +255,15 @@ urlpatterns = [
     # --- Loyalty Levels ---
     path("loyalty-levels/", loyalty_levels.level_list, name="loyalty-level-list"),
     path("loyalty-levels/<int:pk>/", loyalty_levels.level_detail, name="loyalty-level-detail"),
+
+    # --- RFM ---
+    path("rfm/settings/", rfm.rfm_settings, name="rfm-settings"),
+    path("rfm/segments/", rfm.rfm_segment_list, name="rfm-segment-list"),
+    path("rfm/segments/<int:pk>/", rfm.rfm_segment_detail, name="rfm-segment-detail"),
+    path("rfm/summary/", rfm.rfm_summary, name="rfm-summary"),
+    path("rfm/customers/", rfm.rfm_customers, name="rfm-customers"),
+    path("rfm/recalculate/", rfm.rfm_recalculate, name="rfm-recalculate"),
+    path("rfm/customers/<int:pk>/send-sms/", rfm.rfm_send_sms, name="rfm-send-sms"),
 
     # --- SMS ---
     path("sms/logs/", sms.sms_logs, name="sms-logs"),

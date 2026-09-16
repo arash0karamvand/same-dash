@@ -87,6 +87,7 @@ class SMSLog(ReferenceCodeModel):
         ("order_placed", "ثبت سفارش"),
         ("discount", "تخفیف ویژه"),
         ("reminder", "یادآوری باشگاه"),
+        ("rfm", "بخش‌بندی RFM"),
     ]
     customer = models.ForeignKey(
         Customer, null=True, blank=True, on_delete=models.SET_NULL, related_name="sms_logs"

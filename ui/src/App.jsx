@@ -34,6 +34,7 @@ import Roles from './pages/Roles'
 import EmployeeRanking from './pages/EmployeeRanking'
 import OrgChart from './pages/OrgChart'
 import RecordFilter from './pages/RecordFilter'
+import Rfm from './pages/Rfm'
 import Settings from './pages/Settings'
 import Cycle from './pages/Cycle'
 import CycleWatch from './pages/CycleWatch'
@@ -55,6 +56,7 @@ const PAGES = {
   'factory-built': FactoryBuilt,
   freight: FreightOrders,
   customers: Customers,
+  rfm: Rfm,
   products: Products,
   materials: Materials,
   accounting: Accounting,

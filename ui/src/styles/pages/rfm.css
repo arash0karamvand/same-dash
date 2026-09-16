@@ -1,0 +1,59 @@
+/* صفحه تحلیل RFM در پورتال اداری */
+
+.rfm-score-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.rfm-score-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--layer-1);
+  font-size: 13px;
+}
+
+.rfm-threshold-grid {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 8px 12px;
+  align-items: center;
+}
+
+.rfm-segment-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.rfm-segment-card {
+  text-align: right;
+  cursor: pointer;
+  padding: 0;
+}
+
+.rfm-segment-card .stat-hint {
+  white-space: normal;
+}
+
+.rfm-code {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+}
+
+@media (max-width: 767px) {
+  .rfm-table-desktop {
+    display: none;
+  }
+}
+
+@media (min-width: 768px) {
+  .rfm-cards-mobile {
+    display: none;
+  }
+}

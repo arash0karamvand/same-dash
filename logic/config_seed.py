@@ -40,6 +40,8 @@ from auth.permissions import (
     VIEW_FREIGHT_ORDERS,
     VIEW_INSTALLMENTS,
     VIEW_LOYALTY,
+    VIEW_RFM,
+    MANAGE_RFM,
     VIEW_MANAGERS,
     VIEW_MATERIALS,
     VIEW_ORG_CHART,
@@ -134,6 +136,7 @@ REFERENCE_ROWS = {
         ("manual", "دستی"), ("welcome", "خوش‌آمدگویی"), ("level_up", "ارتقای سطح"),
         ("promotion", "تبلیغاتی"), ("birthday", "تبریک تولد"), ("order_placed", "ثبت سفارش"),
         ("discount", "تخفیف ویژه"), ("reminder", "یادآوری باشگاه"),
+        ("rfm", "بخش‌بندی RFM"),
     ],
     JournalEntryType: [
         ("manual", "دستی"), ("sale", "فروش"), ("receivable", "دریافتنی"),
@@ -204,7 +207,7 @@ ORG_BUILTIN_ROLES = [
             VIEW_DASHBOARD, VIEW_ACCOUNTING, CREATE_ACCOUNTING, EDIT_ACCOUNTING,
             APPROVE_ACCOUNTING, APPROVE_SALE_ACCOUNTING, EDIT_SALE, VIEW_REPORTS, VIEW_INSTALLMENTS,
             VIEW_FACTORY_ACCOUNTING, TRANSFER_FACTORY_ACCOUNTING_TO_OFFICE,
-            VIEW_CUSTOMERS, EDIT_CUSTOMER, VIEW_PRODUCTS, MANAGE_PRODUCTS,
+            VIEW_CUSTOMERS, EDIT_CUSTOMER, VIEW_RFM, MANAGE_RFM, VIEW_PRODUCTS, MANAGE_PRODUCTS,
             VIEW_MATERIALS, CREATE_MATERIALS, APPROVE_MATERIALS,
             VIEW_FACTORY_ORDERS, VIEW_FREIGHT_ORDERS,
         ]),
@@ -511,6 +514,12 @@ def seed_config_defaults():
         from logic.order_cycle import seed_order_cycle
 
         seed_order_cycle()
+    except Exception:
+        pass
+    try:
+        from logic.rfm import seed_rfm_defaults
+
+        seed_rfm_defaults()
     except Exception:
         pass
 

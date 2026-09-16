@@ -49,6 +49,8 @@ VIEW_REPORTS = "view_reports"
 VIEW_LOYALTY = "view_loyalty"
 MANAGE_LOYALTY = "manage_loyalty"
 RECALCULATE_LEVELS = "recalculate_levels"
+VIEW_RFM = "view_rfm"
+MANAGE_RFM = "manage_rfm"
 
 SEND_SMS = "send_sms"
 MANAGE_SMS_CLUB = "manage_sms_club"
@@ -123,6 +125,8 @@ PERMISSION_LABELS = {
     VIEW_LOYALTY: "مشاهده باشگاه",
     MANAGE_LOYALTY: "مدیریت باشگاه",
     RECALCULATE_LEVELS: "بازمحاسبه سطح",
+    VIEW_RFM: "مشاهده تحلیل RFM",
+    MANAGE_RFM: "مدیریت قوانین RFM",
     SEND_SMS: "ارسال پیامک",
     MANAGE_SMS_CLUB: "تنظیمات پیامک باشگاه",
     MANAGE_BIRTHDAY_SMS: "تنظیمات پیامک تولد",
@@ -195,6 +199,8 @@ ALL_PERMISSIONS = {
     VIEW_LOYALTY,
     MANAGE_LOYALTY,
     RECALCULATE_LEVELS,
+    VIEW_RFM,
+    MANAGE_RFM,
     SEND_SMS,
     MANAGE_SMS_CLUB,
     MANAGE_BIRTHDAY_SMS,
@@ -251,7 +257,14 @@ PERMISSION_GROUPS = [
     {
         "id": "customers",
         "label": "مشتریان",
-        "permissions": [VIEW_CUSTOMERS, CREATE_CUSTOMER, EDIT_CUSTOMER, DELETE_CUSTOMER],
+        "permissions": [
+            VIEW_CUSTOMERS,
+            CREATE_CUSTOMER,
+            EDIT_CUSTOMER,
+            DELETE_CUSTOMER,
+            VIEW_RFM,
+            MANAGE_RFM,
+        ],
     },
     {
         "id": "workflow",
@@ -408,7 +421,7 @@ MENU_SECTIONS = [
         "label": "اداری",
         "icon": "🏢",
         "page_key": "office",
-        "menu_permissions": [APPROVE_SALE_ACCOUNTING, VIEW_ACCOUNTING, VIEW_CUSTOMERS, VIEW_FACTORY_ORDERS],
+        "menu_permissions": [APPROVE_SALE_ACCOUNTING, VIEW_ACCOUNTING, VIEW_CUSTOMERS, VIEW_RFM, VIEW_FACTORY_ORDERS],
         "section_permissions": [
             APPROVE_SALE_ACCOUNTING,
             EDIT_SALE,
@@ -422,6 +435,8 @@ MENU_SECTIONS = [
             MANAGE_INSTALLMENTS,
             VIEW_CUSTOMERS,
             EDIT_CUSTOMER,
+            VIEW_RFM,
+            MANAGE_RFM,
             VIEW_PRODUCTS,
             MANAGE_PRODUCTS,
             VIEW_MATERIALS,

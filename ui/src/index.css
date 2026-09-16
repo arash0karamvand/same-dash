@@ -100,6 +100,7 @@
 @import "./styles/pages/sales.css";
 @import "./styles/pages/accounting.css";
 @import "./styles/pages/admin.css";
+@import "./styles/pages/rfm.css";
 @import "./styles/pages/legacy.css";
 @import "./styles/pages/legacy-glass.css";
 @import "./styles/responsive.css";

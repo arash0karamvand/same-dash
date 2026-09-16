@@ -416,6 +416,28 @@ export const levelsApi = {
   remove: (id) => del(`/api/loyalty-levels/${id}/`),
 }
 
+export const rfmApi = {
+  settings: () => get('/api/rfm/settings/'),
+  updateSettings: (data) => put('/api/rfm/settings/', data),
+  segments: () => get('/api/rfm/segments/'),
+  createSegment: (data) => post('/api/rfm/segments/', data),
+  updateSegment: (id, data) => put(`/api/rfm/segments/${id}/`, data),
+  removeSegment: (id) => del(`/api/rfm/segments/${id}/`),
+  summary: () => get('/api/rfm/summary/'),
+  customers: (opts = {}) => {
+    const p = new URLSearchParams()
+    if (opts.search) p.set('search', opts.search)
+    if (opts.segmentId) p.set('segment_id', opts.segmentId)
+    if (opts.actionType) p.set('action_type', opts.actionType)
+    if (opts.offset != null) p.set('offset', opts.offset)
+    if (opts.limit) p.set('limit', opts.limit)
+    const q = p.toString()
+    return get(`/api/rfm/customers/${q ? `?${q}` : ''}`)
+  },
+  recalculate: (data = {}) => post('/api/rfm/recalculate/', data),
+  sendSms: (customerId, data = {}) => post(`/api/rfm/customers/${customerId}/send-sms/`, data),
+}
+
 function accountingParams(opts = {}) {
   const p = new URLSearchParams()
   if (opts.type) p.set('type', opts.type)
