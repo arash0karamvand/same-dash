@@ -131,6 +131,7 @@ function isDeposit(form) {
 
 function ShopDailyBreakdownSection({ data, loading, breakdownMonth, onMonthChange, compact = false }) {
   const monthLabel = `${PERSIAN_MONTHS[breakdownMonth.month - 1]} ${toPersianDigits(breakdownMonth.year)}`
+  const hideAmounts = Boolean(data?.amounts_masked)
   return (
     <div className={fromLegacy(`shop-daily-breakdown${compact ? ' shop-daily-breakdown-compact' : ''}`)}>
       <div className={fromLegacy("shop-daily-breakdown-head")}>
@@ -138,8 +139,15 @@ function ShopDailyBreakdownSection({ data, loading, breakdownMonth, onMonthChang
           <h3 className={fromLegacy("shop-daily-breakdown-title")}>خلاصه فروش روزانه</h3>
           {data && (
             <p className={fromLegacy("shop-daily-breakdown-total")}>
-              جمع {monthLabel}: <strong>{formatMoney(data.total_final || 0)}</strong>
-              <span className={fromLegacy("shop-daily-breakdown-count")}>{toPersianDigits(data.count || 0)} سفارش</span>
+              جمع {monthLabel}:{' '}
+              {hideAmounts ? (
+                <strong>{toPersianDigits(data.count || 0)} سفارش</strong>
+              ) : (
+                <>
+                  <strong>{formatMoney(data.total_final || 0)}</strong>
+                  <span className={fromLegacy("shop-daily-breakdown-count")}>{toPersianDigits(data.count || 0)} سفارش</span>
+                </>
+              )}
             </p>
           )}
         </div>
@@ -163,7 +171,7 @@ function ShopDailyBreakdownSection({ data, loading, breakdownMonth, onMonthChang
                 <tr>
                   <th>تاریخ</th>
                   <th>تعداد</th>
-                  <th>مبلغ فروش</th>
+                  {!hideAmounts && <th>مبلغ فروش</th>}
                 </tr>
               </thead>
               <tbody>
@@ -171,7 +179,7 @@ function ShopDailyBreakdownSection({ data, loading, breakdownMonth, onMonthChang
                   <tr key={`${d.jalali_year}-${d.jalali_month}-${d.jalali_day}`}>
                     <td>{formatJalali(jalaliToIso(d.jalali_year, d.jalali_month, d.jalali_day))}</td>
                     <td>{toPersianDigits(d.count)}</td>
-                    <td>{formatMoney(d.total_final)}</td>
+                    {!hideAmounts && <td>{formatMoney(d.total_final)}</td>}
                   </tr>
                 ))}
               </tbody>
@@ -268,6 +276,8 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
 
   const [daily, setDaily] = useState(null)
 
+  const [weekly, setWeekly] = useState(null)
+
   const [dailyBreakdown, setDailyBreakdown] = useState(null)
   const [breakdownMonth, setBreakdownMonth] = useState(() => {
     const j = currentJalali()
@@ -336,6 +346,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
         setSummary({ total_final: monthlyData.total_final, count: monthlyData.count })
         setMonthly(monthlyData)
         setDaily(null)
+        setWeekly(null)
         setDailyBreakdown(breakdownData)
         setCustomers([])
         setError('')
@@ -369,8 +380,12 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
         if (isShop) {
           reportTasks.push(salesApi.dailyBreakdown(bm.year, bm.month))
         }
-        if (viewAllSales) {
+        const needDaily = viewAllSales || shopOfficeQueue
+        if (needDaily) {
           reportTasks.push(salesApi.dailyReport(todayIso()))
+        }
+        if (shopOfficeQueue) {
+          reportTasks.push(salesApi.weeklyReport(todayIso()))
         }
         const allResults = await Promise.all([
           salesApi.list(q.toString()),
@@ -381,14 +396,16 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
         const yearlyData = allResults[2]
         let nextIdx = 3
         const breakdownData = isShop ? allResults[nextIdx++] : null
-        const dailyData = viewAllSales ? allResults[nextIdx] : null
+        const dailyData = needDaily ? allResults[nextIdx++] : null
+        const weeklyData = shopOfficeQueue ? allResults[nextIdx++] : null
         setSales(listData.results)
         setSalesTotal(listData.total || 0)
         setSalesOffset(listData.offset ?? 0)
         setSummary(null)
         setMonthly(monthlyData)
         setYearly(yearlyData)
-        setDaily(viewAllSales ? dailyData : null)
+        setDaily(needDaily ? dailyData : null)
+        setWeekly(shopOfficeQueue ? weeklyData : null)
         setDailyBreakdown(breakdownData)
         setCustomers([])
         setError('')
@@ -426,10 +443,12 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
         setDaily(dailyData)
         setMonthly(monthlyData)
         setYearly(yearlyData)
+        setWeekly(null)
       } else {
         setDaily(null)
         setMonthly(null)
         setYearly(null)
+        setWeekly(null)
       }
       setError('')
     } catch (e) {
@@ -859,6 +878,12 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
   const yearLabel = toPersianDigits(jNow.year)
   const branchStatsTitle = isExecutiveUser(user) ? 'همه شعب' : (user?.branch_label || 'شعبه من')
   const pendingSendCount = sales.filter((s) => s.workflow_stage === 'pending_branch').length
+  const dayCountLabel = daily?.jalali_year
+    ? formatJalali(jalaliToIso(daily.jalali_year, daily.jalali_month, daily.jalali_day))
+    : formatJalali(todayIso())
+  const weekCountHint = weekly?.start_jalali_year
+    ? `${formatJalali(jalaliToIso(weekly.start_jalali_year, weekly.start_jalali_month, weekly.start_jalali_day))} تا ${formatJalali(jalaliToIso(weekly.end_jalali_year, weekly.end_jalali_month, weekly.end_jalali_day))}`
+    : 'شنبه تا جمعه'
 
 
 
@@ -871,7 +896,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
           collapsed={personalCollapsed}
           onToggleCollapse={() => setPersonalCollapsed((v) => !v)}
           onApplyListFilter={summaryOnly ? undefined : applyPersonalFilter}
-          monthOnly={summaryOnly}
+          monthOnly={false}
         />
       )}
 
@@ -915,17 +940,29 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
       )}
 
       {shopOfficeQueue && !viewAllSales && (
-      <div className={fromLegacy("stat-grid shop-office-stats sales-stats-grid")}>
+      <div className={fromLegacy("stat-grid shop-office-stats sales-stats-grid shop-office-period-stats")}>
+        <StatCard
+          label={`فروش ${dayCountLabel}`}
+          value={toPersianDigits(daily?.count || 0)}
+          hint={`فقره — ${branchStatsTitle}`}
+          accent="var(--accent)"
+        />
+        <StatCard
+          label="فروش این هفته"
+          value={toPersianDigits(weekly?.count || 0)}
+          hint={`فقره — ${weekCountHint}`}
+          accent="var(--info)"
+        />
         <StatCard
           label={`فروش ${monthLabel}`}
-          value={formatMoney(monthly?.total_final || 0)}
-          hint={`${toPersianDigits(monthly?.count || 0)} فقره — ${branchStatsTitle}`}
+          value={toPersianDigits(monthly?.count || 0)}
+          hint={`فقره — ${branchStatsTitle}`}
           accent="var(--accent)"
         />
         <StatCard
           label={`فروش سال ${yearLabel}`}
-          value={formatMoney(yearly?.total_final || 0)}
-          hint={`${toPersianDigits(yearly?.count || 0)} فقره — سال جاری`}
+          value={toPersianDigits(yearly?.count || 0)}
+          hint="فقره — سال جاری"
           accent="var(--info)"
         />
         <StatCard
@@ -940,12 +977,12 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
       {branchQueueView && !viewAllSales && !shopOfficeQueue && (
       <div className={fromLegacy("stats-grid")}>
         <Card title={`فروش ماه ${monthLabel} — ${branchStatsTitle}`}>
-          <p className={fromLegacy("stat-value")}>{formatMoney(monthly?.total_final || 0)}</p>
-          <p className={fromLegacy("muted")}>{monthly?.count || 0} فقره — شامل ارسال‌شده به اداری</p>
+          <p className={fromLegacy("stat-value")}>{toPersianDigits(monthly?.count || 0)} فقره</p>
+          <p className={fromLegacy("muted")}>شامل ارسال‌شده به اداری</p>
         </Card>
         <Card title={`فروش سال ${yearLabel} — ${branchStatsTitle}`}>
-          <p className={fromLegacy("stat-value")}>{formatMoney(yearly?.total_final || 0)}</p>
-          <p className={fromLegacy("muted")}>{yearly?.count || 0} فقره — سال جاری شعبه</p>
+          <p className={fromLegacy("stat-value")}>{toPersianDigits(yearly?.count || 0)} فقره</p>
+          <p className={fromLegacy("muted")}>سال جاری شعبه</p>
         </Card>
       </div>
       )}
@@ -975,8 +1012,14 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
 
         {summaryOnly && !isShop && monthly && (
           <Card title={`فروش ماه ${monthLabel}`}>
-            <p className={fromLegacy("stat-value")}>{formatMoney(monthly.total_final || 0)}</p>
-            <p className={fromLegacy("muted")}>{monthly.count || 0} سفارش ثبت‌شده</p>
+            {monthly.amounts_masked ? (
+              <p className={fromLegacy("stat-value")}>{toPersianDigits(monthly.count || 0)} سفارش</p>
+            ) : (
+              <>
+                <p className={fromLegacy("stat-value")}>{formatMoney(monthly.total_final || 0)}</p>
+                <p className={fromLegacy("muted")}>{monthly.count || 0} سفارش ثبت‌شده</p>
+              </>
+            )}
           </Card>
         )}
 

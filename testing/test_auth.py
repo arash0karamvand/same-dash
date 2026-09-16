@@ -5,6 +5,7 @@ from django.test import TestCase
 
 from auth import roles
 from auth.permissions import (
+    ALL_PERMISSIONS,
     CREATE_ACCOUNTING,
     CREATE_SALE,
     DELETE_CUSTOMER,
@@ -154,3 +155,38 @@ class RolePermissionTest(TestCase):
         self.assertTrue(has_permission(user, VIEW_CUSTOMERS))
         self.assertFalse(has_permission(user, MANAGE_ROLES))
         self.assertEqual(get_user_extra_permissions(user), {VIEW_CUSTOMERS})
+
+    def test_builtin_role_edits_survive_seed(self):
+        rd = RoleDefinition.objects.get(slug=roles.SALES_EXPERT)
+        edited = [VIEW_DASHBOARD, VIEW_SALES, CREATE_SALE]
+        rd.label = "کارشناس فروش ویرایش‌شده"
+        rd.permissions = edited
+        rd.save()
+
+        seed_builtin_roles()
+
+        rd.refresh_from_db()
+        self.assertEqual(rd.label, "کارشناس فروش ویرایش‌شده")
+        self.assertEqual(set(rd.permissions), set(edited))
+
+    def test_locked_roles_stay_full_access_after_seed(self):
+        rd = RoleDefinition.objects.get(slug=roles.ADMIN)
+        rd.permissions = [VIEW_DASHBOARD]
+        rd.save()
+
+        seed_builtin_roles()
+
+        rd.refresh_from_db()
+        self.assertTrue(rd.grants_full_access)
+        self.assertTrue(rd.is_locked)
+        self.assertEqual(set(rd.permissions), set(ALL_PERMISSIONS))
+
+    def test_missing_builtin_role_is_recreated(self):
+        RoleDefinition.objects.filter(slug=roles.SALES_EXPERT).delete()
+        self.assertFalse(RoleDefinition.objects.filter(slug=roles.SALES_EXPERT).exists())
+
+        seed_builtin_roles()
+
+        rd = RoleDefinition.objects.get(slug=roles.SALES_EXPERT)
+        self.assertTrue(rd.is_builtin)
+        self.assertIn(VIEW_DASHBOARD, rd.permissions)

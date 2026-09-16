@@ -212,7 +212,7 @@ ORG_BUILTIN_ROLES = [
     {
         "slug": roles.SALES_EXPERT,
         "label": "کارشناس فروش",
-        "description": "ثبت سفارش؛ فقط جمع فروش ماهانه",
+        "description": "ثبت سفارش؛ تعداد فروش بدون مبلغ",
         "parent_slug": roles.BRANCH_SUPERVISOR,
         "needs_branch": True,
         "color": "#6366f1",
@@ -398,6 +398,46 @@ def _role_defaults(spec, perms, parent):
     return data
 
 
+def _spec_permissions(spec):
+    slug = spec["slug"]
+    if spec.get("grants_full_access"):
+        return sanitize_role_permissions(slug, ALL_PERMISSIONS)
+    return sanitize_role_permissions(slug, spec.get("permissions") or [])
+
+
+def _permission_objects(perms):
+    return [
+        Permission.objects.get_or_create(
+            code=code, defaults={"label": PERMISSION_LABELS.get(code, code)}
+        )[0]
+        for code in perms
+    ]
+
+
+def _is_locked_spec(spec):
+    return bool(spec.get("is_locked") or spec.get("grants_full_access"))
+
+
+def _sync_existing_role_structure(rd, spec, perms):
+    """Keep structural flags; do not overwrite admin edits on unlocked roles."""
+    updates = []
+    if not rd.is_builtin:
+        rd.is_builtin = True
+        updates.append("is_builtin")
+    locked = _is_locked_spec(spec)
+    if locked and _column_exists("backend_roledefinition", "grants_full_access"):
+        if spec.get("grants_full_access") and not rd.grants_full_access:
+            rd.grants_full_access = True
+            updates.append("grants_full_access")
+        if spec.get("is_locked") and not rd.is_locked:
+            rd.is_locked = True
+            updates.append("is_locked")
+    if updates:
+        rd.save(update_fields=updates)
+    if locked:
+        rd.permission_set.set(_permission_objects(perms))
+
+
 def _is_role_suppressed(slug):
     from django.db.utils import OperationalError, ProgrammingError
 
@@ -415,41 +455,40 @@ def seed_org_roles():
     from logic.role_definitions import sync_group_for_role
 
     slug_to_parent = {}
+    created_slugs = set()
     for spec in ORG_BUILTIN_ROLES:
         slug = spec["slug"]
         if _is_role_suppressed(slug):
             continue
-        if spec.get("grants_full_access"):
-            perms = sanitize_role_permissions(slug, ALL_PERMISSIONS)
-        else:
-            perms = sanitize_role_permissions(slug, spec.get("permissions") or [])
 
         parent = None
         parent_slug = spec.get("parent_slug")
         if parent_slug:
             parent = RoleDefinition.objects.filter(slug=parent_slug).first() or slug_to_parent.get(parent_slug)
 
-        rd, _ = RoleDefinition.objects.update_or_create(
+        perms = _spec_permissions(spec)
+        rd, created = RoleDefinition.objects.get_or_create(
             slug=slug,
             defaults=_role_defaults(spec, perms, parent),
         )
-        rd.permission_set.set(
-            [
-                Permission.objects.get_or_create(
-                    code=code, defaults={"label": PERMISSION_LABELS.get(code, code)}
-                )[0]
-                for code in perms
-            ]
-        )
+        if created:
+            rd.permission_set.set(_permission_objects(perms))
+            created_slugs.add(slug)
+        else:
+            _sync_existing_role_structure(rd, spec, perms)
+
         slug_to_parent[slug] = rd
         sync_group_for_role(slug)
 
     for spec in ORG_BUILTIN_ROLES:
+        slug = spec["slug"]
+        if slug not in created_slugs:
+            continue
         parent_slug = spec.get("parent_slug")
         if parent_slug:
             parent = RoleDefinition.objects.filter(slug=parent_slug).first()
             if parent:
-                child = RoleDefinition.objects.filter(slug=spec["slug"]).first()
+                child = RoleDefinition.objects.filter(slug=slug).first()
                 if child and child.parent_id != parent.id:
                     child.parent = parent
                     child.save(update_fields=["parent"])
@@ -463,6 +502,11 @@ def seed_config_defaults():
     seed_menu_sections()
     seed_org_ranks()
     seed_org_roles()
+    try:
+        for code, label in PERMISSION_LABELS.items():
+            Permission.objects.filter(code=code).exclude(label=label).update(label=label)
+    except OperationalError:
+        pass
     try:
         from logic.order_cycle import seed_order_cycle
 

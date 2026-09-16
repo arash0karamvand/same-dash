@@ -311,11 +311,9 @@ def build_permission_matrix_payload():
         menu_sections_for_matrix,
         permission_groups_for_matrix,
     )
-    from logic.config_seed import seed_config_defaults
     from logic.module_catalog import portal_modules_for_matrix
 
     seed_builtin_roles()
-    seed_config_defaults()
     return {
         "permissions": [
             {"code": code, "label": PERMISSION_LABELS.get(code, code)}

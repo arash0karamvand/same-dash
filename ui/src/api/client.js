@@ -316,6 +316,7 @@ export const salesApi = {
   freightReceive: (id) => post(`/api/sales/${id}/freight-receive/`),
   freightComplete: (id) => post(`/api/sales/${id}/freight-complete/`),
   dailyReport: (date) => get(`/api/sales/reports/daily/${date ? `?date=${date}` : ''}`),
+  weeklyReport: (date) => get(`/api/sales/reports/weekly/${date ? `?date=${date}` : ''}`),
   monthlyReport: (year, month) => get(`/api/sales/reports/monthly/?year=${year}&month=${month}`),
   dailyBreakdown: (year, month) => get(`/api/sales/reports/daily-breakdown/?year=${year}&month=${month}`),
   yearlyReport: (year) => get(`/api/sales/reports/yearly/?year=${year}`),

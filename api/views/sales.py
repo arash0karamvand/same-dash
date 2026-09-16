@@ -5,7 +5,7 @@ from decimal import Decimal, InvalidOperation
 from api.filters import apply_sales_filters, parse_date
 from api.helpers import api_view, fail, parse_json, success
 from api.serializers import sale_to_dict
-from auth.org_roles import is_branch_supervisor, is_executive_user
+from auth.org_roles import is_executive_user
 from auth.permissions import (
     APPROVE_SALE_ACCOUNTING,
     APPROVE_SALE_BRANCH,
@@ -33,10 +33,12 @@ from logic.sales import (
 from logic.sale_workflow import approve_sale_branch
 from logic.sales_reports import (
     aggregate_sales,
+    apply_shop_sales_totals_mask,
     build_daily_breakdown,
     build_daily_sales_report,
     build_employee_ranking_report,
     build_monthly_sales_payload,
+    build_weekly_sales_report,
     build_yearly_sales_report,
     can_list_sales,
     can_view_sales_reports,
@@ -53,6 +55,7 @@ def _serialize_sales(user, sales):
 
 def _report_success(user, payload):
     """تبدیل کلید sales به results سریال‌شده."""
+    payload = apply_shop_sales_totals_mask(payload, user)
     sales = payload.pop("sales", None)
     if sales is not None:
         if sales == []:
@@ -76,10 +79,11 @@ def sale_list(request):
         from logic.pagination import paginate
 
         page, meta = paginate(qs, request.GET)
+        summary = apply_shop_sales_totals_mask(aggregate_sales(qs), request.user)
         return success(
             {
                 "results": _serialize_sales(request.user, page),
-                "summary": aggregate_sales(qs),
+                "summary": summary,
                 **meta,
             }
         )
@@ -380,9 +384,14 @@ def sale_cancel(request, pk):
 def sales_daily_report(request):
     if not can_view_sales_reports(request.user):
         return fail("Permission denied", status=403)
-    if is_branch_supervisor(request.user) and not is_executive_user(request.user):
-        return fail("سرپرست شعبه گزارش روزانه ندارد.", status=403)
     return _report_success(request.user, build_daily_sales_report(request.user, request.GET))
+
+
+@api_view("GET")
+def sales_weekly_report(request):
+    if not can_view_sales_reports(request.user):
+        return fail("Permission denied", status=403)
+    return _report_success(request.user, build_weekly_sales_report(request.user, request.GET))
 
 
 @api_view("GET")

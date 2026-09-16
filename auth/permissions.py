@@ -95,7 +95,7 @@ PERMISSION_LABELS = {
     VIEW_EMPLOYEE_RANKING: "رده‌بندی کارکنان",
     CREATE_SALE: "ثبت فروش",
     EDIT_SALE: "ویرایش فروش",
-    VIEW_SALES_SUMMARY: "فقط جمع فروش ماهانه",
+    VIEW_SALES_SUMMARY: "تعداد فروش بدون مبلغ",
     APPROVE_SALE_BRANCH: "ارسال به اداری (سرپرست شعبه)",
     APPROVE_SALE_ACCOUNTING: "تایید اداری و انتخاب مسیر ارسال",
     VIEW_FACTORY_ORDERS: "مشاهده سفارش‌های کارخانه",

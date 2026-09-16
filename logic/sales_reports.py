@@ -5,7 +5,12 @@ from datetime import datetime
 from django.db.models import Count, Sum
 from django.utils import timezone
 
-from auth.org_roles import is_branch_supervisor, is_executive_user, sales_expert_summary_only
+from auth.org_roles import (
+    is_branch_supervisor,
+    is_executive_user,
+    sales_expert_summary_only,
+    should_mask_shop_sales_totals,
+)
 from auth.permissions import (
     APPROVE_SALE_BRANCH,
     VIEW_OWN_SALES,
@@ -20,7 +25,9 @@ from logic.sale_workflow import STAGE_PENDING_BRANCH
 from logic.sales_day import (
     filter_sales_for_gregorian_date,
     filter_sales_for_jalali_month,
+    filter_sales_for_jalali_range,
     filter_sales_for_jalali_year,
+    jalali_week_bounds,
     sold_at_jalali,
     today_jalali,
 )
@@ -137,6 +144,21 @@ def aggregate_sales(qs):
     }
 
 
+def apply_shop_sales_totals_mask(payload, user):
+    """مبلغ گزارش را برای کارکنان فروشگاه خالی می‌کند؛ تعداد می‌ماند."""
+    if not should_mask_shop_sales_totals(user):
+        payload["amounts_masked"] = False
+        return payload
+    payload["amounts_masked"] = True
+    payload["total_final"] = None
+    payload["total_paid"] = None
+    if "sales" in payload:
+        payload["sales"] = []
+    for day in payload.get("days") or []:
+        day["total_final"] = None
+    return payload
+
+
 def parse_period_params(params):
     period = (params.get("period") or "month").strip().lower()
     if period not in {"day", "month", "year"}:
@@ -181,14 +203,42 @@ def build_daily_sales_report(user, params):
     jy, jm, jd = date_to_jalali(day)
     branch = (params.get("branch") or "").strip() or None
     qs = filter_sales_for_gregorian_date(sales_report_queryset(user, branch), day)
-    return {
-        "date": day.isoformat(),
-        "jalali_year": jy,
-        "jalali_month": jm,
-        "jalali_day": jd,
-        **aggregate_sales(qs),
-        "sales": qs,
-    }
+    return apply_shop_sales_totals_mask(
+        {
+            "date": day.isoformat(),
+            "jalali_year": jy,
+            "jalali_month": jm,
+            "jalali_day": jd,
+            **aggregate_sales(qs),
+            "sales": qs,
+        },
+        user,
+    )
+
+
+def build_weekly_sales_report(user, params):
+    """گزارش هفته شمسی (شنبه تا جمعه)."""
+    params = _params_dict(params)
+    day = _parse_date(params.get("date")) or timezone.localdate()
+    start, end = jalali_week_bounds(day)
+    branch = (params.get("branch") or "").strip() or None
+    qs = _expert_or_report_qs(user, branch)
+    qs = filter_sales_for_jalali_range(qs, *start, *end)
+    summary_only = sales_expert_summary_only(user)
+    return apply_shop_sales_totals_mask(
+        {
+            "date": day.isoformat(),
+            "start_jalali_year": start[0],
+            "start_jalali_month": start[1],
+            "start_jalali_day": start[2],
+            "end_jalali_year": end[0],
+            "end_jalali_month": end[1],
+            "end_jalali_day": end[2],
+            **aggregate_sales(qs),
+            "sales": [] if summary_only else qs,
+        },
+        user,
+    )
 
 
 def prepare_monthly_sales_queryset(user, params):
@@ -205,14 +255,17 @@ def prepare_monthly_sales_queryset(user, params):
 
 def build_monthly_sales_payload(user, qs, year, month):
     summary_only = sales_expert_summary_only(user)
-    return {
-        "jalali_year": year,
-        "jalali_month": month,
-        "year": year,
-        "month": month,
-        **aggregate_sales(qs),
-        "sales": [] if summary_only else qs,
-    }
+    return apply_shop_sales_totals_mask(
+        {
+            "jalali_year": year,
+            "jalali_month": month,
+            "year": year,
+            "month": month,
+            **aggregate_sales(qs),
+            "sales": [] if summary_only else qs,
+        },
+        user,
+    )
 
 
 def build_yearly_sales_report(user, params):
@@ -223,12 +276,15 @@ def build_yearly_sales_report(user, params):
     qs = _expert_or_report_qs(user, branch)
     qs = filter_sales_for_jalali_year(qs, year)
     summary_only = sales_expert_summary_only(user)
-    return {
-        "jalali_year": year,
-        "year": year,
-        **aggregate_sales(qs),
-        "sales": [] if summary_only else qs,
-    }
+    return apply_shop_sales_totals_mask(
+        {
+            "jalali_year": year,
+            "year": year,
+            **aggregate_sales(qs),
+            "sales": [] if summary_only else qs,
+        },
+        user,
+    )
 
 
 def build_daily_breakdown(user, params):
@@ -264,14 +320,17 @@ def build_daily_breakdown(user, params):
             }
         )
 
-    return {
-        "jalali_year": year,
-        "jalali_month": month,
-        "year": year,
-        "month": month,
-        **aggregate_sales(qs),
-        "days": days,
-    }
+    return apply_shop_sales_totals_mask(
+        {
+            "jalali_year": year,
+            "jalali_month": month,
+            "year": year,
+            "month": month,
+            **aggregate_sales(qs),
+            "days": days,
+        },
+        user,
+    )
 
 
 def build_employee_ranking_report(params):

@@ -47,6 +47,24 @@ def is_sales_expert(user):
     return _has_role(user, roles.SALES_EXPERT)
 
 
+def is_operator(user):
+    return _has_role(user, roles.OPERATOR)
+
+
+def is_shop_staff_user(user):
+    """کارکنان فروشگاه: کارشناس فروش، سرپرست شعبه، فروشنده."""
+    if not user or not getattr(user, "is_authenticated", False):
+        return False
+    if is_executive_user(user):
+        return False
+    return is_sales_expert(user) or is_branch_supervisor(user) or is_operator(user)
+
+
+def should_mask_shop_sales_totals(user):
+    """کارکنان فروشگاه جمع مبلغ فروش را در گزارش نمی‌بینند."""
+    return is_shop_staff_user(user)
+
+
 def is_factory_supervisor(user):
     return _has_role(user, roles.FACTORY_SUPERVISOR)
 
@@ -86,7 +104,7 @@ def should_mask_amounts_for_user(user):
 
 
 def sales_expert_summary_only(user):
-    """کارشناس فروش فقط جمع فروش ماهانه — بدون لیست سفارش."""
+    """کارشناس فروش فقط تعداد فروش — بدون لیست سفارش."""
     from auth.permissions import VIEW_OWN_SALES, VIEW_SALES, VIEW_SALES_SUMMARY, has_permission
 
     if not is_sales_expert(user):

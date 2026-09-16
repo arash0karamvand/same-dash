@@ -98,14 +98,14 @@ export default function Layout({ portal, page, onNavigate, children }) {
     <div className={tw.layout}>
       <button
         type="button"
-        className={cn(tw.sidebarBackdrop, drawerOpen && tw.sidebarBackdropOpen)}
+        className={cn(tw.sidebarBackdrop, drawerOpen ? tw.sidebarBackdropOpen : tw.sidebarBackdropClosed)}
         aria-label="بستن منو"
         aria-hidden={!drawerOpen}
         tabIndex={drawerOpen ? 0 : -1}
         onClick={() => setMenuOpen(false)}
       />
       <aside
-        className={cn(tw.sidebar, drawerOpen && tw.sidebarOpen)}
+        className={cn(tw.sidebar, drawerOpen ? tw.sidebarOpen : tw.sidebarClosed)}
         aria-label="پورتال‌ها"
         aria-hidden={isMobile || (showTabletMenu && !menuOpen)}
         inert={isMobile || (showTabletMenu && !menuOpen) ? true : undefined}

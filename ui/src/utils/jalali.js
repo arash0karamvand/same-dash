@@ -157,3 +157,17 @@ export function addYearsToIso(iso, years) {
   const nd = Math.min(d, dim)
   return `${ny}-${pad2(m)}-${pad2(nd)}`
 }
+
+/** شروع و پایان هفته شمسی (شنبه تا جمعه) برای یک روز میلادی ISO. */
+export function jalaliWeekBoundsIso(iso) {
+  const [y, m, d] = gregorianFromIso(iso || todayIso())
+  const utc = Date.UTC(y, m - 1, d)
+  const weekday = new Date(utc).getUTCDay()
+  const daysSinceSaturday = (weekday + 1) % 7
+  const start = new Date(utc)
+  start.setUTCDate(start.getUTCDate() - daysSinceSaturday)
+  const end = new Date(start)
+  end.setUTCDate(end.getUTCDate() + 6)
+  const toIso = (dt) => `${dt.getUTCFullYear()}-${pad2(dt.getUTCMonth() + 1)}-${pad2(dt.getUTCDate())}`
+  return { startIso: toIso(start), endIso: toIso(end) }
+}

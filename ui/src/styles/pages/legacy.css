@@ -5747,6 +5747,63 @@ body.is-resizing[data-resize-dir='row'] {
   gap: 8px;
   margin-bottom: 8px;
 }
+.sale-line-remove {
+  margin-inline-start: auto;
+}
+.product-lines-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 4px 0 8px;
+}
+.product-picker-hint {
+  margin: 8px 0 0;
+}
+.product-picker-check {
+  position: absolute;
+  inset-inline-end: 6px;
+  top: 6px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--primary);
+  cursor: pointer;
+}
+.product-picker-check.on {
+  border-color: var(--primary);
+  background: var(--accent-soft);
+}
+.product-picker-selected {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0 10px;
+}
+.product-picker-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.product-picker-count {
+  margin-inline-end: auto;
+}
+.color-swatch.active {
+  outline: 2px solid var(--primary);
+  outline-offset: 1px;
+}
 .line-color-badge {
   width: 18px;
   height: 18px;
@@ -5771,11 +5828,13 @@ body.is-resizing[data-resize-dir='row'] {
   margin: 12px 0;
 }
 .product-picker-item {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 4px;
   padding: 10px;
+  padding-inline-end: 30px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
@@ -5783,7 +5842,8 @@ body.is-resizing[data-resize-dir='row'] {
   text-align: right;
   font: inherit;
 }
-.product-picker-item.selected {
+.product-picker-item.selected,
+.product-picker-item.focused {
   border-color: var(--primary);
   background: var(--accent-soft);
 }

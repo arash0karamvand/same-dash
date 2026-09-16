@@ -126,7 +126,8 @@ export const tw = {
 
   layout: 'flex min-h-dvh w-full max-w-full bg-bg',
   sidebar:
-    'sticky top-0 z-[200] flex h-dvh w-[var(--sidebar-width)] shrink-0 flex-col overflow-hidden border-l border-sidebar-border bg-sidebar p-6 px-4 text-sidebar-text shadow-[var(--jelly-drop)] max-compact:fixed max-compact:inset-y-0 max-compact:right-0 max-compact:h-dvh max-compact:w-[min(320px,92vw)] max-compact:max-w-[320px] max-compact:translate-x-[110%] max-compact:overflow-hidden max-compact:px-3 max-compact:py-[max(14px,env(safe-area-inset-top))] max-compact:pb-[max(14px,env(safe-area-inset-bottom))] max-compact:shadow-[-8px_0_32px_rgba(0,0,0,0.28)] max-compact:transition-transform max-compact:duration-[280ms] max-md:!hidden',
+    'sticky top-0 z-[200] flex h-dvh w-[var(--sidebar-width)] shrink-0 flex-col overflow-hidden border-l border-sidebar-border bg-sidebar p-6 px-4 text-sidebar-text shadow-[var(--jelly-drop)] max-compact:!fixed max-compact:inset-y-0 max-compact:right-0 max-compact:h-dvh max-compact:w-[min(320px,92vw)] max-compact:max-w-[320px] max-compact:overflow-hidden max-compact:px-3 max-compact:py-[max(14px,env(safe-area-inset-top))] max-compact:pb-[max(14px,env(safe-area-inset-bottom))] max-compact:shadow-[-8px_0_32px_rgba(0,0,0,0.28)] max-compact:transition-[translate] max-compact:duration-[280ms] max-md:!hidden',
+  sidebarClosed: 'max-compact:translate-x-[110%]',
   sidebarOpen: 'max-compact:translate-x-0',
   brand: 'flex shrink-0 items-center gap-3 px-2 pb-5 pt-1 font-display text-lg font-extrabold tracking-tight',
   brandLogo: 'flex h-8 w-8 shrink-0 items-center justify-center bg-transparent text-accent',
@@ -147,7 +148,8 @@ export const tw = {
   navIcon: 'flex items-center justify-center opacity-75',
   sidebarFooter: 'shrink-0 border-t border-sidebar-border px-2.5 pt-3.5 text-xs tracking-wide text-sidebar-muted',
   sidebarBackdrop:
-    'fixed inset-0 z-[199] hidden cursor-pointer border-0 bg-black/55 backdrop-blur-[4px]',
+    'fixed inset-0 z-[199] cursor-pointer border-0 bg-black/55 backdrop-blur-[4px]',
+  sidebarBackdropClosed: 'hidden',
   sidebarBackdropOpen: 'max-compact:block',
 
   main: 'flex min-h-dvh min-w-0 w-full flex-1 flex-col max-compact:max-w-none',

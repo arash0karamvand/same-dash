@@ -93,6 +93,7 @@ urlpatterns = [
 
     # --- Sales ---
     path("sales/reports/daily/", sales.sales_daily_report, name="sales-daily-report"),
+    path("sales/reports/weekly/", sales.sales_weekly_report, name="sales-weekly-report"),
     path("sales/reports/monthly/", sales.sales_monthly_report, name="sales-monthly-report"),
     path("sales/reports/daily-breakdown/", sales.sales_daily_breakdown, name="sales-daily-breakdown"),
     path("sales/reports/yearly/", sales.sales_yearly_report, name="sales-yearly-report"),

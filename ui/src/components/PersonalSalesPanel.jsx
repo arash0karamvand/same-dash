@@ -1,4 +1,4 @@
-// پنل جمع‌بندی فروش شخصی — روز / ماه / سال شمسی
+// پنل جمع‌بندی فروش شخصی — روز / هفته / ماه / سال شمسی
 
 import { useEffect, useState } from 'react'
 import PersianDateInput from './PersianDateInput'
@@ -7,11 +7,12 @@ import Select from './Select'
 import { Button, Card, Field } from './ui'
 import { salesApi } from '../api/client'
 import { formatMoney } from '../utils/format'
-import { currentJalali, formatJalali, jalaliToIso, PERSIAN_MONTHS, todayIso, toPersianDigits } from '../utils/jalali'
+import { currentJalali, formatJalali, jalaliToIso, jalaliWeekBoundsIso, PERSIAN_MONTHS, todayIso, toPersianDigits } from '../utils/jalali'
 import { fromLegacy } from '../styles/tw.js'
 
 const PERIOD_OPTIONS = [
   { value: 'day', label: 'روز' },
+  { value: 'week', label: 'هفته' },
   { value: 'month', label: 'ماه' },
   { value: 'year', label: 'سال' },
 ]
@@ -21,6 +22,11 @@ function buildYearOptions(curYear) {
     const y = curYear - i
     return { value: String(y), label: toPersianDigits(y) }
   })
+}
+
+function jalaliRangeLabel(year, month, day) {
+  if (!year || !month || !day) return ''
+  return formatJalali(jalaliToIso(year, month, day))
 }
 
 export default function PersonalSalesPanel({
@@ -46,6 +52,8 @@ export default function PersonalSalesPanel({
       let data
       if (period === 'day') {
         data = await salesApi.dailyReport(dayIso)
+      } else if (period === 'week') {
+        data = await salesApi.weeklyReport(dayIso)
       } else if (period === 'month') {
         data = await salesApi.monthlyReport(monthYear, monthValue)
       } else {
@@ -66,11 +74,17 @@ export default function PersonalSalesPanel({
 
   const periodLabel = () => {
     if (period === 'day') {
-      const j = currentJalali()
       if (stats?.jalali_year) {
         return formatJalali(jalaliToIso(stats.jalali_year, stats.jalali_month, stats.jalali_day))
       }
       return formatJalali(dayIso)
+    }
+    if (period === 'week') {
+      const start = jalaliRangeLabel(stats?.start_jalali_year, stats?.start_jalali_month, stats?.start_jalali_day)
+      const end = jalaliRangeLabel(stats?.end_jalali_year, stats?.end_jalali_month, stats?.end_jalali_day)
+      if (start && end) return `${start} تا ${end}`
+      const bounds = jalaliWeekBoundsIso(dayIso)
+      return `${formatJalali(bounds.startIso)} تا ${formatJalali(bounds.endIso)}`
     }
     if (period === 'month') {
       return `${PERSIAN_MONTHS[(stats?.jalali_month || monthValue) - 1]} ${toPersianDigits(stats?.jalali_year || monthYear)}`
@@ -83,6 +97,17 @@ export default function PersonalSalesPanel({
       onApplyListFilter?.({ date_from: dayIso, date_to: dayIso })
       return
     }
+    if (period === 'week') {
+      const bounds = jalaliWeekBoundsIso(dayIso)
+      const start = stats?.start_jalali_year
+        ? jalaliToIso(stats.start_jalali_year, stats.start_jalali_month, stats.start_jalali_day)
+        : bounds.startIso
+      const end = stats?.end_jalali_year
+        ? jalaliToIso(stats.end_jalali_year, stats.end_jalali_month, stats.end_jalali_day)
+        : bounds.endIso
+      onApplyListFilter?.({ date_from: start, date_to: end })
+      return
+    }
     if (period === 'month') {
       const start = jalaliToIso(monthYear, monthValue, 1)
       const endDay = monthValue <= 6 ? 31 : monthValue <= 11 ? 30 : 29
@@ -92,6 +117,8 @@ export default function PersonalSalesPanel({
     const start = jalaliToIso(yearValue, 1, 1)
     onApplyListFilter?.({ date_from: start, date_to: jalaliToIso(yearValue, 12, 29) })
   }
+
+  const showAmount = Boolean(stats) && !stats.amounts_masked
 
   return (
     <Card
@@ -115,8 +142,8 @@ export default function PersonalSalesPanel({
               />
             </Field>
             )}
-            {period === 'day' && (
-              <Field label="روز">
+            {(period === 'day' || period === 'week') && (
+              <Field label={period === 'week' ? 'روز داخل هفته' : 'روز'}>
                 <PersianDateInput
                   value={dayIso}
                   onChange={setDayIso}
@@ -160,10 +187,12 @@ export default function PersonalSalesPanel({
               <span className={fromLegacy("muted")}>بازه</span>
               <strong>{periodLabel()}</strong>
             </div>
+            {showAmount && (
             <div>
               <span className={fromLegacy("muted")}>مبلغ</span>
               <strong className={fromLegacy("stat-value")}>{formatMoney(stats?.total_final || 0)}</strong>
             </div>
+            )}
             <div>
               <span className={fromLegacy("muted")}>تعداد</span>
               <strong>{stats?.count || 0} فقره</strong>
