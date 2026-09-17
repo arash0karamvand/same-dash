@@ -30,6 +30,14 @@ from logic.menu_config import (
     update_menu_section,
 )
 from logic.page_guides import get_page_guides_map, upsert_page_guide
+from logic.attendance_settings import get_attendance_settings, set_attendance_enforced
+from logic.ticket_grades import get_ticket_grades, set_ticket_grades
+from logic.inventory_settings import (
+    can_toggle_manual_stock_lock,
+    get_inventory_settings,
+    set_manual_stock_locked,
+)
+from logic.stock_locations import list_stock_locations
 
 
 def _require_admin(user):
@@ -51,6 +59,10 @@ def app_config(request):
         "permission_catalog": permission_catalog(),
         "page_guides": get_page_guides_map(),
         "branding": get_branding(),
+        "stock_locations": list_stock_locations(),
+        "attendance_settings": get_attendance_settings(),
+        "inventory_settings": get_inventory_settings(),
+        "ticket_grades": get_ticket_grades(),
     })
 
 
@@ -72,6 +84,8 @@ def branch_list(request):
             color=data.get("color") or "#6366f1",
             sort_order=data.get("sort_order") or 0,
             is_active=bool(data.get("is_active", True)),
+            work_start=data.get("work_start"),
+            work_end=data.get("work_end"),
         )
     except ValueError as exc:
         return fail(str(exc), status=400)
@@ -225,3 +239,52 @@ def page_guide_detail(request, code):
     except ValueError as exc:
         return fail(str(exc), status=400)
     return success({"code": code, "text": (data.get("text") or "").strip()})
+
+
+@api_view("GET", "PUT")
+def attendance_settings(request):
+    if request.method == "GET":
+        if not request.user.is_authenticated:
+            return fail("Unauthorized", status=401)
+        return success(get_attendance_settings())
+    denied = _require_admin(request.user)
+    if denied:
+        return denied
+    data = parse_json(request)
+    enabled = data.get("enforced")
+    if enabled is None:
+        enabled = data.get("enabled")
+    return success(set_attendance_enforced(bool(enabled)))
+
+
+@api_view("GET", "PUT")
+def inventory_settings(request):
+    if request.method == "GET":
+        if not request.user.is_authenticated:
+            return fail("Unauthorized", status=401)
+        return success(get_inventory_settings())
+    if not can_toggle_manual_stock_lock(request.user):
+        return fail("Permission denied", status=403)
+    data = parse_json(request)
+    locked = data.get("manual_stock_locked")
+    if locked is None:
+        locked = data.get("locked")
+    return success(set_manual_stock_locked(bool(locked)))
+
+
+@api_view("GET", "PUT")
+def ticket_grades(request):
+    if request.method == "GET":
+        if not request.user.is_authenticated:
+            return fail("Unauthorized", status=401)
+        return success(get_ticket_grades())
+    denied = _require_admin(request.user)
+    if denied:
+        return denied
+    data = parse_json(request)
+    return success(
+        set_ticket_grades(
+            grades=data.get("grades"),
+            default_grade=data.get("default_grade"),
+        )
+    )

@@ -18,7 +18,7 @@ import WorkflowOrdersPage from './WorkflowOrdersPage'
 import { fromLegacy } from '../styles/tw.js'
 
 const ORDER_KINDS = [
-  { value: 'normal', label: 'فروش عادی' },
+  { value: 'normal', label: 'فروش و پرداخت آنی' },
   { value: 'pre_invoice', label: 'پیش‌فاکتور' },
   { value: 'deposit', label: 'بیعانیه' },
 ]

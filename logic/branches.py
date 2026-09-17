@@ -32,6 +32,8 @@ def get_active_branches(force_refresh=False):
                 "label": b.label,
                 "color": b.color,
                 "sort_order": b.sort_order,
+                "work_start": b.work_start.strftime("%H:%M") if b.work_start else "",
+                "work_end": b.work_end.strftime("%H:%M") if b.work_end else "",
             }
             for b in qs
         ]
@@ -71,6 +73,8 @@ def branch_to_dict(branch):
         "color": branch.color,
         "sort_order": branch.sort_order,
         "is_active": branch.is_active,
+        "work_start": branch.work_start.strftime("%H:%M") if branch.work_start else "",
+        "work_end": branch.work_end.strftime("%H:%M") if branch.work_end else "",
     }
 
 
@@ -82,7 +86,7 @@ def list_all_branches():
     return list(Branch.objects.order_by("sort_order", "label"))
 
 
-def create_branch(*, code, label, color="#6366f1", sort_order=0, is_active=True):
+def create_branch(*, code, label, color="#6366f1", sort_order=0, is_active=True, work_start=None, work_end=None):
     code = (code or "").strip()
     label = (label or "").strip()
     if not code or not label:
@@ -95,9 +99,29 @@ def create_branch(*, code, label, color="#6366f1", sort_order=0, is_active=True)
         color=(color or "#6366f1").strip()[:20],
         sort_order=int(sort_order or 0),
         is_active=bool(is_active),
+        work_start=_parse_time(work_start),
+        work_end=_parse_time(work_end),
     )
     invalidate_branch_cache()
     return branch
+
+
+def _parse_time(value):
+    if not value:
+        return None
+    if hasattr(value, "hour"):
+        return value
+    text = str(value).strip()
+    if not text:
+        return None
+    from datetime import datetime
+
+    for fmt in ("%H:%M", "%H:%M:%S"):
+        try:
+            return datetime.strptime(text, fmt).time()
+        except ValueError:
+            continue
+    raise ValueError("ساعت کاری نامعتبر است.")
 
 
 def update_branch(branch, data):
@@ -109,6 +133,10 @@ def update_branch(branch, data):
         branch.sort_order = int(data.get("sort_order") or branch.sort_order)
     if "is_active" in data:
         branch.is_active = bool(data.get("is_active"))
+    if "work_start" in data:
+        branch.work_start = _parse_time(data.get("work_start"))
+    if "work_end" in data:
+        branch.work_end = _parse_time(data.get("work_end"))
     branch.save()
     invalidate_branch_cache()
     return branch

@@ -4,7 +4,7 @@ import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import Icon from './icons/Icon'
 import { iconForNavItem, iconForPortal } from '../config/iconMap'
-import { canSeeNavItem } from '../utils/permissions'
+import { canSeePortal, getVisiblePortalChildren } from '../utils/permissions'
 import { cn, tw } from '../styles/tw'
 
 export default function MobileMenuSheet({
@@ -61,8 +61,8 @@ export default function MobileMenuSheet({
         </div>
 
         <div className={tw.mobileMenuBody}>
-          {(portals || []).map((p) => {
-            const items = (p.children || []).filter((c) => canSeeNavItem(user, c))
+          {(portals || []).filter((p) => canSeePortal(user, p)).map((p) => {
+            const items = getVisiblePortalChildren(user, p)
             if (!items.length) return null
             return (
               <section key={p.id} className={tw.mobileMenuPortalBlock}>

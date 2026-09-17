@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { materialsApi, productsApi } from '../api/client'
+import { configApi, materialsApi, productsApi } from '../api/client'
 import MoneyInput from '../components/MoneyInput'
 import Select from '../components/Select'
 import { Badge, Button, Card, EmptyState, Field, FilterBar, LoadMoreButton, Modal } from '../components/ui'
 import { PAGE_SIZE, PICKER_LIMIT } from '../config/pagination'
 import { useAuth } from '../context/AuthContext'
+import { useConfig } from '../context/ConfigContext'
 import { useConfirm } from '../context/ConfirmContext'
 import { formatMoney } from '../utils/format'
 import { parseRoute } from '../utils/routing'
 import { fromLegacy } from '../styles/tw.js'
 
-import { hasAnyPermission, hasPermission } from '../utils/permissions'
+import { canSeePortal, hasAnyPermission, hasPermission } from '../utils/permissions'
 import { PAGE_GUIDE_DEFAULTS } from '../config/pageGuideDefaults'
 import { useRegisterPageGuide } from '../context/PageGuideContext'
 
@@ -28,7 +29,23 @@ const COLOR_PRESETS = [
 ]
 
 const EMPTY_CATEGORY = { name: '', description: '', color: 'var(--accent)', icon: 'package', sort_order: 0, is_active: true }
-const EMPTY_VARIANT = { color_name: '', color_hex: '#cccccc', sku: '', stock: '', is_active: true }
+const EMPTY_VARIANT = { color_name: '', color_hex: '#cccccc', sku: '', stock_by_location: [], is_active: true }
+
+function locationStocksFrom(locations, existing = []) {
+  const byKey = new Map((existing || []).map((row) => [row.key, row]))
+  return (locations || []).map((loc) => {
+    const current = byKey.get(loc.key)
+    const qty = current?.quantity
+    return {
+      key: loc.key,
+      kind: loc.kind,
+      warehouse_id: loc.warehouse_id,
+      branch: loc.branch || '',
+      label: loc.label,
+      quantity: qty === 0 || qty ? String(qty) : '',
+    }
+  })
+}
 const EMPTY_PRODUCT_MATERIAL = { id: null, material_id: '', quantity: '1' }
 const EMPTY_PRODUCT = {
   name: '',
@@ -55,6 +72,7 @@ function useProductMode() {
 
 export default function Products() {
   const { user } = useAuth()
+  const { stockLocations, inventorySettings, portals, refresh } = useConfig()
   const confirm = useConfirm()
   const mode = useProductMode()
   const isFactory = mode === 'factory'
@@ -67,6 +85,9 @@ export default function Products() {
   const showCosts = isOffice || (hasPermission(user, 'view_materials') && hasPermission(user, 'view_products'))
   const canEditMaterials = canManageFactory
   const canManageCategories = canManageSales || canManageFactory
+  const managersPortal = (portals || []).find((portal) => portal.id === 'managers')
+  const canLockManualStock = canSeePortal(user, managersPortal)
+  const manualStockLocked = Boolean(inventorySettings?.manual_stock_locked)
 
   const productsGuideText = isFactory
     ? PAGE_GUIDE_DEFAULTS.products_factory
@@ -96,6 +117,15 @@ export default function Products() {
   const [saving, setSaving] = useState(false)
   const [topSelling, setTopSelling] = useState([])
   const [materialCatalog, setMaterialCatalog] = useState([])
+  const [transferOpen, setTransferOpen] = useState(false)
+  const [transferForm, setTransferForm] = useState({
+    variant_id: '',
+    source: '',
+    destination: '',
+    quantity: '',
+  })
+  const [transferBusy, setTransferBusy] = useState(false)
+  const [lockBusy, setLockBusy] = useState(false)
 
   const load = useCallback(async ({ append = false, offset: nextOffset = 0 } = {}) => {
     if (append) setLoadingMore(true)
@@ -173,7 +203,11 @@ export default function Products() {
 
   const openCreateProduct = () => {
     setEditingProduct(null)
-    setProductForm({ ...EMPTY_PRODUCT, variants: [{ ...EMPTY_VARIANT }], materials: [] })
+    setProductForm({
+      ...EMPTY_PRODUCT,
+      variants: [{ ...EMPTY_VARIANT, stock_by_location: locationStocksFrom(stockLocations) }],
+      materials: [],
+    })
     setProductModal(true)
   }
 
@@ -196,7 +230,7 @@ export default function Products() {
         color_name: v.color_name,
         color_hex: v.color_hex,
         sku: v.sku || '',
-        stock: v.stock != null ? String(v.stock) : '',
+        stock_by_location: locationStocksFrom(stockLocations, v.stock_by_location),
         is_active: v.is_active !== false,
       })),
       materials: (p.materials || []).map((pm) => ({
@@ -235,7 +269,26 @@ export default function Products() {
   }
 
   const addVariant = () => {
-    setProductForm((f) => ({ ...f, variants: [...f.variants, { ...EMPTY_VARIANT }] }))
+    setProductForm((f) => ({
+      ...f,
+      variants: [...f.variants, { ...EMPTY_VARIANT, stock_by_location: locationStocksFrom(stockLocations) }],
+    }))
+  }
+
+  const updateVariantStock = (idx, key, quantity) => {
+    setProductForm((f) => ({
+      ...f,
+      variants: f.variants.map((v, i) => (
+        i === idx
+          ? {
+              ...v,
+              stock_by_location: (v.stock_by_location || []).map((row) => (
+                row.key === key ? { ...row, quantity } : row
+              )),
+            }
+          : v
+      )),
+    }))
   }
 
   const removeVariant = (idx) => {
@@ -290,7 +343,14 @@ export default function Products() {
             color_name: v.color_name.trim(),
             color_hex: v.color_hex,
             sku: v.sku.trim(),
-            stock: v.stock === '' ? null : Number(v.stock),
+            stock_by_location: (v.stock_by_location || [])
+              .filter((row) => row.quantity !== '' && row.quantity != null)
+              .map((row) => ({
+                kind: row.kind,
+                warehouse_id: row.warehouse_id,
+                branch: row.branch,
+                quantity: Number(row.quantity),
+              })),
             is_active: v.is_active !== false,
           })),
       }
@@ -317,6 +377,18 @@ export default function Products() {
       setError(err.message)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const toggleManualStockLock = async (next) => {
+    setLockBusy(true)
+    try {
+      await configApi.saveInventorySettings({ manual_stock_locked: next })
+      await refresh()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setLockBusy(false)
     }
   }
 
@@ -378,6 +450,20 @@ export default function Products() {
       <div className={fromLegacy("products-page-header")}>
         <div>
           <h1 className={fromLegacy("page-title")}>محصولات</h1>
+          {canLockManualStock && !isFactory && (
+            <label className={fromLegacy("checkbox-row")}>
+              <input
+                type="checkbox"
+                checked={manualStockLocked}
+                disabled={lockBusy}
+                onChange={(e) => toggleManualStockLock(e.target.checked)}
+              />
+              قفل تغییر دستی موجودی
+            </label>
+          )}
+          {manualStockLocked && (
+            <p className={fromLegacy("muted small")}>کسر موجودی با ثبت فاکتور همچنان خودکار است.</p>
+          )}
         </div>
         {canManage && (
           <div className={fromLegacy("products-header-actions")}>
@@ -385,6 +471,9 @@ export default function Products() {
               <Button type="button" variant="ghost" onClick={openCreateCategory}>+ دسته</Button>
             )}
             <Button type="button" onClick={openCreateProduct}>+ محصول</Button>
+            {!manualStockLocked && (
+              <Button type="button" variant="ghost" onClick={() => setTransferOpen(true)}>انتقال موجودی</Button>
+            )}
           </div>
         )}
       </div>
@@ -546,6 +635,11 @@ export default function Products() {
                     <strong>تمام‌شده: {formatMoney(p.material_cost_total)}</strong>
                   )}
                   <span className={fromLegacy("muted")}>{p.variants?.length || 0} رنگ</span>
+                  {p.variants?.some((v) => v.stock_summary) && (
+                    <p className={fromLegacy("muted small")}>
+                      {p.variants.map((v) => v.stock_summary).filter(Boolean).join(' | ')}
+                    </p>
+                  )}
                   {showCosts && p.materials?.length > 0 && (
                     <span className={fromLegacy("muted")}>{p.materials.length} متریال</span>
                   )}
@@ -676,9 +770,21 @@ export default function Products() {
                   <Field label="کد رنگ">
                     <input className={fromLegacy("ltr")} type="color" value={v.color_hex} onChange={(e) => updateVariant(idx, 'color_hex', e.target.value)} />
                   </Field>
-                  <Field label="موجودی (اختیاری)">
-                    <input className={fromLegacy("ltr")} type="number" min="0" value={v.stock} onChange={(e) => updateVariant(idx, 'stock', e.target.value)} placeholder="—" />
-                  </Field>
+                </div>
+                <div className="stock-location-grid">
+                  {(v.stock_by_location?.length ? v.stock_by_location : locationStocksFrom(stockLocations)).map((row) => (
+                    <Field key={row.key} label={`موجودی ${row.label || row.key}`}>
+                      <input
+                        className={fromLegacy("ltr")}
+                        type="number"
+                        min="0"
+                        value={row.quantity}
+                        onChange={(e) => updateVariantStock(idx, row.key, e.target.value)}
+                        placeholder="—"
+                        disabled={manualStockLocked}
+                      />
+                    </Field>
+                  ))}
                 </div>
                 {productForm.variants.length > 1 && (
                   <button type="button" className={fromLegacy("link danger variant-remove")} onClick={() => removeVariant(idx)}>حذف رنگ</button>
@@ -767,6 +873,72 @@ export default function Products() {
             فعال
           </label>
           <Button type="submit" disabled={saving}>{saving ? 'در حال ذخیره…' : 'ذخیره دسته'}</Button>
+        </form>
+      </Modal>
+
+      <Modal title="انتقال موجودی بین انبار و شعبه" open={transferOpen} onClose={() => !transferBusy && setTransferOpen(false)}>
+        <form
+          className={fromLegacy("form")}
+          onSubmit={async (e) => {
+            e.preventDefault()
+            const source = stockLocations.find((l) => l.key === transferForm.source)
+            const destination = stockLocations.find((l) => l.key === transferForm.destination)
+            if (!source || !destination) {
+              setError('مبدأ و مقصد را انتخاب کنید.')
+              return
+            }
+            setTransferBusy(true)
+            try {
+              await productsApi.transferStock({
+                variant_id: Number(transferForm.variant_id),
+                source,
+                destination,
+                quantity: Number(transferForm.quantity),
+              })
+              setTransferOpen(false)
+              setTransferForm({ variant_id: '', source: '', destination: '', quantity: '' })
+              load()
+            } catch (err) {
+              setError(err.message)
+            } finally {
+              setTransferBusy(false)
+            }
+          }}
+        >
+          <Field label="رنگ محصول">
+            <Select
+              value={transferForm.variant_id}
+              onChange={(v) => setTransferForm({ ...transferForm, variant_id: v })}
+              options={[
+                { value: '', label: 'انتخاب…' },
+                ...products.flatMap((p) => (p.variants || []).map((v) => ({
+                  value: String(v.id),
+                  label: `${p.name} — ${v.color_name}${v.stock_summary ? ` (${v.stock_summary})` : ''}`,
+                }))),
+              ]}
+              required
+            />
+          </Field>
+          <Field label="از">
+            <Select
+              value={transferForm.source}
+              onChange={(v) => setTransferForm({ ...transferForm, source: v })}
+              options={[{ value: '', label: 'انتخاب مبدأ…' }, ...stockLocations.map((l) => ({ value: l.key, label: l.label }))]}
+              required
+            />
+          </Field>
+          <Field label="به">
+            <Select
+              value={transferForm.destination}
+              onChange={(v) => setTransferForm({ ...transferForm, destination: v })}
+              options={[{ value: '', label: 'انتخاب مقصد…' }, ...stockLocations.map((l) => ({ value: l.key, label: l.label }))]}
+              required
+            />
+          </Field>
+          <Field label="تعداد">
+            <input className={fromLegacy("ltr")} type="number" min="1" value={transferForm.quantity} onChange={(e) => setTransferForm({ ...transferForm, quantity: e.target.value })} required />
+          </Field>
+          <Button type="submit" disabled={transferBusy}>{transferBusy ? 'در حال انتقال…' : 'انتقال'}</Button>
         </form>
       </Modal>
     </div>

@@ -82,6 +82,7 @@
 
   --breakpoint-md: 768px;
   --breakpoint-compact: 1441px;
+  --breakpoint-wide: 1600px;
   --breakpoint-bp1100: 1101px;
   --breakpoint-bp900: 901px;
   --breakpoint-bp560: 561px;

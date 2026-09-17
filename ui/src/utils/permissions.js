@@ -57,6 +57,10 @@ export function hasAnyPermission(user, codes = []) {
   return codes.some((code) => hasPermission(user, code))
 }
 
+function isSupplementalNavItem(item) {
+  return item?.key === 'notifications'
+}
+
 export function canSeeNavItem(user, item) {
   if (!item) return false
   if (item.executiveOnly) return isExecutiveUser(user)
@@ -87,7 +91,7 @@ export function getVisiblePortalChildren(user, portal) {
 export function canSeePortal(user, portal) {
   if (!portal) return false
   if (isExecutiveUser(user)) return true
-  return getVisiblePortalChildren(user, portal).length > 0
+  return getVisiblePortalChildren(user, portal).some((child) => !isSupplementalNavItem(child))
 }
 
 export function getVisiblePortals(user, portals) {
@@ -107,16 +111,18 @@ export function canAccessRoute(user, portal, page, portals) {
   if (!p || !canSeePortal(user, p)) return false
   const resolved = page || p.defaultPage
   const child = findPortalChild(portals, portal, resolved)
-  if (!child) return resolved === p.defaultPage && getVisiblePortalChildren(user, p).length > 0
+  if (!child) {
+    if (resolved === 'notifications') return canSeePortal(user, p)
+    return resolved === p.defaultPage && getVisiblePortalChildren(user, p).some((c) => !isSupplementalNavItem(c))
+  }
+  if (isSupplementalNavItem(child)) return canSeePortal(user, p)
   return canSeeNavItem(user, child)
 }
 
 export function getFirstAccessibleRoute(user, portals) {
   for (const portal of getVisiblePortals(user, portals)) {
-    const children = getVisiblePortalChildren(user, portal)
-    if (children.length) {
-      return { portal: portal.id, page: children[0].key }
-    }
+    const page = getFirstAccessiblePageForPortal(user, portal)
+    if (page) return { portal: portal.id, page }
   }
   return null
 }
@@ -124,12 +130,14 @@ export function getFirstAccessibleRoute(user, portals) {
 export function getFirstAccessiblePageForPortal(user, portal) {
   if (!portal) return null
   const children = getVisiblePortalChildren(user, portal)
-  if (!children.length) return null
+  const landing = children.filter((c) => !isSupplementalNavItem(c))
+  const pool = landing.length ? landing : children
+  if (!pool.length) return null
   const defaultPage = portal.defaultPage
-  if (defaultPage && children.some((c) => c.key === defaultPage)) {
+  if (defaultPage && pool.some((c) => c.key === defaultPage)) {
     return defaultPage
   }
-  return children[0].key
+  return pool[0].key
 }
 
 /** سازگاری با کد قدیمی */

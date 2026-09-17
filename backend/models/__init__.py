@@ -103,6 +103,11 @@ from .rfm import (
     RfmSegment,
     RfmSettings,
 )
+from .notifications import (
+    Notification,
+    NotificationReceipt,
+    TicketMessage,
+)
 from .people import (
     Customer,
     CustomerAttendance,

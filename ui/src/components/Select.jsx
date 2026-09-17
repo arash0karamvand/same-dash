@@ -21,6 +21,7 @@ export default function Select({
   const strValue = value == null ? '' : String(value)
   const selected = options.find((o) => String(o.value) === strValue)
   const display = selected ? selected.label : placeholder
+  const displayHint = selected?.hint
 
   useEffect(() => {
     if (!open || !listRef.current) return
@@ -45,7 +46,10 @@ export default function Select({
         aria-haspopup="listbox"
         aria-label={label}
       >
-        <span className={fromLegacy("select-trigger-text")}>{display}</span>
+        <span className={fromLegacy("select-trigger-text")}>
+          <span>{display}</span>
+          {displayHint && <span className={fromLegacy("select-trigger-hint")}>{displayHint}</span>}
+        </span>
         <span className={fromLegacy("jcal-trigger-chevron")} aria-hidden>{open ? '▲' : '▼'}</span>
       </button>
 
@@ -68,7 +72,10 @@ export default function Select({
                 className={fromLegacy(`select-option ${isSel ? 'selected' : ''}`)}
                 onClick={() => pick(opt)}
               >
-                <span>{opt.label}</span>
+                <span className={fromLegacy("select-option-main")}>
+                  <span>{opt.label}</span>
+                  {opt.hint && <span className={fromLegacy("select-option-hint")}>{opt.hint}</span>}
+                </span>
                 {isSel && <span className={fromLegacy("select-check")} aria-hidden>✓</span>}
               </button>
             )

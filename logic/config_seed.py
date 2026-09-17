@@ -88,7 +88,7 @@ DEFAULT_LOOKUPS = [
     ("payment_status", "paid", "پرداخت‌شده", 0, {"color": "#10b981"}),
     ("payment_status", "unpaid", "پرداخت‌نشده", 1, {"color": "#ef4444"}),
     ("payment_status", "installment", "قسطی", 2, {"color": "#f59e0b"}),
-    ("order_kind", "normal", "فروش عادی", 0, {}),
+    ("order_kind", "normal", "فروش و پرداخت آنی", 0, {}),
     ("order_kind", "pre_invoice", "پیش‌فاکتور (بیعانه + تایید/لغو)", 1, {}),
     ("order_kind", "deposit", "بیعانیه (پرداخت روز قبل تحویل)", 2, {}),
     ("order_status", "confirmed", "تایید شده", 0, {"color": "#10b981"}),
@@ -101,6 +101,7 @@ DEFAULT_LOOKUPS = [
     ("staff_kind", "manager", "مدیر", 1, {}),
     ("attendance_status", "present", "حاضر", 0, {}),
     ("attendance_status", "absent", "غایب", 1, {}),
+    ("attendance_status", "leave", "مرخصی", 2, {}),
     ("approval_status", "pending", "در انتظار", 0, {}),
     ("approval_status", "approved", "تایید شده", 1, {}),
     ("approval_status", "rejected", "رد شده", 2, {}),
@@ -121,11 +122,11 @@ REFERENCE_ROWS = {
         ("cash", "نقدی"), ("card", "کارت‌خوان"), ("check", "چک"),
     ],
     PaymentStatus: [("paid", "پرداخت‌شده"), ("unpaid", "پرداخت‌نشده"), ("installment", "قسطی")],
-    OrderKind: [("normal", "فروش عادی"), ("pre_invoice", "پیش‌فاکتور"), ("deposit", "بیعانیه")],
+    OrderKind: [("normal", "فروش و پرداخت آنی"), ("pre_invoice", "پیش‌فاکتور"), ("deposit", "بیعانیه")],
     OrderStatus: [("confirmed", "تایید شده"), ("pending", "در انتظار"), ("cancelled", "لغو شده")],
     AccountingMode: [("automatic", "حسابداری خودکار"), ("manual", "حسابداری دستی")],
     InstallmentStatus: [("pending", "در انتظار"), ("paid", "پرداخت‌شده"), ("cancelled", "لغوشده")],
-    AttendanceStatus: [("present", "حاضر"), ("absent", "غایب")],
+    AttendanceStatus: [("present", "حاضر"), ("absent", "غایب"), ("leave", "مرخصی")],
     ApprovalStatus: [("pending", "در انتظار تایید"), ("approved", "تایید شده"), ("rejected", "رد شده")],
     MaterialStatus: [("pending", "در انتظار تایید اداری"), ("approved", "تایید شده"), ("rejected", "رد شده")],
     SmsStatus: [
@@ -155,6 +156,7 @@ ORG_BUILTIN_ROLES = [
         "needs_branch": False,
         "color": "#b91c1c",
         "sort_order": 0,
+        "department": "managers",
         "grants_full_access": True,
         "is_locked": True,
     },
@@ -166,6 +168,7 @@ ORG_BUILTIN_ROLES = [
         "needs_branch": False,
         "color": "#ef4444",
         "sort_order": 1,
+        "department": "managers",
         "grants_full_access": True,
         "is_locked": True,
     },
@@ -177,6 +180,7 @@ ORG_BUILTIN_ROLES = [
         "needs_branch": False,
         "color": "#8b5cf6",
         "sort_order": 2,
+        "department": "managers",
         "permissions": sorted([
             VIEW_DASHBOARD, VIEW_ACCOUNTING, VIEW_REPORTS, VIEW_INSTALLMENTS, SEND_SMS,
             VIEW_SALES,
@@ -190,6 +194,7 @@ ORG_BUILTIN_ROLES = [
         "needs_branch": True,
         "color": "#0ea5e9",
         "sort_order": 3,
+        "department": "shop",
         "permissions": sorted([
             VIEW_DASHBOARD, VIEW_CUSTOMERS, CREATE_CUSTOMER, CREATE_SALE, EDIT_SALE,
             APPROVE_SALE_BRANCH, VIEW_PRODUCTS, SELF_CHECK_IN,
@@ -203,6 +208,7 @@ ORG_BUILTIN_ROLES = [
         "needs_branch": False,
         "color": "#10b981",
         "sort_order": 4,
+        "department": "office",
         "permissions": sorted([
             VIEW_DASHBOARD, VIEW_ACCOUNTING, CREATE_ACCOUNTING, EDIT_ACCOUNTING,
             APPROVE_ACCOUNTING, APPROVE_SALE_ACCOUNTING, EDIT_SALE, VIEW_REPORTS, VIEW_INSTALLMENTS,
@@ -220,6 +226,7 @@ ORG_BUILTIN_ROLES = [
         "needs_branch": True,
         "color": "#6366f1",
         "sort_order": 5,
+        "department": "shop",
         "permissions": sorted([
             VIEW_DASHBOARD, VIEW_CUSTOMERS, CREATE_CUSTOMER, CREATE_SALE,
             VIEW_SALES_SUMMARY, VIEW_PRODUCTS, SELF_CHECK_IN,
@@ -233,6 +240,7 @@ ORG_BUILTIN_ROLES = [
         "needs_branch": False,
         "color": "#78716c",
         "sort_order": 6,
+        "department": "factory",
         "permissions": sorted([
             VIEW_DASHBOARD, VIEW_FACTORY_ORDERS, MANAGE_FACTORY_ORDERS,
             VIEW_FACTORY_PRODUCTS, MANAGE_FACTORY_PRODUCTS,
@@ -247,6 +255,7 @@ ORG_BUILTIN_ROLES = [
         "needs_branch": False,
         "color": "#ea580c",
         "sort_order": 7,
+        "department": "factory",
         "permissions": sorted([VIEW_DASHBOARD, VIEW_FREIGHT_ORDERS, MANAGE_FREIGHT_ORDERS]),
     },
 ]
@@ -398,6 +407,8 @@ def _role_defaults(spec, perms, parent):
     if _column_exists("backend_roledefinition", "grants_full_access"):
         data["grants_full_access"] = bool(spec.get("grants_full_access"))
         data["is_locked"] = bool(spec.get("is_locked"))
+    if _column_exists("backend_roledefinition", "department"):
+        data["department"] = spec.get("department") or ""
     return data
 
 
@@ -435,6 +446,11 @@ def _sync_existing_role_structure(rd, spec, perms):
         if spec.get("is_locked") and not rd.is_locked:
             rd.is_locked = True
             updates.append("is_locked")
+    if _column_exists("backend_roledefinition", "department"):
+        wanted = spec.get("department") or ""
+        if (rd.department or "") != wanted:
+            rd.department = wanted
+            updates.append("department")
     if updates:
         rd.save(update_fields=updates)
     if locked:
@@ -505,6 +521,33 @@ def seed_config_defaults():
     seed_menu_sections()
     seed_org_ranks()
     seed_org_roles()
+    try:
+        from logic.attendance_settings import set_attendance_enforced
+
+        if not LookupOption.objects.filter(category="system", code="attendance_enforced").exists():
+            set_attendance_enforced(True)
+    except OperationalError:
+        pass
+    try:
+        from logic.ticket_grades import TICKET_GRADES_CODE, set_ticket_grades
+
+        if not LookupOption.objects.filter(category="system", code=TICKET_GRADES_CODE).exists():
+            set_ticket_grades()
+    except OperationalError:
+        pass
+    try:
+        from logic.inventory_settings import set_manual_stock_locked
+
+        if not LookupOption.objects.filter(category="system", code="manual_stock_locked").exists():
+            set_manual_stock_locked(False)
+    except OperationalError:
+        pass
+    try:
+        from logic.stock_locations import ensure_central_warehouse
+
+        ensure_central_warehouse()
+    except Exception:
+        pass
     try:
         for code, label in PERMISSION_LABELS.items():
             Permission.objects.filter(code=code).exclude(label=label).update(label=label)

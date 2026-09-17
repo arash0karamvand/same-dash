@@ -1,7 +1,9 @@
 """تست نقش‌ها، مجوزها و همگام‌سازی superuser."""
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.test import Client, TestCase
+
+import json
 
 from auth import roles
 from auth.permissions import (
@@ -190,3 +192,110 @@ class RolePermissionTest(TestCase):
         rd = RoleDefinition.objects.get(slug=roles.SALES_EXPERT)
         self.assertTrue(rd.is_builtin)
         self.assertIn(VIEW_DASHBOARD, rd.permissions)
+        self.assertEqual(rd.department, "shop")
+
+
+class UserDepartmentTest(TestCase):
+    def setUp(self):
+        seed_builtin_roles()
+        self.admin = User.objects.create_user(username="deptadm", password="secret123")
+        roles.assign_role(self.admin, roles.ADMIN)
+        self.client = Client()
+        self.client.login(username="deptadm", password="secret123")
+
+    def _create(self, username, role, branch=None):
+        from auth.views import apply_user_access
+
+        user = User.objects.create_user(username=username, password="secret123")
+        apply_user_access(user, role, branch)
+        return user
+
+    def test_builtin_roles_have_departments(self):
+        mapping = {
+            roles.CEO: "managers",
+            roles.ADMIN: "managers",
+            roles.CO_CEO: "managers",
+            roles.BRANCH_SUPERVISOR: "shop",
+            roles.SALES_EXPERT: "shop",
+            roles.ACCOUNTING_FINANCE: "office",
+            roles.FACTORY_SUPERVISOR: "factory",
+            roles.FREIGHT_SUPERVISOR: "factory",
+        }
+        for slug, department in mapping.items():
+            self.assertEqual(RoleDefinition.objects.get(slug=slug).department, department)
+
+    def test_user_dict_includes_primary_department(self):
+        from auth.views import user_to_dict
+
+        expert = self._create("dexpert", roles.SALES_EXPERT, "branch_1")
+        payload = user_to_dict(expert)
+        self.assertEqual(payload["primary_department"], "shop")
+        self.assertEqual(payload["department_label"], "فروشگاه")
+
+    def test_replace_clears_extras_and_assigns_role(self):
+        from auth.views import set_user_extra_permissions
+
+        expert = self._create("dcut", roles.SALES_EXPERT, "branch_1")
+        set_user_extra_permissions(expert, [VIEW_ACCOUNTING, VIEW_CUSTOMERS])
+        resp = self.client.post(
+            f"/api/auth/users/{expert.id}/assign-department/",
+            data=json.dumps({
+                "department": "office",
+                "mode": "replace",
+                "role": roles.ACCOUNTING_FINANCE,
+            }),
+            content_type="application/json",
+        )
+        body = json.loads(resp.content)
+        self.assertEqual(resp.status_code, 200, msg=body)
+        self.assertEqual(body["data"]["primary_department"], "office")
+        self.assertEqual(body["data"]["role"], roles.ACCOUNTING_FINANCE)
+        self.assertEqual(body["data"]["extra_permissions"], [])
+
+    def test_keep_preserves_other_extras_and_requires_selection(self):
+        from auth.views import set_user_extra_permissions
+
+        expert = self._create("dkeep", roles.SALES_EXPERT, "branch_1")
+        set_user_extra_permissions(expert, [VIEW_ACCOUNTING, CREATE_SALE])
+        empty = self.client.post(
+            f"/api/auth/users/{expert.id}/assign-department/",
+            data=json.dumps({
+                "department": "office",
+                "mode": "keep",
+                "selected_permissions": [],
+            }),
+            content_type="application/json",
+        )
+        empty_body = json.loads(empty.content)
+        self.assertEqual(empty.status_code, 400)
+        self.assertIn("یکی", empty_body.get("error") or "")
+
+        kept = self.client.post(
+            f"/api/auth/users/{expert.id}/assign-department/",
+            data=json.dumps({
+                "department": "office",
+                "mode": "keep",
+                "selected_permissions": [VIEW_ACCOUNTING],
+            }),
+            content_type="application/json",
+        )
+        body = json.loads(kept.content)
+        self.assertEqual(kept.status_code, 200, msg=body)
+        self.assertEqual(body["data"]["primary_department"], "office")
+        self.assertEqual(body["data"]["role"], roles.SALES_EXPERT)
+        self.assertIn(VIEW_ACCOUNTING, body["data"]["extra_permissions"])
+        self.assertIn(CREATE_SALE, body["data"]["extra_permissions"])
+
+    def test_full_access_cannot_leave_managers(self):
+        ceo = self._create("dceo", roles.CEO)
+        resp = self.client.post(
+            f"/api/auth/users/{ceo.id}/assign-department/",
+            data=json.dumps({
+                "department": "shop",
+                "mode": "keep",
+                "selected_permissions": [VIEW_CUSTOMERS],
+            }),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 400)
+

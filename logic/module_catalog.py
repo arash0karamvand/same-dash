@@ -15,7 +15,15 @@ def _mod(module_id, label, icon, page_key, menu_permissions, section_permissions
     }
 
 
-# زیرماژول‌های هر پورتال (هم‌تراز با ui/src/config/portals.js)
+def _notifications_mod(portal_id):
+    return _mod(
+        f"{portal_id}_notifications",
+        "اعلان‌ها",
+        "✉️",
+        "notifications",
+        [],
+        [],
+    )
 PORTAL_MODULE_SPECS = [
     {
         "id": "managers",
@@ -33,6 +41,7 @@ PORTAL_MODULE_SPECS = [
                 [P.VIEW_DASHBOARD],
                 executive_only=True,
             ),
+            _notifications_mod("managers"),
             _mod(
                 "managers_orders",
                 "صف ارسال به اداری",
@@ -173,6 +182,7 @@ PORTAL_MODULE_SPECS = [
         "page_key": "shop",
         "default_page": "shop",
         "modules": [
+            _notifications_mod("shop"),
             _mod(
                 "shop_orders",
                 "سفارش‌ها",
@@ -228,6 +238,7 @@ PORTAL_MODULE_SPECS = [
         "page_key": "office",
         "default_page": "office",
         "modules": [
+            _notifications_mod("office"),
             _mod(
                 "office_approve",
                 "تایید سفارش",
@@ -376,6 +387,7 @@ PORTAL_MODULE_SPECS = [
         "page_key": "factory",
         "default_page": "factory",
         "modules": [
+            _notifications_mod("factory"),
             _mod(
                 "factory_production",
                 "ساخت",
@@ -439,10 +451,10 @@ def _codes_for_pool(codes, pool):
     return [c for c in codes if c in pool]
 
 
-def _module_for_matrix(mod, pool):
+def _module_for_matrix(mod, pool, *, include_empty=False):
     menu_codes = _codes_for_pool(mod["menu_permissions"], pool)
     section_codes = sorted(set(_codes_for_pool(mod["section_permissions"], pool)))
-    if not menu_codes and not section_codes:
+    if not menu_codes and not section_codes and not include_empty:
         return None
     return {
         "id": mod["id"],
@@ -463,7 +475,7 @@ def _module_for_matrix(mod, pool):
     }
 
 
-def portal_modules_for_matrix(assignable_only=False):
+def portal_modules_for_matrix(assignable_only=False, *, include_empty_modules=False):
     pool = P.ASSIGNABLE_PERMISSIONS if assignable_only else P.ALL_PERMISSIONS
     portals = []
     for portal in PORTAL_MODULE_SPECS:
@@ -471,7 +483,7 @@ def portal_modules_for_matrix(assignable_only=False):
         for mod in portal["modules"]:
             if assignable_only and mod.get("system_admin"):
                 continue
-            item = _module_for_matrix(mod, pool)
+            item = _module_for_matrix(mod, pool, include_empty=include_empty_modules)
             if item:
                 modules.append(item)
         if not modules:
@@ -495,8 +507,8 @@ def portal_modules_for_matrix(assignable_only=False):
 
 
 def module_tree_for_config():
-    """درخت ماژول برای فرانت — بدون فیلتر assignable."""
-    return portal_modules_for_matrix(assignable_only=False)
+    """درخت ماژول برای فرانت — شامل صفحات بدون مجوز مثل اعلان‌ها."""
+    return portal_modules_for_matrix(assignable_only=False, include_empty_modules=True)
 
 
 def sync_menu_section_permissions():

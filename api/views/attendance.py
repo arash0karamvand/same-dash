@@ -15,11 +15,13 @@ from logic.attendance import (
     get_active_seller,
     get_record,
     list_attendance_base_qs,
+    request_branch_switch,
     soft_delete_attendance,
     today_status_for_seller,
     update_attendance_record,
     upsert_manager_attendance,
 )
+from logic.sale_attendance import evaluate_sale_attendance
 from logic.sellers import get_seller_for_user
 
 
@@ -178,6 +180,35 @@ def attendance_today(request):
         return fail("پروفایل فروشنده یافت نشد. از مدیر بخواهید شعبه و نقش شما را تنظیم کند.", status=404)
 
     return success(today_status_for_seller(seller))
+
+
+@api_view("GET")
+def attendance_sale_gate(request):
+    if not request.user.is_authenticated:
+        return fail("Unauthorized", status=401)
+    return success(evaluate_sale_attendance(request.user, requested_branch=request.GET.get("branch") or ""))
+
+
+@api_view("POST")
+def attendance_request_branch_switch(request):
+    if not has_permission(request.user, SELF_CHECK_IN):
+        return fail("Permission denied", status=403)
+    seller = get_seller_for_user(request.user)
+    if seller is None:
+        return fail("پروفایل فروشنده یافت نشد. از مدیر بخواهید شعبه و نقش شما را تنظیم کند.", status=404)
+    data = parse_json(request)
+    try:
+        notification, record = request_branch_switch(seller, request.user, data.get("to_branch") or "")
+    except ValueError as exc:
+        return fail(str(exc), status=400)
+    log_action(
+        request.user,
+        "update",
+        f"درخواست تغییر شعبه {seller.full_name}",
+        entity_type="StaffAttendance",
+        entity_id=record.id,
+    )
+    return success({"notification_id": notification.id, "record": attendance_to_dict(record)})
 
 
 @api_view("POST")

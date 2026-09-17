@@ -8,6 +8,7 @@ from auth.views import (  # noqa: F401
     me,
     reset_business_data,
     role_list,
+    user_assign_department,
     user_deactivate,
     user_detail,
     user_list,

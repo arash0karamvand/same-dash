@@ -637,6 +637,7 @@ def can_edit_sale(user, sale):
 def can_view_sale(user, sale):
     """معلق‌ها فقط مدیران و مسئول همان مرحله."""
     from auth.org_roles import (
+        is_accounting_finance,
         is_branch_supervisor,
         is_executive_user,
         is_factory_supervisor,

@@ -2,10 +2,10 @@
 
 
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { fromLegacy } from '../styles/tw.js'
 
-import { salesApi } from '../api/client'
+import { salesApi, attendanceApi } from '../api/client'
 import { PAGE_GUIDE_DEFAULTS } from '../config/pageGuideDefaults'
 import { useRegisterPageGuide } from '../context/PageGuideContext'
 
@@ -19,6 +19,7 @@ import { CHECK_FORM_MAX_ROWS } from '../config/checkForm'
 import InvoiceModal from '../components/InvoiceModal'
 import MoneyInput from '../components/MoneyInput'
 import ProductLines from '../components/ProductLines'
+import AttendanceWidget from '../components/AttendanceWidget'
 import PersianDateInput from '../components/PersianDateInput'
 import SaleDiscountFields, { saleBalanceDue } from '../components/SaleDiscountFields'
 import Select from '../components/Select'
@@ -46,7 +47,7 @@ const PAYMENT_METHODS = [
 
 
 const ORDER_KINDS = [
-  { value: 'normal', label: 'فروش عادی' },
+  { value: 'normal', label: 'فروش و پرداخت آنی' },
   { value: 'pre_invoice', label: 'پیش‌فاکتور (بیعانه + تایید/لغو)' },
   { value: 'deposit', label: 'بیعانیه (پرداخت روز قبل تحویل)' },
 ]
@@ -92,7 +93,9 @@ const EMPTY_FORM = {
   installments: [],
 
   line_items: [],
-
+  stock_source_kind: 'warehouse',
+  stock_source_warehouse_id: '',
+  stock_source_branch: '',
 }
 
 
@@ -127,6 +130,76 @@ function isPreInvoice(form) {
 
 function isDeposit(form) {
   return form.order_kind === 'deposit'
+}
+
+function isStockSourceSelected(form) {
+  if (form.stock_source_kind === 'warehouse') return Boolean(form.stock_source_warehouse_id)
+  if (form.stock_source_kind === 'branch') return Boolean(form.stock_source_branch)
+  return false
+}
+
+function validateSaleSubmit({
+  editing,
+  form,
+  selectedCustomer,
+  pickBranchOnSale,
+  isShop,
+  shopDeliveryMinIso,
+  shopDeliveryMaxIso,
+  saleGate,
+  stockLocations,
+}) {
+  if (!editing && saleGate?.blocked) return saleGate.reason
+
+  if (editing) {
+    if (!Number(form.amount) || Number(form.amount) <= 0) {
+      return 'مبلغ فروش را وارد کنید.'
+    }
+    return null
+  }
+
+  if (!selectedCustomer?.id && !selectedCustomer?.full_name) {
+    return 'مشتری را انتخاب یا ثبت کنید.'
+  }
+  if (!selectedCustomer?.id && (!selectedCustomer?.phone || !selectedCustomer?.address)) {
+    return 'برای مشتری جدید، شماره تماس و آدرس الزامی است.'
+  }
+  if (pickBranchOnSale && !form.branch) {
+    return 'انتخاب شعبه الزامی است.'
+  }
+  if ((stockLocations || []).length > 0 && !isStockSourceSelected(form)) {
+    return 'منبع موجودی را انتخاب کنید.'
+  }
+  if (isDeposit(form) && !form.delivery_date) {
+    return 'برای بیعانیه، تاریخ تحویل الزامی است.'
+  }
+  if (form.line_items?.length) {
+    const invalid = form.line_items.some((i) => !i.product_id || !Number(i.unit_price))
+    if (invalid) return 'هر ردیف باید محصول با قیمت تعریف‌شده در کاتالوگ داشته باشد.'
+    const amount = form.line_items.reduce(
+      (s, i) => s + Number(i.unit_price || 0) * Number(i.quantity || 1),
+      0,
+    )
+    if (amount <= 0) return 'مبلغ فروش باید بیشتر از صفر باشد — قیمت محصول را در کاتالوگ بررسی کنید.'
+  } else if (!Number(form.amount)) {
+    return 'محصول انتخاب کنید یا مبلغ فروش را وارد کنید.'
+  }
+  if (form.payment_method === 'check' && !isPreInvoice(form) && !isDeposit(form) && form.paid_amount === '') {
+    return 'برای فروش با چک، پرداخت اولیه را وارد کنید (۰ اگر پرداختی نبود).'
+  }
+  if (showInstallmentSection(form, isShop) && form.installments.length) {
+    if (form.installments.length > CHECK_FORM_MAX_ROWS) {
+      return `حداکثر ${CHECK_FORM_MAX_ROWS} چک مطابق فرم اکسل قابل ثبت است.`
+    }
+    const incomplete = form.installments.some((i) => Number(i.amount) > 0 && !i.due_date)
+    if (incomplete) return 'برای هر چک، تاریخ سررسید الزامی است.'
+  }
+  if (isShop && form.delivery_date) {
+    if (form.delivery_date < shopDeliveryMinIso || form.delivery_date > shopDeliveryMaxIso) {
+      return `تاریخ تحویل باید بین ${formatJalali(shopDeliveryMinIso)} و ${formatJalali(shopDeliveryMaxIso)} باشد.`
+    }
+  }
+  return null
 }
 
 function ShopDailyBreakdownSection({ data, loading, breakdownMonth, onMonthChange, compact = false }) {
@@ -202,7 +275,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
 
   const { user } = useAuth()
   const confirm = useConfirm()
-  const { choices, branchOptions } = useConfig()
+  const { choices, branchOptions, stockLocations } = useConfig()
   const paymentMethods = choices('payment_method').length ? choices('payment_method') : PAYMENT_METHODS
   const orderKinds = choices('order_kind').length ? choices('order_kind') : ORDER_KINDS
   const orderStatusColors = Object.fromEntries(
@@ -217,7 +290,6 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
   const summaryOnly = viewSalesSummary && !viewAllSales && !viewOwnSales
   const canViewList = !summaryOnly
   const canCreateSale = hasPermission(user, 'create_sale')
-  const pickBranchOnSale = isExecutiveUser(user) && canCreateSale
   const canApproveBranch = canApproveSaleBranch(user)
   const canApproveAccounting = hasPermission(user, 'approve_sale_accounting')
   const branchQueueOnly = canApproveBranch && !viewAllSales
@@ -294,6 +366,14 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
   const [salesOffset, setSalesOffset] = useState(0)
 
   const [error, setError] = useState('')
+  const [formError, setFormError] = useState('')
+  const formErrorRef = useRef(null)
+
+  useEffect(() => {
+    if (formError && formErrorRef.current) {
+      formErrorRef.current.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    }
+  }, [formError])
 
   const [modalOpen, setModalOpen] = useState(false)
 
@@ -308,6 +388,31 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
   const [excelLoadingId, setExcelLoadingId] = useState(null)
 
   const [form, setForm] = useState(EMPTY_FORM)
+  const [saleGate, setSaleGate] = useState(null)
+  const pickBranchOnSale = Boolean(canCreateSale && (saleGate?.must_pick_branch || (isExecutiveUser(user) && !saleGate)))
+
+  const refreshSaleGate = useCallback(async () => {
+    if (!canCreateSale) return
+    try {
+      const data = await attendanceApi.saleGate()
+      setSaleGate(data)
+    } catch {
+      setSaleGate({
+        blocked: true,
+        reason: 'وضعیت حضور قابل بررسی نیست؛ اتصال به سرور را بررسی کنید.',
+        must_pick_branch: false,
+      })
+    }
+  }, [canCreateSale, user?.id])
+
+  useEffect(() => {
+    if (!canCreateSale) return undefined
+    let cancelled = false
+    refreshSaleGate().catch(() => {
+      if (!cancelled) setSaleGate(null)
+    })
+    return () => { cancelled = true }
+  }, [canCreateSale, refreshSaleGate])
 
   const [filters, setFilters] = useState({ payment_method: '', payment_status: '', order_kind: '', date_from: '', date_to: '', search: '' })
 
@@ -494,9 +599,18 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
 
 
   const openCreate = () => {
+    const defaultLocation = (stockLocations || [])[0]
     setEditing(null)
-    setForm(EMPTY_FORM)
+    setForm({
+      ...EMPTY_FORM,
+      stock_source_kind: defaultLocation?.kind || '',
+      stock_source_warehouse_id: defaultLocation?.warehouse_id
+        ? String(defaultLocation.warehouse_id)
+        : '',
+      stock_source_branch: defaultLocation?.branch || '',
+    })
     setSelectedCustomer(null)
+    setFormError('')
     setModalOpen(true)
   }
 
@@ -524,6 +638,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
 
     })
 
+    setFormError('')
     setModalOpen(true)
 
   }
@@ -649,14 +764,33 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
     })
   }
 
-  const save = async (e) => {
+  const shopDeliveryMinIso = todayIso()
+  const shopDeliveryMaxIso = addYearsToIso(shopDeliveryMinIso, 3)
+  const shopDeliveryDateProps = isShop
+    ? { minIso: shopDeliveryMinIso, maxIso: shopDeliveryMaxIso }
+    : {}
 
+  const save = async (e) => {
     e.preventDefault()
+    const validationError = validateSaleSubmit({
+      editing,
+      form,
+      selectedCustomer,
+      pickBranchOnSale,
+      isShop,
+      shopDeliveryMinIso,
+      shopDeliveryMaxIso,
+      saleGate,
+      stockLocations,
+    })
+    if (validationError) {
+      setFormError(validationError)
+      return
+    }
 
     try {
-
+      setFormError('')
       if (editing) {
-
         await salesApi.update(editing.id, {
           description: form.description,
           invoice_number: form.invoice_number,
@@ -666,9 +800,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
           discount_value: Number(form.discount_value) || 0,
           paid_amount: Number(form.paid_amount),
         })
-
       } else {
-
         const payload = {
           amount: Number(form.amount),
           discount_type: form.discount_type || 'amount',
@@ -681,19 +813,19 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
           description: form.description,
         }
 
-        if (pickBranchOnSale && !editing) {
-          if (!form.branch) {
-            setError('انتخاب شعبه الزامی است.')
-            return
-          }
+        if (pickBranchOnSale) {
           payload.branch = form.branch
         }
 
+        payload.stock_source_kind = form.stock_source_kind
+        if (form.stock_source_kind === 'warehouse') {
+          payload.stock_source_warehouse_id = Number(form.stock_source_warehouse_id)
+        }
+        if (form.stock_source_kind === 'branch') {
+          payload.stock_source_branch = form.stock_source_branch
+        }
+
         if (isDeposit(form)) {
-          if (!form.delivery_date) {
-            setError('برای بیعانیه، تاریخ تحویل الزامی است.')
-            return
-          }
           payload.delivery_date = form.delivery_date
           payload.paid_amount = Number(form.paid_amount || 0)
         }
@@ -703,56 +835,26 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
         }
 
         if (form.line_items?.length) {
-          const invalid = form.line_items.some((i) => !i.product_id || !Number(i.unit_price))
-          if (invalid) {
-            setError('هر ردیف باید محصول با قیمت تعریف‌شده در کاتالوگ داشته باشد.')
-            return
-          }
           payload.line_items = form.line_items.map((i) => ({
             product_id: i.product_id,
             variant_id: i.variant_id || null,
             quantity: Number(i.quantity || 1),
           }))
-
           payload.amount = form.line_items.reduce(
             (s, i) => s + Number(i.unit_price || 0) * Number(i.quantity || 1),
             0,
           )
-          if (payload.amount <= 0) {
-            setError('مبلغ فروش باید بیشتر از صفر باشد — قیمت محصول را در کاتالوگ بررسی کنید.')
-            return
-          }
-        } else if (!Number(form.amount)) {
-          setError('محصول انتخاب کنید یا مبلغ فروش را وارد کنید.')
-          return
         }
 
-        if (selectedCustomer?.id) payload.customer_id = selectedCustomer.id
-
-        else if (selectedCustomer?.full_name) {
-
+        if (selectedCustomer?.id) {
+          payload.customer_id = selectedCustomer.id
+        } else {
           payload.new_customer = {
-
             full_name: selectedCustomer.full_name,
-
             phone: selectedCustomer.phone,
-
             address: selectedCustomer.address || '',
-
             birthday: selectedCustomer.birthday || '',
-
           }
-
-        }
-
-        if (!selectedCustomer?.id && !selectedCustomer?.full_name) {
-          setError('مشتری را انتخاب یا ثبت کنید.')
-          return
-        }
-
-        if (!selectedCustomer?.id && (!selectedCustomer?.phone || !selectedCustomer?.address)) {
-          setError('برای مشتری جدید، شماره تماس و آدرس الزامی است.')
-          return
         }
 
         if (form.payment_method === 'check' && !isPreInvoice(form) && !isDeposit(form)) {
@@ -760,10 +862,6 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
         }
 
         if (showInstallmentSection(form, isShop) && form.installments.length) {
-          if (form.installments.length > CHECK_FORM_MAX_ROWS) {
-            setError(`حداکثر ${CHECK_FORM_MAX_ROWS} چک مطابق فرم اکسل قابل ثبت است.`)
-            return
-          }
           payload.installments = form.installments
             .filter((i) => Number(i.amount) > 0)
             .map((i) => ({
@@ -778,64 +876,41 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
             }))
         }
 
-        if (form.payment_method === 'check' && !isPreInvoice(form) && !isDeposit(form) && form.paid_amount === '') {
-          setError('برای فروش با چک، پرداخت اولیه را وارد کنید (۰ اگر پرداختی نبود).')
-          return
-        }
-
         if (!isDeposit(form) && form.delivery_date) {
           payload.delivery_date = form.delivery_date
         }
 
-        if (isShop && form.delivery_date) {
-          if (form.delivery_date < shopDeliveryMinIso || form.delivery_date > shopDeliveryMaxIso) {
-            setError(`تاریخ تحویل باید بین ${formatJalali(shopDeliveryMinIso)} و ${formatJalali(shopDeliveryMaxIso)} باشد.`)
-            return
-          }
-        }
-
         await salesApi.create(payload)
-
       }
 
       setModalOpen(false)
-
       setForm(EMPTY_FORM)
-
       setEditing(null)
-
       setSelectedCustomer(null)
-
+      setFormError('')
       load()
-
     } catch (err) {
-
-      setError(err.message)
-
+      setFormError(err.message)
     }
-
   }
 
 
 
   const submitPayment = async (e) => {
-
     e.preventDefault()
-
-    try {
-
-      await salesApi.recordPayment(payModal.id, { amount: Number(payAmount) })
-
-      setPayModal(null)
-
-      load()
-
-    } catch (err) {
-
-      setError(err.message)
-
+    if (!Number(payAmount) || Number(payAmount) <= 0) {
+      setFormError('مبلغ پرداخت را وارد کنید.')
+      return
     }
 
+    try {
+      setFormError('')
+      await salesApi.recordPayment(payModal.id, { amount: Number(payAmount) })
+      setPayModal(null)
+      load()
+    } catch (err) {
+      setFormError(err.message)
+    }
   }
 
 
@@ -866,11 +941,6 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
 
 
   const jNow = currentJalali()
-  const shopDeliveryMinIso = todayIso()
-  const shopDeliveryMaxIso = addYearsToIso(shopDeliveryMinIso, 3)
-  const shopDeliveryDateProps = isShop
-    ? { minIso: shopDeliveryMinIso, maxIso: shopDeliveryMaxIso }
-    : {}
   const walletBalance = selectedCustomer?.wallet_balance ?? editing?.customer_wallet_balance ?? 0
   const customerSelected = Boolean(selectedCustomer?.id || editing?.customer_id)
 
@@ -890,6 +960,10 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
   return (
 
     <div className={fromLegacy(`page sales-page${shopOfficeQueue ? ' sales-page-shop-office' : ''}`)}>
+
+      {isShop && hasPermission(user, 'self_check_in') && !isSystemAdmin(user) && (
+        <AttendanceWidget onStatusChange={refreshSaleGate} />
+      )}
 
       {(summaryOnly || (viewOwnSales && !branchQueueOnly)) && (
         <PersonalSalesPanel
@@ -990,7 +1064,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
       <Card
         title={salesPageTitle()}
         className={shopOfficeQueue ? 'shop-office-queue-card-wrap' : ''}
-        actions={canCreateSale ? <Button onClick={openCreate}>+ ثبت فروش</Button> : null}
+        actions={canCreateSale ? <Button onClick={openCreate} disabled={Boolean(saleGate?.blocked)}>+ ثبت فروش</Button> : null}
       >
 
         {error && <div className={fromLegacy("alert-error")}>{error}</div>}
@@ -1399,9 +1473,13 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
 
 
 
-      <Modal title={editing ? 'ویرایش فروش' : 'ثبت فروش'} open={modalOpen} onClose={() => { setModalOpen(false); setEditing(null) }}>
+      <Modal title={editing ? 'ویرایش فروش' : 'ثبت فروش'} open={modalOpen} onClose={() => { setModalOpen(false); setEditing(null); setFormError('') }}>
 
-        <form onSubmit={save} className={fromLegacy("form")}>
+        <form onSubmit={save} className={fromLegacy("form")} noValidate>
+
+          {formError ? (
+            <div className={fromLegacy("alert-error")} role="alert">{formError}</div>
+          ) : null}
 
           {editing ? (
 
@@ -1449,6 +1527,10 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
                 onCreateNew={(c) => setSelectedCustomer(c)}
               />
 
+              {saleGate?.blocked && (
+                <div className={fromLegacy("alert-error")}>{saleGate.reason}</div>
+              )}
+
               {pickBranchOnSale && (
                 <Field label="شعبه">
                   <Select
@@ -1468,9 +1550,46 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
                 />
               </Field>
 
+              <Field label="موجودی از کجا">
+                <Select
+                  value={
+                    form.stock_source_kind === 'warehouse'
+                      ? `warehouse:${form.stock_source_warehouse_id}`
+                      : form.stock_source_kind === 'branch'
+                        ? `branch:${form.stock_source_branch}`
+                        : ''
+                  }
+                  onChange={(v) => {
+                    const loc = (stockLocations || []).find((item) => item.key === v)
+                    if (!loc) {
+                      setForm({ ...form, stock_source_kind: '', stock_source_warehouse_id: '', stock_source_branch: '' })
+                      return
+                    }
+                    setForm({
+                      ...form,
+                      stock_source_kind: loc.kind,
+                      stock_source_warehouse_id: loc.warehouse_id ? String(loc.warehouse_id) : '',
+                      stock_source_branch: loc.branch || '',
+                    })
+                  }}
+                  options={[
+                    { value: '', label: 'انتخاب منبع موجودی…' },
+                    ...(stockLocations || []).map((loc) => ({ value: loc.key, label: loc.label })),
+                  ]}
+                  required
+                />
+              </Field>
+
 
               <ProductLines
                 lines={form.line_items}
+                stockSourceKey={
+                  form.stock_source_kind === 'warehouse' && form.stock_source_warehouse_id
+                    ? `warehouse:${form.stock_source_warehouse_id}`
+                    : form.stock_source_kind === 'branch' && form.stock_source_branch
+                      ? `branch:${form.stock_source_branch}`
+                      : ''
+                }
                 onChange={(line_items) => {
                   const amount = line_items.reduce(
                     (s, i) => s + Number(i.unit_price || 0) * Number(i.quantity || 1),
@@ -1568,7 +1687,10 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
 
           )}
 
-          <Button type="submit">{editing ? 'ذخیره تغییرات' : 'ثبت'}</Button>
+          {formError ? (
+            <div ref={formErrorRef} className={fromLegacy("alert-error")} role="alert">{formError}</div>
+          ) : null}
+          <Button type="submit" disabled={!editing && Boolean(saleGate?.blocked)}>{editing ? 'ذخیره تغییرات' : 'ثبت'}</Button>
 
         </form>
 
@@ -1576,11 +1698,15 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
 
 
 
-      <Modal title="ثبت پرداخت" open={!!payModal} onClose={() => setPayModal(null)}>
+      <Modal title="ثبت پرداخت" open={!!payModal} onClose={() => { setPayModal(null); setFormError('') }}>
 
         {payModal && (
 
-          <form onSubmit={submitPayment} className={fromLegacy("form")}>
+          <form onSubmit={submitPayment} className={fromLegacy("form")} noValidate>
+
+            {formError ? (
+              <div className={fromLegacy("alert-error")} role="alert">{formError}</div>
+            ) : null}
 
             <p className={fromLegacy("muted")}>مانده: {formatMoney(payModal.balance_due)}</p>
 

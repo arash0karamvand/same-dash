@@ -40,6 +40,7 @@ import Cycle from './pages/Cycle'
 import CycleWatch from './pages/CycleWatch'
 import WarehouseOrders from './pages/WarehouseOrders'
 import PickupOrders from './pages/PickupOrders'
+import Notifications from './pages/Notifications'
 import Icon from './components/icons/Icon'
 import { Button } from './components/ui'
 import BrandLogo from './components/BrandLogo'
@@ -70,6 +71,7 @@ const PAGES = {
   'cycle-watch': CycleWatch,
   warehouse: WarehouseOrders,
   pickup: PickupOrders,
+  notifications: Notifications,
   ranking: EmployeeRanking,
   orgchart: OrgChart,
   attendance: Attendance,

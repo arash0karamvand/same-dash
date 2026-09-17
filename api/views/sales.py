@@ -94,11 +94,13 @@ def sale_list(request):
     data = parse_json(request)
     customer_id = data.get("customer_id")
     new_customer = data.get("new_customer")
+    if not customer_id and not new_customer:
+        return fail("مشتری را انتخاب یا ثبت کنید.", status=400)
     if not customer_id and new_customer:
         phone = (new_customer.get("phone") or "").strip()
         name = (new_customer.get("full_name") or "").strip()
         if not name or not phone:
-            return fail("Customer name and phone required", status=400)
+            return fail("نام و شماره تماس مشتری الزامی است.", status=400)
         birthday = parse_date(new_customer.get("birthday")) if new_customer.get("birthday") else None
         customer, created = Customer.objects.get_or_create(
             phone=phone,
@@ -132,8 +134,8 @@ def sale_list(request):
     else:
         try:
             customer = Customer.objects.get(pk=customer_id)
-        except Customer.DoesNotExist:
-            return fail("Invalid customer", status=404)
+        except (Customer.DoesNotExist, TypeError, ValueError):
+            return fail("مشتری انتخاب‌شده نامعتبر است.", status=400)
 
     line_items = data.get("line_items") or []
     try:
@@ -148,6 +150,9 @@ def sale_list(request):
             paid_amount = Decimal(str(paid_amount))
     except (InvalidOperation, TypeError):
         return fail("Invalid amount or discount", status=400)
+
+    if not line_items and amount <= 0:
+        return fail("محصول انتخاب کنید یا مبلغ فروش را وارد کنید.", status=400)
 
     payment_status = normalize_payment_status(data.get("payment_status") or "paid")
     order_kind = (data.get("order_kind") or Sale.ORDER_KIND_NORMAL).strip()
@@ -176,6 +181,13 @@ def sale_list(request):
             order_kind=order_kind,
             delivery_date=delivery_date,
             accounting_mode=data.get("accounting_mode"),
+            stock_source={
+                "kind": data.get("stock_source_kind"),
+                "warehouse_id": data.get("stock_source_warehouse_id"),
+                "branch": data.get("stock_source_branch"),
+            }
+            if data.get("stock_source_kind")
+            else None,
         )
     except ValueError as exc:
         return fail(str(exc), status=400)
@@ -287,6 +299,7 @@ def sale_detail(request, pk):
             kwargs["line_items"] = data.get("line_items") or []
         if "installments" in data:
             kwargs["installments"] = data.get("installments") or []
+        kwargs["recorded_by"] = request.user
         sale = update_sale(sale, **kwargs)
     except ValueError as exc:
         return fail(str(exc), status=400)

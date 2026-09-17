@@ -192,7 +192,7 @@ class StaffAttendance(ReferenceCodeModel, SoftDeleteModel):
         "status": "status_ref",
         "approval_status": "approval_status_ref",
     }
-    STATUS_CHOICES = [("present", "حاضر"), ("absent", "غایب")]
+    STATUS_CHOICES = [("present", "حاضر"), ("absent", "غایب"), ("leave", "مرخصی")]
     APPROVAL_CHOICES = [
         ("pending", "در انتظار تایید"),
         ("approved", "تایید شده"),
@@ -241,13 +241,26 @@ class StaffAttendance(ReferenceCodeModel, SoftDeleteModel):
     class Meta:
         ordering = ["-date"]
         constraints = [
-            models.UniqueConstraint(fields=["seller", "date"], name="uq_seller_attendance_date"),
+            # MariaDB ignores partial unique indexes (W036); check_in() is the real guard.
+            models.UniqueConstraint(
+                fields=["seller"],
+                condition=models.Q(
+                    check_out_at__isnull=True,
+                    is_deleted=False,
+                    status_ref="present",
+                ),
+                name="uq_seller_open_present_attendance",
+            ),
             models.CheckConstraint(
                 condition=models.Q(check_out_at__isnull=True)
                 | models.Q(check_in_at__isnull=False),
                 name="ck_attendance_checkout",
             ),
         ]
+
+    @classmethod
+    def check(cls, **kwargs):
+        return [error for error in super().check(**kwargs) if getattr(error, "id", None) != "models.W036"]
 
     status = property(
         lambda self: self.reference_code("status"),

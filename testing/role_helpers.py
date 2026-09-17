@@ -75,7 +75,7 @@ ACCOUNTANT_PERMISSIONS = sorted([
 ])
 
 
-def ensure_test_role(slug, permissions, *, label=None, needs_branch=False):
+def ensure_test_role(slug, permissions, *, label=None, needs_branch=False, department=""):
     seed_builtin_roles()
     rd, _ = RoleDefinition.objects.update_or_create(
         slug=slug,
@@ -84,6 +84,7 @@ def ensure_test_role(slug, permissions, *, label=None, needs_branch=False):
             "permissions": permissions,
             "is_builtin": False,
             "needs_branch": needs_branch,
+            "department": department or "",
         },
     )
     sync_group_for_role(slug)

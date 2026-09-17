@@ -17,6 +17,11 @@ function navItemFromModule(mod) {
   return item
 }
 
+function withNotifications(children) {
+  if (children.some((child) => child.key === 'notifications')) return children
+  return [{ key: 'notifications', label: 'اعلان‌ها', icon: 'envelope' }, ...children]
+}
+
 export function buildPortalsFromModuleTree(moduleTree) {
   if (!moduleTree?.length) return STATIC_PORTALS
   return moduleTree.map((portal) => ({
@@ -25,7 +30,7 @@ export function buildPortalsFromModuleTree(moduleTree) {
     icon: portal.icon,
     executiveOnly: portal.executive_only,
     defaultPage: portal.default_page || portal.page_key,
-    children: (portal.modules || []).map(navItemFromModule),
+    children: withNotifications((portal.modules || []).map(navItemFromModule)),
   }))
 }
 

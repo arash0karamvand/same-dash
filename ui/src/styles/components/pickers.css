@@ -97,6 +97,35 @@
   color: var(--text);
 }
 
+.select-trigger-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.select-trigger-hint,
+.select-option-hint {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.select-option-main {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+  text-align: right;
+  pointer-events: none;
+}
+
 .jcal-trigger-chevron {
   color: var(--muted);
   font-size: 10px;

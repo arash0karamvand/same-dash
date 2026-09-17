@@ -14,7 +14,7 @@ from auth.permissions import (
     VIEW_PRODUCTS,
     has_permission,
 )
-from backend.models import Product, ProductCategory
+from backend.models import Product, ProductCategory, ProductVariant
 from logic.audit import log_action
 from logic.analytics import best_selling_products
 from logic.products import (
@@ -26,6 +26,7 @@ from logic.products import (
     update_category,
     update_product,
 )
+from logic.stock_locations import parse_location, transfer_variant_stock
 
 
 def _can_view_sales(user):
@@ -253,3 +254,38 @@ def product_top_selling(request):
         limit = 20
     results = best_selling_products(limit=limit)
     return success({"results": results, "count": len(results)})
+
+
+@api_view("POST")
+def product_stock_transfer(request):
+    if not _can_manage(request.user):
+        return fail("Permission denied", status=403)
+    from logic.inventory_settings import assert_manual_stock_unlocked
+
+    try:
+        assert_manual_stock_unlocked()
+    except ValueError as exc:
+        return fail(str(exc), status=400)
+    data = parse_json(request)
+    variant_id = data.get("variant_id")
+    try:
+        variant = ProductVariant.objects.select_related("product").get(pk=variant_id, is_active=True)
+    except ProductVariant.DoesNotExist:
+        return fail("رنگ محصول یافت نشد.", status=404)
+    try:
+        from django.db import transaction
+
+        source = parse_location(data.get("source") or {}, required=True)
+        destination = parse_location(data.get("destination") or {}, required=True)
+        with transaction.atomic():
+            transfer_variant_stock(
+                variant,
+                source,
+                destination,
+                data.get("quantity"),
+                recorded_by=request.user,
+                product_id=variant.product_id,
+            )
+    except ValueError as exc:
+        return fail(str(exc), status=400)
+    return success(product_to_dict(variant.product, audience=_product_audience(request.user)))

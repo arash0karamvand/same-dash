@@ -227,6 +227,22 @@
   --sidebar-width: 248px;
   --content-pad-start: 48px;
   --content-pad-end: 28px;
+  --ui-scale: 1;
+}
+
+/* Wide desktop — tokens in rem so they follow the root font-size scale */
+@media (min-width: 1600px) {
+  :root {
+    --ui-scale: min(1.45, calc(100vw / 1600px));
+    --sidebar-width: 15.5rem;
+    --content-pad-start: 3rem;
+    --content-pad-end: 1.75rem;
+    --content-max: min(1920px, calc(100vw - 15.5rem - 4rem));
+    --radius-pill: 1.625rem;
+    --radius-lg: 1.875rem;
+    --radius-md: 1.25rem;
+    --radius-sm: 0.875rem;
+  }
 }
 
 @media (max-width: 1440px) {

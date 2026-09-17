@@ -19,6 +19,19 @@
         } catch (e) {
           document.documentElement.setAttribute('data-theme', 'dark');
         }
+
+        var WIDE = 1600;
+        var CAP = 1.45;
+        var root = document.documentElement;
+        function applyWideScale() {
+          var width = window.innerWidth || WIDE;
+          var scale = width >= WIDE ? Math.min(CAP, width / WIDE) : 1;
+          root.style.setProperty('--ui-scale', String(scale));
+          root.style.zoom = '';
+          root.style.fontSize = scale === 1 ? '' : 16 * scale + 'px';
+        }
+        applyWideScale();
+        window.addEventListener('resize', applyWideScale, { passive: true });
       })();
     </script>
     <title>سامانه مدیریت مشتریان</title>

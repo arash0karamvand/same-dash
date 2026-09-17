@@ -56,7 +56,7 @@ class Sale(ReferenceCodeModel, SoftDeleteModel):
         ("installment", "قسطی"),
     ]
     ORDER_KIND_CHOICES = [
-        ("normal", "فروش عادی"),
+        ("normal", "فروش و پرداخت آنی"),
         ("pre_invoice", "پیش‌فاکتور"),
         ("deposit", "بیعانیه"),
     ]
@@ -113,6 +113,13 @@ class Sale(ReferenceCodeModel, SoftDeleteModel):
     ]
 
     customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name="sales")
+    STOCK_SOURCE_WAREHOUSE = "warehouse"
+    STOCK_SOURCE_BRANCH = "branch"
+    STOCK_SOURCE_CHOICES = [
+        (STOCK_SOURCE_WAREHOUSE, "انبار"),
+        (STOCK_SOURCE_BRANCH, "شعبه"),
+    ]
+
     branch = models.ForeignKey(
         Branch,
         to_field="code",
@@ -120,6 +127,25 @@ class Sale(ReferenceCodeModel, SoftDeleteModel):
         default="branch_1",
         on_delete=models.PROTECT,
         related_name="orders",
+    )
+    stock_source_kind = models.CharField(
+        max_length=16, choices=STOCK_SOURCE_CHOICES, blank=True, default=""
+    )
+    stock_source_warehouse = models.ForeignKey(
+        Warehouse,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="stock_source_sales",
+    )
+    stock_source_branch = models.ForeignKey(
+        Branch,
+        to_field="code",
+        db_column="stock_source_branch",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="stock_source_sales",
     )
     seller = models.ForeignKey(
         Seller, null=True, blank=True, on_delete=models.SET_NULL, related_name="sales"

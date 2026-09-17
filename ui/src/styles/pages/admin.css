@@ -131,3 +131,252 @@
     inset 0 -16px 30px -16px var(--jelly-shade-bottom),
     var(--jelly-drop);
 }
+
+.stock-location-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px 12px;
+  margin-top: 8px;
+}
+
+.notification-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.notification-card {
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 12px 14px;
+  background: var(--layer-1);
+  border-inline-start: 4px solid transparent;
+}
+
+.notification-card.has-ticket-color {
+  border-inline-start-color: var(--ticket-color);
+}
+
+.notification-card.is-unread {
+  border-color: var(--accent);
+}
+
+.notification-card-head,
+.notification-card-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.notification-card-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.notification-card-actions {
+  margin-top: 8px;
+}
+
+.ticket-thread {
+  margin-top: 12px;
+  display: grid;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+}
+
+.ticket-message {
+  background: var(--layer-2, var(--surface));
+  border-radius: 12px;
+  padding: 8px 10px;
+}
+
+.ticket-message p {
+  margin: 4px 0 0;
+}
+
+.ticket-reply {
+  display: grid;
+  gap: 8px;
+}
+
+.invoice-picker {
+  display: grid;
+  gap: 8px;
+}
+
+.invoice-picker-filters {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+@media (max-width: 700px) {
+  .invoice-picker-filters {
+    grid-template-columns: 1fr;
+  }
+}
+
+.invoice-picker-list {
+  display: grid;
+  gap: 6px;
+  max-height: 240px;
+  overflow: auto;
+}
+
+.invoice-picker-item {
+  display: grid;
+  gap: 2px;
+  text-align: start;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--layer-1);
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.invoice-picker-item:hover {
+  border-color: var(--accent);
+}
+
+.invoice-picker-selected {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+
+.notification-bell {
+  position: relative;
+}
+
+.notification-bell-count {
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.attendance-switch {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.dept-board {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  align-items: stretch;
+}
+
+.dept-board-none {
+  grid-template-columns: minmax(0, 1fr);
+  margin-top: 14px;
+}
+
+.dept-column {
+  background: var(--layer-1);
+  border: 1px solid var(--jelly-rim);
+  border-radius: var(--radius-pill);
+  box-shadow:
+    inset 0 1px 0 var(--jelly-gloss-top),
+    inset 0 -14px 26px -14px var(--jelly-shade-bottom),
+    var(--jelly-drop-soft);
+  min-height: 180px;
+  display: flex;
+  flex-direction: column;
+}
+
+.dept-column-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 14px 16px 8px;
+}
+
+.dept-column-head h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.dept-column-body {
+  padding: 0 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dept-user-card {
+  display: block;
+}
+
+.dept-user-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.dept-chip {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--layer-2);
+  color: var(--muted);
+}
+
+.dept-mobile-tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  margin-bottom: 12px;
+  padding-bottom: 4px;
+}
+
+.dept-mobile-tab {
+  flex: 0 0 auto;
+  padding: 8px 14px;
+  border: 1px solid var(--jelly-rim);
+  border-radius: 999px;
+  background: var(--layer-1);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.dept-mobile-tab.is-active {
+  background: var(--layer-4);
+  font-weight: 600;
+}
+
+.dept-mode-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+@media (max-width: 900px) {
+  .dept-board,
+  .dept-board-none {
+    grid-template-columns: minmax(0, 1fr);
+    margin-top: 0;
+  }
+}

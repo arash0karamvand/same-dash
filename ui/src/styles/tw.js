@@ -6,7 +6,7 @@ const jellyBtn =
   'jelly jelly--capsule relative inline-flex min-h-10 isolate overflow-hidden items-center justify-center rounded-capsule border border-jelly-rim bg-layer-2 px-5 py-2.5 text-sm font-medium tracking-normal text-text shadow-jelly-btn transition-[background,border-color,box-shadow] duration-200 hover:bg-layer-3 hover:border-jelly-rim-strong hover:shadow-jelly-hover active:bg-layer-0 active:shadow-pressed disabled:cursor-not-allowed disabled:opacity-40 max-compact:min-h-11'
 
 export const tw = {
-  page: 'flex min-w-0 max-w-full w-full flex-col gap-[34px] max-compact:gap-5 max-md:gap-4',
+  page: 'flex min-w-0 max-w-full w-full flex-col gap-[2.125rem] max-compact:gap-5 max-md:gap-4',
   pageTitle:
     'm-0 font-display text-2xl font-extrabold leading-tight tracking-tight max-compact:truncate max-compact:text-xl max-md:text-lg',
   pageHead: 'flex flex-wrap items-center justify-between gap-2.5 max-md:flex-col max-md:items-stretch',
@@ -170,7 +170,7 @@ export const tw = {
   menuToggleBar: 'block h-0.5 rounded-[1px] bg-text',
   brandLogoAuth: 'mx-auto mb-[18px] flex items-center justify-center text-accent',
   content:
-    'min-w-0 w-full flex-1 pt-3 pr-[var(--content-pad-end)] pb-14 pl-[var(--content-pad-start)] max-w-[min(100%,calc(var(--content-max)+var(--content-pad-start)+var(--content-pad-end)))] max-compact:max-w-none max-compact:px-4 max-compact:pb-8 max-md:px-3.5 max-md:pt-2 max-md:pb-[calc(92px+env(safe-area-inset-bottom,0px))]',
+    'min-w-0 w-full flex-1 pt-3 pr-[var(--content-pad-end)] pb-14 pl-[var(--content-pad-start)] max-w-[min(100%,calc(var(--content-max)+var(--content-pad-start)+var(--content-pad-end)))] wide:max-w-none max-compact:max-w-none max-compact:px-4 max-compact:pb-8 max-md:px-3.5 max-md:pt-2 max-md:pb-[calc(92px+env(safe-area-inset-bottom,0px))]',
 
   portalSubnav:
     'flex gap-1.5 overflow-x-auto pb-3 pl-[var(--content-pad-start)] pr-[var(--content-pad-end)] [scrollbar-width:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden max-md:!hidden',

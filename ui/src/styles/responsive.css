@@ -311,3 +311,66 @@ body,
     padding: 28px 16px;
   }
 }
+
+/* ---------------------------------------------------------------- Wide desktop (≥1600) — scale the whole UI with the viewport */
+@media (min-width: 1600px) {
+  html {
+    font-size: clamp(16px, 1vw, 23.2px);
+  }
+
+  .content {
+    max-width: none;
+    width: 100%;
+    padding-top: 0.75rem;
+    padding-bottom: 3.5rem;
+    padding-inline-start: var(--content-pad-start);
+    padding-inline-end: var(--content-pad-end);
+  }
+
+  .page {
+    gap: 2.125rem;
+  }
+
+  .topbar {
+    padding-block: 1.25rem;
+    padding-inline-start: var(--content-pad-start);
+    padding-inline-end: var(--content-pad-end);
+    gap: 1rem;
+  }
+
+  .sidebar {
+    width: var(--sidebar-width);
+  }
+
+  .modal-wide {
+    max-width: min(70rem, calc(100vw - 4rem));
+  }
+
+  .table,
+  .users-table-wrap,
+  .sales-table-desktop,
+  .accounting-table-desktop {
+    font-size: 0.875rem;
+  }
+
+  .nav-item,
+  .portal-nav-item {
+    font-size: 0.9375rem;
+    padding-block: 0.75rem;
+    padding-inline: 0.9rem;
+  }
+
+  .card-head {
+    padding: 1.125rem 1.625rem;
+  }
+
+  .card-body {
+    padding: 1.375rem 1.625rem 1.625rem;
+  }
+}
+
+@media print {
+  html {
+    font-size: 16px;
+  }
+}

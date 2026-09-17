@@ -150,6 +150,7 @@ export default function Attendance() {
                 { value: '', label: 'همه' },
                 { value: 'present', label: 'حاضر' },
                 { value: 'absent', label: 'غایب' },
+                { value: 'leave', label: 'مرخصی' },
               ]}
               placeholder="همه"
             />
@@ -245,6 +246,7 @@ export default function Attendance() {
               options={[
                 { value: 'present', label: 'حاضر' },
                 { value: 'absent', label: 'غایب' },
+                { value: 'leave', label: 'مرخصی' },
               ]}
             />
           </Field>

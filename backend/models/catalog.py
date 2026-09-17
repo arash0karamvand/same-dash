@@ -8,7 +8,7 @@ from django.db.models import Sum
 
 from backend.soft_delete import SoftDeleteModel
 from .base import AppendOnlyModel, MONEY_KWARGS, QUANTITY_KWARGS, ReferenceCodeModel
-from .config import MaterialStatus
+from .config import Branch, MaterialStatus
 
 
 class ProductCategory(SoftDeleteModel):
@@ -77,6 +77,16 @@ class ProductVariant(models.Model):
     @property
     def stock(self):
         return self.inventory_movements.aggregate(total=Sum("quantity"))["total"] or Decimal("0")
+
+    def stock_at(self, *, location_kind=None, warehouse_id=None, branch_id=None):
+        qs = self.inventory_movements.all()
+        if location_kind:
+            qs = qs.filter(location_kind=location_kind)
+        if warehouse_id:
+            qs = qs.filter(warehouse_id=warehouse_id)
+        if branch_id:
+            qs = qs.filter(branch_id=branch_id)
+        return qs.aggregate(total=Sum("quantity"))["total"] or Decimal("0")
 
     def __str__(self):
         return f"{self.product.name} — {self.color_name}"
@@ -164,6 +174,13 @@ class ProductMaterial(models.Model):
 
 
 class InventoryTransaction(AppendOnlyModel):
+    LOCATION_WAREHOUSE = "warehouse"
+    LOCATION_BRANCH = "branch"
+    LOCATION_KIND_CHOICES = [
+        (LOCATION_WAREHOUSE, "انبار"),
+        (LOCATION_BRANCH, "شعبه"),
+    ]
+
     material = models.ForeignKey(
         Material, null=True, blank=True, on_delete=models.PROTECT, related_name="inventory_movements"
     )
@@ -176,6 +193,25 @@ class InventoryTransaction(AppendOnlyModel):
     )
     order_line = models.ForeignKey(
         "backend.SaleLineItem",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="inventory_movements",
+    )
+    location_kind = models.CharField(
+        max_length=16, choices=LOCATION_KIND_CHOICES, blank=True, default=""
+    )
+    warehouse = models.ForeignKey(
+        "backend.Warehouse",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="inventory_movements",
+    )
+    branch = models.ForeignKey(
+        Branch,
+        to_field="code",
+        db_column="stock_branch",
         null=True,
         blank=True,
         on_delete=models.PROTECT,
@@ -203,8 +239,28 @@ class InventoryTransaction(AppendOnlyModel):
                 condition=~models.Q(quantity=0), name="ck_inventory_quantity_nonzero"
             ),
             models.CheckConstraint(condition=models.Q(unit_cost__gte=0), name="ck_inventory_cost"),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(variant__isnull=True)
+                    | (
+                        models.Q(
+                            location_kind="warehouse",
+                            warehouse__isnull=False,
+                            branch__isnull=True,
+                        )
+                        | models.Q(
+                            location_kind="branch",
+                            warehouse__isnull=True,
+                            branch__isnull=False,
+                        )
+                    )
+                ),
+                name="ck_inventory_variant_location",
+            ),
         ]
         indexes = [
             models.Index(fields=["material", "created_at"], name="ix_inventory_material"),
             models.Index(fields=["variant", "created_at"], name="ix_inventory_variant"),
+            models.Index(fields=["variant", "location_kind", "warehouse"], name="ix_inventory_loc_wh"),
+            models.Index(fields=["variant", "location_kind", "branch"], name="ix_inventory_loc_br"),
         ]

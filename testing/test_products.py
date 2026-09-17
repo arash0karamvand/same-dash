@@ -159,6 +159,7 @@ class ProductStockSaleTests(TestCase):
     def setUp(self):
         from backend.models import Customer, InventoryTransaction
         from logic.sales import record_sale
+        from logic.stock_locations import LOCATION_WAREHOUSE, default_warehouse, location_transaction_kwargs, parse_location
 
         self.InventoryTransaction = InventoryTransaction
         self.record_sale = record_sale
@@ -167,11 +168,16 @@ class ProductStockSaleTests(TestCase):
         self.variant = ProductVariant.objects.create(
             product=self.product, color_name="مشکی", color_hex="#111111"
         )
+        self.warehouse = default_warehouse()
+        self.location = parse_location(
+            {"kind": LOCATION_WAREHOUSE, "warehouse_id": self.warehouse.id}, required=True
+        )
         InventoryTransaction.objects.create(
             variant=self.variant,
             quantity=10,
             reason="catalog_stock_adjustment",
             reference=f"product:{self.product.pk}",
+            **location_transaction_kwargs(self.location),
         )
 
     def _sell(self, quantity, **kwargs):
@@ -240,4 +246,233 @@ class ProductStockSaleTests(TestCase):
             ],
         )
         self.assertEqual(self.variant.stock, Decimal("8"))
+
+    def test_sale_deducts_from_selected_branch_not_warehouse(self):
+        from backend.models import Branch, InventoryTransaction
+        from logic.stock_locations import LOCATION_BRANCH, location_transaction_kwargs, parse_location, stock_for_variant_at
+
+        branch, _ = Branch.objects.get_or_create(
+            code="branch_1",
+            defaults={"label": "کمرد", "sort_order": 0, "is_active": True},
+        )
+        loc = parse_location({"kind": LOCATION_BRANCH, "branch": branch.code}, required=True)
+        InventoryTransaction.objects.create(
+            variant=self.variant,
+            quantity=4,
+            reason="catalog_stock_adjustment",
+            **location_transaction_kwargs(loc),
+        )
+        self._sell(
+            3,
+            stock_source={"kind": LOCATION_BRANCH, "branch": branch.code},
+        )
+        self.assertEqual(stock_for_variant_at(self.variant, loc), Decimal("1"))
+        self.assertEqual(stock_for_variant_at(self.variant, self.location), Decimal("10"))
+
+    def test_transfer_moves_stock_between_locations(self):
+        from backend.models import Branch
+        from logic.stock_locations import LOCATION_BRANCH, parse_location, stock_for_variant_at, transfer_variant_stock
+
+        branch, _ = Branch.objects.get_or_create(
+            code="branch_1",
+            defaults={"label": "کمرد", "sort_order": 0, "is_active": True},
+        )
+        dest = parse_location({"kind": LOCATION_BRANCH, "branch": branch.code}, required=True)
+        transfer_variant_stock(self.variant, self.location, dest, 2)
+        self.assertEqual(stock_for_variant_at(self.variant, self.location), Decimal("8"))
+        self.assertEqual(stock_for_variant_at(self.variant, dest), Decimal("2"))
+
+    def test_catalog_rejects_negative_location_stock(self):
+        from logic.products import update_product
+
+        with self.assertRaises(ValueError):
+            update_product(
+                self.product,
+                {
+                    "variants": [
+                        {
+                            "id": self.variant.id,
+                            "color_name": self.variant.color_name,
+                            "color_hex": self.variant.color_hex,
+                            "stock_by_location": [
+                                {
+                                    "kind": "warehouse",
+                                    "warehouse_id": self.warehouse.id,
+                                    "quantity": -1,
+                                }
+                            ],
+                        }
+                    ]
+                },
+            )
+
+
+class ManualStockLockTests(TestCase):
+    def setUp(self):
+        from backend.models import Customer, InventoryTransaction
+        from logic.inventory_settings import set_manual_stock_locked
+        from logic.stock_locations import LOCATION_WAREHOUSE, default_warehouse, location_transaction_kwargs, parse_location
+
+        ensure_legacy_test_roles()
+        set_manual_stock_locked(False)
+        self.addCleanup(lambda: set_manual_stock_locked(False))
+
+        self.client = Client()
+        self.user = User.objects.create_user(username="catalog", password="testpass123")
+        roles.assign_role(self.user, roles.SALES_MANAGER)
+        self.client.login(username="catalog", password="testpass123")
+
+        self.product = Product.objects.create(name="کفش قفل", default_price=100000)
+        self.variant = ProductVariant.objects.create(
+            product=self.product, color_name="مشکی", color_hex="#111111"
+        )
+        self.warehouse = default_warehouse()
+        self.location = parse_location(
+            {"kind": LOCATION_WAREHOUSE, "warehouse_id": self.warehouse.id}, required=True
+        )
+        InventoryTransaction.objects.create(
+            variant=self.variant,
+            quantity=10,
+            reason="catalog_stock_adjustment",
+            reference=f"product:{self.product.pk}",
+            **location_transaction_kwargs(self.location),
+        )
+        self.customer = Customer.objects.create(full_name="خریدار قفل", phone="09120000099")
+
+    def test_locked_catalog_stock_adjustment_is_rejected(self):
+        from logic.inventory_settings import MANUAL_STOCK_LOCKED_MESSAGE, set_manual_stock_locked
+        from logic.products import update_product
+
+        set_manual_stock_locked(True)
+        with self.assertRaises(ValueError) as ctx:
+            update_product(
+                self.product,
+                {
+                    "variants": [
+                        {
+                            "id": self.variant.id,
+                            "color_name": self.variant.color_name,
+                            "color_hex": self.variant.color_hex,
+                            "stock_by_location": [
+                                {
+                                    "kind": "warehouse",
+                                    "warehouse_id": self.warehouse.id,
+                                    "quantity": 20,
+                                }
+                            ],
+                        }
+                    ]
+                },
+            )
+        self.assertIn(MANUAL_STOCK_LOCKED_MESSAGE, str(ctx.exception))
+        self.assertEqual(self.variant.stock, Decimal("10"))
+
+    def test_locked_same_stock_save_is_allowed(self):
+        from logic.inventory_settings import set_manual_stock_locked
+        from logic.products import update_product
+
+        set_manual_stock_locked(True)
+        update_product(
+            self.product,
+            {
+                "name": "کفش قفل ویرایش",
+                "variants": [
+                    {
+                        "id": self.variant.id,
+                        "color_name": self.variant.color_name,
+                        "color_hex": self.variant.color_hex,
+                        "stock_by_location": [
+                            {
+                                "kind": "warehouse",
+                                "warehouse_id": self.warehouse.id,
+                                "quantity": 10,
+                            }
+                        ],
+                    }
+                ],
+            },
+        )
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.name, "کفش قفل ویرایش")
+        self.assertEqual(self.variant.stock, Decimal("10"))
+
+    def test_sale_still_deducts_when_manual_stock_locked(self):
+        from logic.inventory_settings import set_manual_stock_locked
+        from logic.sales import record_sale
+
+        set_manual_stock_locked(True)
+        record_sale(
+            self.customer,
+            0,
+            line_items=[
+                {
+                    "product_id": self.product.id,
+                    "variant_id": self.variant.id,
+                    "quantity": 3,
+                }
+            ],
+        )
+        self.assertEqual(self.variant.stock, Decimal("7"))
+
+    def test_transfer_rejected_when_locked(self):
+        from backend.models import Branch
+        from logic.inventory_settings import MANUAL_STOCK_LOCKED_MESSAGE, set_manual_stock_locked
+
+        set_manual_stock_locked(True)
+        branch, _ = Branch.objects.get_or_create(
+            code="branch_1",
+            defaults={"label": "کمرد", "sort_order": 0, "is_active": True},
+        )
+        resp = self.client.post(
+            "/api/products/stock-transfer/",
+            data=json.dumps({
+                "variant_id": self.variant.id,
+                "source": {"kind": "warehouse", "warehouse_id": self.warehouse.id},
+                "destination": {"kind": "branch", "branch": branch.code},
+                "quantity": 2,
+            }),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.json()["error"], MANUAL_STOCK_LOCKED_MESSAGE)
+        self.assertEqual(self.variant.stock, Decimal("10"))
+
+    def test_unauthorized_user_cannot_toggle_lock(self):
+        ensure_test_role(
+            "catalog_only",
+            ["view_products", "manage_products"],
+            label="فقط کاتالوگ",
+        )
+        clerk = User.objects.create_user(username="clerk", password="testpass123")
+        roles.assign_role(clerk, "catalog_only")
+        client = Client()
+        client.login(username="clerk", password="testpass123")
+        resp = client.put(
+            "/api/config/inventory-settings/",
+            data=json.dumps({"manual_stock_locked": True}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 403)
+        from logic.inventory_settings import is_manual_stock_locked
+        self.assertFalse(is_manual_stock_locked())
+
+    def test_managers_portal_user_can_toggle_lock(self):
+        from logic.inventory_settings import is_manual_stock_locked
+
+        admin = User.objects.create_user(username="boss", password="testpass123", is_superuser=True)
+        client = Client()
+        client.login(username="boss", password="testpass123")
+        resp = client.put(
+            "/api/config/inventory-settings/",
+            data=json.dumps({"manual_stock_locked": True}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200, resp.content)
+        self.assertTrue(resp.json()["data"]["manual_stock_locked"])
+        self.assertTrue(is_manual_stock_locked())
+
+        cfg = client.get("/api/config/")
+        self.assertEqual(cfg.status_code, 200)
+        self.assertTrue(cfg.json()["data"]["inventory_settings"]["manual_stock_locked"])
+
 

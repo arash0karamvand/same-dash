@@ -38,7 +38,18 @@ function lineFromPick(pick, quantity = 1) {
   }
 }
 
-export default function ProductLines({ lines, onChange }) {
+function locationQty(variant, stockSourceKey) {
+  if (!variant) return null
+  if (stockSourceKey && variant.stock_by_location?.length) {
+    const row = variant.stock_by_location.find((item) => item.key === stockSourceKey)
+    if (row) return row.quantity
+  }
+  if (variant.stock_summary) return variant.stock_summary
+  if (variant.stock != null && variant.stock !== '') return variant.stock
+  return null
+}
+
+export default function ProductLines({ lines, onChange, stockSourceKey = '' }) {
   const [pickerOpen, setPickerOpen] = useState(false)
   const [activeLineIdx, setActiveLineIdx] = useState(null)
   const [search, setSearch] = useState('')
@@ -299,7 +310,7 @@ export default function ProductLines({ lines, onChange }) {
                             tabIndex={0}
                             className={fromLegacy(`color-swatch${pick?.variant?.id === v.id ? ' active' : ''}`)}
                             style={{ background: v.color_hex }}
-                            title={v.color_name}
+                            title={`${v.color_name}${locationQty(v, stockSourceKey) != null ? ` — موجودی ${toPersianDigits(locationQty(v, stockSourceKey))}` : ''}`}
                             onClick={(e) => {
                               e.stopPropagation()
                               pickWithVariant(p, v)
@@ -314,6 +325,12 @@ export default function ProductLines({ lines, onChange }) {
                           />
                         ))}
                       </div>
+                    )}
+                    {pick?.variant && locationQty(pick.variant, stockSourceKey) != null && (
+                      <span className={fromLegacy("muted small")}>
+                        موجودی: {toPersianDigits(locationQty(pick.variant, stockSourceKey))}
+                        {pick.variant.stock_summary && !stockSourceKey ? ` (${pick.variant.stock_summary})` : ''}
+                      </span>
                     )}
                   </div>
                 )

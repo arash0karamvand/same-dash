@@ -183,6 +183,48 @@ class SaleApiTest(TestCase):
         self.assertEqual(int(self.customer.total_purchases), 1000000)
         self.assertEqual(AccountingEntry.objects.count(), 2)
 
+    def test_create_sale_requires_customer(self):
+        resp = self.client.post(
+            "/api/sales/",
+            data=json.dumps({"amount": 1000000, "payment_status": "paid"}),
+            content_type="application/json",
+        )
+        body = parse(resp)
+        self.assertEqual(resp.status_code, 400)
+        self.assertFalse(body["ok"])
+        self.assertEqual(body["error"], "مشتری را انتخاب یا ثبت کنید.")
+        self.assertEqual(Sale.objects.count(), 0)
+
+    def test_create_sale_requires_amount(self):
+        resp = self.client.post(
+            "/api/sales/",
+            data=json.dumps({"customer_id": self.customer.id, "payment_status": "paid"}),
+            content_type="application/json",
+        )
+        body = parse(resp)
+        self.assertEqual(resp.status_code, 400)
+        self.assertFalse(body["ok"])
+        self.assertEqual(body["error"], "محصول انتخاب کنید یا مبلغ فروش را وارد کنید.")
+        self.assertEqual(Sale.objects.count(), 0)
+
+    def test_create_sale_requires_new_customer_fields(self):
+        resp = self.client.post(
+            "/api/sales/",
+            data=json.dumps(
+                {
+                    "amount": 1000000,
+                    "payment_status": "paid",
+                    "new_customer": {"full_name": "Sara"},
+                }
+            ),
+            content_type="application/json",
+        )
+        body = parse(resp)
+        self.assertEqual(resp.status_code, 400)
+        self.assertFalse(body["ok"])
+        self.assertEqual(body["error"], "نام و شماره تماس مشتری الزامی است.")
+        self.assertEqual(Sale.objects.count(), 0)
+
     def test_operator_sees_only_own_sales(self):
         Sale.objects.create(
             customer=self.customer,

@@ -15,6 +15,18 @@ const EMPTY_CONFIG = {
   permission_catalog: { permissions: [], permission_groups: [], module_tree: [] },
   page_guides: {},
   branding: { logo_url: DEFAULT_LOGO_URL, logo_is_custom: false },
+  stock_locations: [],
+  attendance_settings: { enforced: true },
+  inventory_settings: { manual_stock_locked: false },
+  ticket_grades: {
+    grades: [
+      { grade: 1, label: 'درجه ۱', color: '#dc2626' },
+      { grade: 2, label: 'درجه ۲', color: '#f59e0b' },
+      { grade: 3, label: 'درجه ۳', color: '#2563eb' },
+      { grade: 4, label: 'درجه ۴', color: '#64748b' },
+    ],
+    default_grade: 3,
+  },
 }
 
 export function ConfigProvider({ children }) {
@@ -96,6 +108,10 @@ export function ConfigProvider({ children }) {
     branding: config.branding || EMPTY_CONFIG.branding,
     logoUrl,
     applyBranding,
+    stockLocations: config.stock_locations || [],
+    attendanceSettings: config.attendance_settings || { enforced: true },
+    inventorySettings: config.inventory_settings || { manual_stock_locked: false },
+    ticketGrades: config.ticket_grades || EMPTY_CONFIG.ticket_grades,
   }
 
   return <ConfigContext.Provider value={value}>{children}</ConfigContext.Provider>

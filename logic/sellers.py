@@ -166,7 +166,7 @@ def effective_sale_branch(user, today=None):
             status="present",
             check_out_at__isnull=True,
         )
-        .order_by("-approved_at")
+        .order_by("-check_in_at", "-approved_at")
         .first()
     )
     if record:
@@ -175,16 +175,19 @@ def effective_sale_branch(user, today=None):
 
 
 def resolve_sale_branch_for_create(user, requested_branch=None):
-    """مدیران شعبه را خودشان انتخاب می‌کنند؛ بقیه از شعبه ثابت کاربر."""
-    from auth.org_roles import is_executive_user
+    """شعبه فاکتور: حضور فعال، یا انتخاب اجباری وقتی حضور خاموش/مدیر بدون حضور است."""
     from logic.branches import branch_labels
+    from logic.sale_attendance import assert_user_can_record_sale
 
-    if is_executive_user(user):
-        code = (requested_branch or "").strip()
-        labels = branch_labels()
-        if not code or code not in labels:
+    state = assert_user_can_record_sale(user)
+    labels = branch_labels()
+    requested = (requested_branch or "").strip()
+    if state["must_pick_branch"]:
+        if not requested or requested not in labels:
             raise ValueError("انتخاب شعبه الزامی است.")
-        return code
+        return requested
+    if state["work_branch"] and state["work_branch"] in labels:
+        return state["work_branch"]
 
     seller = get_seller_for_user(user)
     branch = effective_sale_branch(user) or (seller.branch_id if seller else "")

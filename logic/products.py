@@ -7,6 +7,18 @@ from django.db.models import Q
 
 from backend.models import InventoryTransaction, Material, Product, ProductCategory, ProductVariant
 from logic.materials import compute_product_material_cost, product_material_to_dict, sync_product_materials
+from logic.stock_locations import (
+    LOCATION_WAREHOUSE,
+    default_warehouse,
+    format_stock_summary,
+    list_stock_locations,
+    location_from_sale,
+    location_transaction_kwargs,
+    parse_location,
+    stock_breakdown_for_variant,
+    stock_for_variant_at,
+    variant_has_tracked_stock,
+)
 
 
 def category_to_dict(cat):
@@ -24,13 +36,27 @@ def category_to_dict(cat):
     }
 
 
-def variant_to_dict(v):
+def variant_to_dict(v, locations=None):
+    locations = locations or list_stock_locations()
+    breakdown = stock_breakdown_for_variant(v, locations)
+    serialized = []
+    for row in breakdown:
+        qty = row["quantity"]
+        serialized.append(
+            {
+                **row,
+                "quantity": int(qty) if qty == qty.to_integral_value() else float(qty),
+            }
+        )
+    total = v.stock
     return {
         "id": v.id,
         "color_name": v.color_name,
         "color_hex": v.color_hex,
         "sku": v.sku,
-        "stock": v.stock,
+        "stock": int(total) if total == total.to_integral_value() else float(total),
+        "stock_by_location": serialized,
+        "stock_summary": format_stock_summary(breakdown),
         "is_active": v.is_active,
         "sort_order": v.sort_order,
     }
@@ -40,7 +66,11 @@ def product_to_dict(p, include_variants=True, *, audience="sales"):
     """audience: sales | factory | full — کنترل نمایش قیمت فروش و متریال."""
     variants = []
     if include_variants:
-        variants = [variant_to_dict(v) for v in p.variants.filter(is_active=True).order_by("sort_order", "id")]
+        locations = list_stock_locations()
+        variants = [
+            variant_to_dict(v, locations)
+            for v in p.variants.filter(is_active=True).order_by("sort_order", "id")
+        ]
 
     data = {
         "id": p.id,
@@ -86,6 +116,41 @@ def product_to_dict(p, include_variants=True, *, audience="sales"):
     return data
 
 
+def _parse_stock_quantity(value):
+    if value is None or value == "":
+        return None
+    try:
+        quantity = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        raise ValueError("موجودی واردشده نامعتبر است.")
+    if quantity < 0:
+        raise ValueError("موجودی هر مکان نمی‌تواند منفی باشد.")
+    return quantity
+
+
+def _parse_location_stocks(item):
+    rows = item.get("stock_by_location")
+    parsed = []
+    if isinstance(rows, list):
+        for row in rows:
+            qty = _parse_stock_quantity(row.get("quantity") if isinstance(row, dict) else None)
+            if qty is None:
+                continue
+            location = parse_location(row, required=True)
+            parsed.append((location, qty))
+        if parsed:
+            return parsed
+    legacy = _parse_stock_quantity(item.get("stock"))
+    if legacy is None:
+        return []
+    warehouse = default_warehouse()
+    location = parse_location(
+        {"kind": LOCATION_WAREHOUSE, "warehouse_id": warehouse.id},
+        required=True,
+    )
+    return [(location, legacy)]
+
+
 def _parse_variants(raw_variants):
     if not raw_variants:
         return []
@@ -94,17 +159,12 @@ def _parse_variants(raw_variants):
         color_name = (item.get("color_name") or "").strip()
         if not color_name:
             continue
-        stock = item.get("stock")
-        if stock is not None and stock != "":
-            stock = int(stock)
-        else:
-            stock = None
         parsed.append(
             {
                 "color_name": color_name,
                 "color_hex": (item.get("color_hex") or "#cccccc").strip()[:7],
                 "sku": (item.get("sku") or "").strip(),
-                "stock": stock,
+                "stock_by_location": _parse_location_stocks(item),
                 "is_active": bool(item.get("is_active", True)),
                 "sort_order": int(item.get("sort_order") if item.get("sort_order") is not None else idx),
             }
@@ -113,6 +173,9 @@ def _parse_variants(raw_variants):
 
 
 def _sync_variants(product, variants_data):
+    from logic.inventory_settings import MANUAL_STOCK_LOCKED_MESSAGE, is_manual_stock_locked
+
+    stock_locked = is_manual_stock_locked()
     keep_ids = []
     for item in variants_data:
         variant_id = item.get("id")
@@ -130,17 +193,21 @@ def _sync_variants(product, variants_data):
         variant.is_active = item.get("is_active", True)
         variant.sort_order = item.get("sort_order", 0)
         variant.save()
-        requested_stock = item.get("stock")
-        if requested_stock is not None:
+        for location, requested_stock in item.get("stock_by_location") or []:
             locked = ProductVariant.objects.select_for_update().get(pk=variant.pk)
-            stock_delta = Decimal(requested_stock) - Decimal(locked.stock or 0)
-            if stock_delta:
-                InventoryTransaction.objects.create(
-                    variant=locked,
-                    quantity=stock_delta,
-                    reason="catalog_stock_adjustment",
-                    reference=f"product:{product.pk}",
-                )
+            current = stock_for_variant_at(locked, location)
+            stock_delta = Decimal(requested_stock) - Decimal(current or 0)
+            if not stock_delta:
+                continue
+            if stock_locked:
+                raise ValueError(MANUAL_STOCK_LOCKED_MESSAGE)
+            InventoryTransaction.objects.create(
+                variant=locked,
+                quantity=stock_delta,
+                reason="catalog_stock_adjustment",
+                reference=f"product:{product.pk}",
+                **location_transaction_kwargs(location),
+            )
         keep_ids.append(variant.id)
     product.variants.exclude(pk__in=keep_ids).update(is_active=False)
 
@@ -401,6 +468,10 @@ def deduct_variant_stock_for_sale(sale, *, recorded_by=None):
     from backend.models import Sale
 
     Sale.objects.select_for_update().get(pk=sale.pk)
+    location = location_from_sale(sale)
+    if location is None:
+        warehouse = default_warehouse()
+        location = parse_location({"kind": LOCATION_WAREHOUSE, "warehouse_id": warehouse.id}, required=True)
     lines = [line for line in sale.line_items.all() if line.variant_id]
     if not lines:
         return
@@ -416,17 +487,18 @@ def deduct_variant_stock_for_sale(sale, *, recorded_by=None):
         return
 
     locked = _lock_variants(pending_by_variant)
+    loc_kwargs = location_transaction_kwargs(location)
     for variant_id, variant_lines in pending_by_variant.items():
         variant = locked.get(variant_id)
         if variant is None:
             continue
-        if not variant.inventory_movements.exists():
+        if not variant_has_tracked_stock(variant):
             continue
         needed = sum((Decimal(line.quantity or 0) for line in variant_lines), Decimal(0))
-        stock = Decimal(variant.stock or 0)
+        stock = Decimal(stock_for_variant_at(variant, location) or 0)
         if stock < needed:
             raise ValueError(
-                f"موجودی «{_variant_label(variant)}» کافی نیست — "
+                f"موجودی «{_variant_label(variant)}» در {location['label']} کافی نیست — "
                 f"موجود {_format_stock_qty(stock)}، درخواست {_format_stock_qty(needed)}."
             )
         for line in variant_lines:
@@ -439,6 +511,7 @@ def deduct_variant_stock_for_sale(sale, *, recorded_by=None):
                 reason=SALE_STOCK_REASON,
                 reference=_sale_line_stock_reference(sale, line),
                 recorded_by=recorded_by,
+                **loc_kwargs,
             )
 
 
@@ -475,4 +548,7 @@ def restore_variant_stock_for_sale(sale, *, recorded_by=None):
             reason=SALE_STOCK_ROLLBACK_REASON,
             reference=tx.reference,
             recorded_by=recorded_by,
+            location_kind=tx.location_kind,
+            warehouse_id=tx.warehouse_id,
+            branch_id=tx.branch_id,
         )

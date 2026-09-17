@@ -8,6 +8,7 @@ export const PORTALS = [
     defaultPage: 'dashboard',
     children: [
       { key: 'dashboard', label: 'داشبورد', icon: 'chart', permission: 'view_dashboard', executiveOnly: true },
+      { key: 'notifications', label: 'اعلان‌ها', icon: 'envelope' },
       { key: 'orders', label: 'صف ارسال به اداری', icon: 'clipboard', executiveOnly: true },
       { key: 'users', label: 'کاربران', icon: 'shield', systemAdmin: true },
       { key: 'roles', label: 'نقش‌ها و دسترسی', icon: 'lock', systemAdmin: true },
@@ -31,6 +32,7 @@ export const PORTALS = [
     icon: 'store',
     defaultPage: 'shop',
     children: [
+      { key: 'notifications', label: 'اعلان‌ها', icon: 'envelope' },
       { key: 'shop', label: 'سفارش‌ها', icon: 'receipt', anyPermission: ['create_sale', 'approve_sale_branch', 'view_sales_summary', 'view_sales'] },
       { key: 'customers', label: 'مشتریان', icon: 'users', permission: 'view_customers' },
       { key: 'products', label: 'محصولات', icon: 'package', permission: 'view_products' },
@@ -43,6 +45,7 @@ export const PORTALS = [
     icon: 'building',
     defaultPage: 'office',
     children: [
+      { key: 'notifications', label: 'اعلان‌ها', icon: 'envelope' },
       { key: 'office', label: 'تایید سفارش', icon: 'clipboard', permission: 'approve_sale_accounting' },
       { key: 'office-orders', label: 'سفارش‌ها', icon: 'package', anyPermission: ['approve_sale_accounting', 'view_sales'] },
       { key: 'customers', label: 'مشتریان', icon: 'users', permission: 'view_customers' },
@@ -65,6 +68,7 @@ export const PORTALS = [
     icon: 'factory',
     defaultPage: 'factory',
     children: [
+      { key: 'notifications', label: 'اعلان‌ها', icon: 'envelope' },
       { key: 'factory', label: 'ساخت', icon: 'wrench', permission: 'view_factory_orders' },
       { key: 'factory-built', label: 'ساخته‌شده‌ها', icon: 'check', permission: 'view_factory_orders' },
       { key: 'freight', label: 'باربری', icon: 'truck', anyPermission: ['view_freight_orders', 'manage_freight_orders'] },

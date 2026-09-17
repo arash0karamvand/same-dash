@@ -300,7 +300,13 @@ def record_sale(
     order_kind=Sale.ORDER_KIND_NORMAL,
     delivery_date=None,
     accounting_mode=None,
+    stock_source=None,
 ):
+    if recorded_by is not None:
+        from logic.sale_attendance import assert_user_can_record_sale
+
+        assert_user_can_record_sale(recorded_by)
+
     resolved_items = None
     if line_items:
         from logic.products import resolve_line_item_from_catalog
@@ -393,6 +399,20 @@ def record_sale(
         "office_released_at": None,
         "factory_released_at": None,
     }
+    from logic.stock_locations import LOCATION_WAREHOUSE, default_warehouse, parse_location
+
+    location = None
+    if stock_source:
+        location = parse_location(stock_source, required=True)
+    elif line_items:
+        warehouse = default_warehouse()
+        location = parse_location({"kind": LOCATION_WAREHOUSE, "warehouse_id": warehouse.id}, required=True)
+    if location:
+        sale_kwargs["stock_source_kind"] = location["kind"]
+        if location["kind"] == LOCATION_WAREHOUSE:
+            sale_kwargs["stock_source_warehouse"] = location["warehouse"]
+        else:
+            sale_kwargs["stock_source_branch"] = location["branch"]
     if sold_at is not None:
         sale_kwargs["sold_at"] = sold_at
     sale = Sale.objects.create(**sale_kwargs)
@@ -723,6 +743,7 @@ def update_sale(
     payment_status=None,
     order_kind=None,
     delivery_date=None,
+    recorded_by=None,
     **meta_fields,
 ):
     """ویرایش فروش — مبلغ، تخفیف، اقلام، اقساط و فیلدهای متنی."""
@@ -731,6 +752,10 @@ def update_sale(
     customer = sale.customer
 
     if line_items is not None:
+        if recorded_by is not None:
+            from logic.sale_attendance import assert_user_can_record_sale
+
+            assert_user_can_record_sale(recorded_by)
         amount = _replace_sale_line_items(sale, line_items)
 
     if order_kind is not None:

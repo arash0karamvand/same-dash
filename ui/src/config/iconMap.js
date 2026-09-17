@@ -46,6 +46,7 @@ export const PAGE_ICONS = {
   checks: 'receipt',
   logs: 'scroll',
   filter: 'search',
+  notifications: 'envelope',
 }
 
 /** Legacy emoji → icon name (API may still return emojis) */

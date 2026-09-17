@@ -39,7 +39,7 @@ def seed_reference_data(apps, schema_editor):
     )
     seed("PaymentMethod", [("cash", "نقدی"), ("card", "کارت‌خوان"), ("check", "چک")])
     seed("PaymentStatus", [("paid", "پرداخت‌شده"), ("unpaid", "پرداخت‌نشده"), ("installment", "قسطی")])
-    seed("OrderKind", [("normal", "فروش عادی"), ("pre_invoice", "پیش‌فاکتور"), ("deposit", "بیعانیه")])
+    seed("OrderKind", [("normal", "فروش و پرداخت آنی"), ("pre_invoice", "پیش‌فاکتور"), ("deposit", "بیعانیه")])
     seed("OrderStatus", [("confirmed", "تایید شده"), ("pending", "در انتظار"), ("cancelled", "لغو شده")])
     seed("AccountingMode", [("automatic", "حسابداری خودکار"), ("manual", "حسابداری دستی")])
     seed("InstallmentStatus", [("pending", "در انتظار"), ("paid", "پرداخت‌شده"), ("cancelled", "لغوشده")])

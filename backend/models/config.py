@@ -11,6 +11,8 @@ class Branch(models.Model):
     color = models.CharField("رنگ", max_length=20, default="#6366f1")
     sort_order = models.PositiveIntegerField("ترتیب", default=0)
     is_active = models.BooleanField("فعال", default=True)
+    work_start = models.TimeField("شروع ساعت کاری", null=True, blank=True)
+    work_end = models.TimeField("پایان ساعت کاری", null=True, blank=True)
     created_at = models.DateTimeField("تاریخ ایجاد", auto_now_add=True)
 
     class Meta:
@@ -127,6 +129,7 @@ class RoleDefinition(models.Model):
     parent = models.ForeignKey(
         "self", null=True, blank=True, on_delete=models.PROTECT, related_name="children"
     )
+    department = models.CharField(max_length=20, blank=True, default="")
     permission_set = models.ManyToManyField(
         Permission, through="RolePermission", related_name="roles", blank=True
     )
@@ -207,6 +210,7 @@ class UserAccessProfile(models.Model):
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="access_profile"
     )
+    primary_department = models.CharField(max_length=20, blank=True, default="")
     permission_set = models.ManyToManyField(
         Permission, through="UserPermission", related_name="users", blank=True
     )

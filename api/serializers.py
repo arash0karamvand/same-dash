@@ -115,6 +115,14 @@ def sale_to_dict(sale, include_installments=False, include_lines=False, user=Non
         "order_status_display": sale.get_order_status_display(),
         "workflow_stage": sale.workflow_stage_id,
         "workflow_stage_display": WORKFLOW_STAGE_LABELS.get(sale.workflow_stage_id, sale.workflow_stage_id),
+        "stock_source_kind": sale.stock_source_kind or "",
+        "stock_source_warehouse_id": sale.stock_source_warehouse_id,
+        "stock_source_branch": sale.stock_source_branch_id or "",
+        "stock_source_label": (
+            sale.stock_source_warehouse.label
+            if sale.stock_source_kind == "warehouse" and sale.stock_source_warehouse_id
+            else BRANCH_LABELS.get(sale.stock_source_branch_id, "")
+        ),
         "delivery_date": sale.delivery_date.isoformat() if sale.delivery_date else None,
         "is_deleted": getattr(sale, "is_deleted", False),
     }

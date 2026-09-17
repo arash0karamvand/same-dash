@@ -33,6 +33,7 @@ const EMPTY_ROLE = {
   permissions: [],
   parent_slug: '',
   sort_order: 50,
+  department: '',
 }
 
 function buildRoleTree(roles) {
@@ -140,6 +141,7 @@ export default function Roles() {
       permissions: [...(role.permissions || [])],
       parent_slug: role.parent_slug || '',
       sort_order: role.sort_order ?? 50,
+      department: role.department || '',
     })
     setModalOpen(true)
   }
@@ -172,6 +174,7 @@ export default function Roles() {
         permissions: form.permissions,
         parent_slug: form.parent_slug || null,
         sort_order: form.sort_order,
+        department: form.department || '',
       }
       if (selected) {
         await authApi.updateRoleDefinition(selected.slug, payload)
@@ -340,6 +343,20 @@ export default function Roles() {
           </Field>
           <Field label="رنگ">
             <input type="color" value={form.color} onChange={(e) => setForm({ ...form, color: e.target.value })} />
+          </Field>
+          <Field label="دپارتمان">
+            <Select
+              value={form.department}
+              onChange={(v) => setForm({ ...form, department: v })}
+              options={[
+                { value: '', label: '— بدون دپارتمان —' },
+                { value: 'managers', label: 'مدیران' },
+                { value: 'shop', label: 'فروشگاه' },
+                { value: 'office', label: 'اداری' },
+                { value: 'factory', label: 'کارخانه' },
+              ]}
+              placeholder="— بدون دپارتمان —"
+            />
           </Field>
           <label className={fromLegacy("checkbox-row")}>
             <input type="checkbox" checked={form.needs_branch} onChange={(e) => setForm({ ...form, needs_branch: e.target.checked })} />

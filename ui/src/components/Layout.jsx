@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { useConfig } from '../context/ConfigContext'
+import { notificationsApi } from '../api/client'
 import BrandLogo from './BrandLogo'
 import ChangePasswordModal from './ChangePasswordModal'
 import MobileBottomNav from './MobileBottomNav'
@@ -28,6 +29,7 @@ export default function Layout({ portal, page, onNavigate, children }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [topbarScrolled, setTopbarScrolled] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
   const isMobile = useMediaQuery('(max-width: 767px)')
   const isCompactNav = useMediaQuery('(max-width: 1440px)')
   const visiblePortals = getVisiblePortals(user, portals)
@@ -66,6 +68,24 @@ export default function Layout({ portal, page, onNavigate, children }) {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const loadUnread = async () => {
+      try {
+        const data = await notificationsApi.unread()
+        if (!cancelled) setUnreadCount(data.unread_count || 0)
+      } catch {
+        if (!cancelled) setUnreadCount(0)
+      }
+    }
+    loadUnread()
+    const id = setInterval(loadUnread, 60000)
+    return () => {
+      cancelled = true
+      clearInterval(id)
+    }
+  }, [user?.id, page])
 
   useEffect(() => {
     const onScroll = () => setTopbarScrolled(window.scrollY > 24)
@@ -198,6 +218,15 @@ export default function Layout({ portal, page, onNavigate, children }) {
               </div>
             </div>
             <div className={tw.userBox}>
+              <button
+                type="button"
+                className={buttonClass({ variant: 'ghost', size: 'sm', className: 'notification-bell' })}
+                aria-label="اعلان‌ها"
+                onClick={() => navigateSub(portal, 'notifications')}
+              >
+                <Icon name="envelope" size={18} />
+                {unreadCount > 0 && <span className="notification-bell-count">{unreadCount}</span>}
+              </button>
               <div className="liquid-glass-group">
                 <ThemeToggle />
               </div>

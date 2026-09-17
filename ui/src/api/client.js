@@ -88,6 +88,12 @@ export const configApi = {
   branding: () => get('/api/config/branding/logo/'),
   saveLogo: (dataUrl, fileName) => put('/api/config/branding/logo/', { data_url: dataUrl, file_name: fileName }),
   resetLogo: () => del('/api/config/branding/logo/'),
+  attendanceSettings: () => get('/api/config/attendance-settings/'),
+  saveAttendanceSettings: (data) => put('/api/config/attendance-settings/', data),
+  inventorySettings: () => get('/api/config/inventory-settings/'),
+  saveInventorySettings: (data) => put('/api/config/inventory-settings/', data),
+  ticketGrades: () => get('/api/config/ticket-grades/'),
+  saveTicketGrades: (data) => put('/api/config/ticket-grades/', data),
 }
 
 export const authApi = {
@@ -101,12 +107,14 @@ export const authApi = {
     if (opts.search) p.set('search', opts.search)
     if (opts.role) p.set('role', opts.role)
     if (opts.active != null) p.set('active', opts.active)
+    if (opts.department) p.set('department', opts.department)
     if (opts.offset != null) p.set('offset', opts.offset)
     if (opts.limit) p.set('limit', opts.limit)
     const q = p.toString()
     return get(`/api/auth/users/${q ? `?${q}` : ''}`)
   },
   updateUser: (id, data) => put(`/api/auth/users/${id}/`, data),
+  assignDepartment: (id, data) => post(`/api/auth/users/${id}/assign-department/`, data),
   resetPassword: (id, newPassword) =>
     post(`/api/auth/users/${id}/reset-password/`, { new_password: newPassword }),
   deactivateUser: (id) => del(`/api/auth/users/${id}/deactivate/`),
@@ -121,6 +129,7 @@ export const authApi = {
   orgRanks: () => get('/api/auth/org-ranks/'),
   createOrgRank: (data) => post('/api/auth/org-ranks/', data),
   orgChart: () => get('/api/org-chart/'),
+  reassignOrgChart: (data) => post('/api/org-chart/reassign/', data),
 }
 
 export const staffApi = {
@@ -170,6 +179,7 @@ export const productsApi = {
   updateCategory: (id, data) => put(`/api/products/categories/${id}/`, data),
   removeCategory: (id) => del(`/api/products/categories/${id}/`),
   topSelling: (limit = 20) => get(`/api/products/top-selling/?limit=${limit}`),
+  transferStock: (data) => post('/api/products/stock-transfer/', data),
 }
 
 export const materialsApi = {
@@ -406,7 +416,22 @@ export const attendanceApi = {
   checkIn: (data) => post('/api/attendance/check-in/', data),
   checkOut: () => post('/api/attendance/check-out/', {}),
   today: () => get('/api/attendance/today/'),
+  saleGate: () => get('/api/attendance/sale-gate/'),
+  requestBranchSwitch: (data) => post('/api/attendance/request-branch-switch/', data),
   approve: (id, decision) => post(`/api/attendance/${id}/approve/`, { decision }),
+}
+
+export const notificationsApi = {
+  list: (params = '') => get(`/api/notifications/${params ? `?${params}` : ''}`),
+  get: (id) => get(`/api/notifications/${id}/`),
+  unread: () => get('/api/notifications/unread/'),
+  markRead: (id, read = true) => post(`/api/notifications/${id}/read/`, { read }),
+  readAll: () => post('/api/notifications/read-all/', {}),
+  recipients: () => get('/api/notifications/recipients/'),
+  invoices: (params = '') => get(`/api/notifications/invoices/${params ? `?${params}` : ''}`),
+  send: (data) => post('/api/notifications/messages/', data),
+  reply: (id, data) => post(`/api/notifications/${id}/replies/`, data),
+  act: (id, data = {}) => post(`/api/notifications/${id}/act/`, data),
 }
 
 export const levelsApi = {

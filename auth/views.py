@@ -26,6 +26,14 @@ from logic.role_definitions import get_role_permissions
 from logic.sellers import ensure_seller_for_user
 from backend.models import OrgRank, Seller, StaffProfile, UserAccessProfile
 from logic.audit import log_action
+from logic.departments import (
+    DEPARTMENT_IDS,
+    accessible_departments,
+    assign_user_department,
+    department_label,
+    get_user_primary_department,
+    set_primary_department_from_role,
+)
 
 User = get_user_model()
 logger = logging.getLogger(__name__)
@@ -91,6 +99,13 @@ def user_to_dict(user):
     except Exception:
         pass
 
+    primary_department = get_user_primary_department(user)
+    accessible = accessible_departments(permissions)
+    if has_full_access(user):
+        from logic.departments import DEPARTMENTS
+
+        accessible = [{"id": item["id"], "label": item["label"]} for item in DEPARTMENTS]
+
     return {
         "id": user.id,
         "username": user.username,
@@ -115,6 +130,10 @@ def user_to_dict(user):
         "date_joined": user.date_joined.isoformat() if user.date_joined else None,
         "last_login": user.last_login.isoformat() if user.last_login else None,
         "cycle": cycle_payload,
+        "primary_department": primary_department,
+        "department_label": department_label(primary_department),
+        "accessible_departments": accessible,
+        "secondary_departments": [item for item in accessible if item["id"] != primary_department],
     }
 
 
@@ -162,6 +181,7 @@ def apply_user_access(user, role, branch=None):
         ensure_seller_for_user(user, branch=chosen)
     elif role != roles.ADMIN:
         StaffProfile.objects.filter(user=user).delete()
+    set_primary_department_from_role(user, role)
 
 
 def _normalize_branch(branch):
@@ -180,10 +200,11 @@ def _set_full_name(user, full_name):
 
 
 def _users_queryset(request):
-    qs = User.objects.select_related("staff_profile").prefetch_related("groups").order_by("username")
+    qs = User.objects.select_related("staff_profile", "access_profile").prefetch_related("groups").order_by("username")
     search = (request.GET.get("search") or "").strip()
     role_filter = (request.GET.get("role") or "").strip()
     active = request.GET.get("active")
+    department = (request.GET.get("department") or "").strip()
 
     if search:
         qs = qs.filter(
@@ -198,7 +219,28 @@ def _users_queryset(request):
         qs = qs.filter(is_active=True)
     elif active == "0":
         qs = qs.filter(is_active=False)
+    if department:
+        if department in {"none", "pending"}:
+            qs = qs.filter(Q(access_profile__isnull=True) | Q(access_profile__primary_department=""))
+        elif department in DEPARTMENT_IDS:
+            qs = qs.filter(access_profile__primary_department=department)
     return qs.distinct()
+
+
+def _department_stats():
+    from collections import Counter
+
+    from logic.departments import DEPARTMENTS
+
+    counts = Counter()
+    for dept in UserAccessProfile.objects.values_list("primary_department", flat=True):
+        key = dept if dept in DEPARTMENT_IDS else "none"
+        counts[key] += 1
+    unprofiled = User.objects.filter(access_profile__isnull=True).count()
+    counts["none"] += unprofiled
+    departments = {item["id"]: counts.get(item["id"], 0) for item in DEPARTMENTS}
+    departments["none"] = counts.get("none", 0)
+    return departments
 
 
 @api_view("POST", auth=False)
@@ -253,6 +295,7 @@ def user_list(request):
             "total": all_qs.count(),
             "active": all_qs.filter(is_active=True).count(),
             "pending": all_qs.filter(groups__name=roles.PENDING).count(),
+            "departments": _department_stats(),
         }
         return success({"results": results, "stats": stats, **meta})
     return _create_user(request)
@@ -314,6 +357,7 @@ def role_list(request):
             "needs_branch": r.needs_branch,
             "color": r.color,
             "permissions": r.permissions or [],
+            "department": r.department or "",
         }
         for r in qs
     ]
@@ -326,6 +370,7 @@ def role_list(request):
                 "needs_branch": False,
                 "color": "#94a3b8",
                 "permissions": [],
+                "department": "",
             }
         )
     from logic.branches import get_active_branches
@@ -349,7 +394,7 @@ def role_list(request):
 @api_view("GET", "PUT", permission=MANAGE_USERS)
 def user_detail(request, pk):
     try:
-        target = User.objects.select_related("staff_profile").get(pk=pk)
+        target = User.objects.select_related("staff_profile", "access_profile").get(pk=pk)
     except User.DoesNotExist:
         return fail("کاربر یافت نشد.", status=404)
 
@@ -417,6 +462,40 @@ def user_detail(request, pk):
         request.user,
         "update",
         f"ویرایش کاربر {target.username}",
+        entity_type="User",
+        entity_id=target.id,
+    )
+    return success(user_to_dict(target))
+
+
+@api_view("POST", permission=MANAGE_USERS)
+def user_assign_department(request, pk):
+    try:
+        target = User.objects.select_related("staff_profile", "access_profile").get(pk=pk)
+    except User.DoesNotExist:
+        return fail("کاربر یافت نشد.", status=404)
+
+    data = parse_json(request)
+    try:
+        assign_user_department(
+            request.user,
+            target,
+            department=data.get("department"),
+            mode=data.get("mode") or "replace",
+            role=data.get("role"),
+            branch=data.get("branch"),
+            selected_permissions=data.get("selected_permissions"),
+        )
+    except PermissionError as exc:
+        return fail(str(exc), status=403)
+    except ValueError as exc:
+        return fail(str(exc), status=400)
+
+    target.refresh_from_db()
+    log_action(
+        request.user,
+        "update",
+        f"تخصیص دپارتمان {target.username} → {data.get('department')}",
         entity_type="User",
         entity_id=target.id,
     )

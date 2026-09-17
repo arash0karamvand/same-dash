@@ -150,6 +150,7 @@ def role_definition_to_dict(rd):
         "color": rd.color,
         "sort_order": rd.sort_order,
         "parent_slug": rd.parent.slug if rd.parent_id else None,
+        "department": rd.department or "",
     }
 
 
@@ -199,10 +200,16 @@ def create_role_definition(data):
     if invalid:
         raise ValueError(f"مجوز نامعتبر: {', '.join(sorted(invalid))}")
 
+    from logic.departments import normalize_department
+
     parent = None
     parent_slug = (data.get("parent_slug") or "").strip()
     if parent_slug:
         parent = RoleDefinition.objects.filter(slug=parent_slug).first()
+
+    department = ""
+    if data.get("department") is not None:
+        department = normalize_department(data.get("department"), allow_empty=True)
 
     rd = RoleDefinition.objects.create(
         slug=slug,
@@ -213,6 +220,7 @@ def create_role_definition(data):
         color=(data.get("color") or "#6366f1").strip()[:20],
         sort_order=int(data.get("sort_order") or 50),
         parent=parent,
+        department=department,
     )
     rd.permission_set.set(
         [
@@ -252,6 +260,10 @@ def update_role_definition(rd, data):
     if "parent_slug" in data:
         ps = (data.get("parent_slug") or "").strip()
         rd.parent = RoleDefinition.objects.filter(slug=ps).first() if ps else None
+    if "department" in data:
+        from logic.departments import normalize_department
+
+        rd.department = normalize_department(data.get("department"), allow_empty=True)
     rd.save()
     if permission_codes is not None:
         rd.permission_set.set(
