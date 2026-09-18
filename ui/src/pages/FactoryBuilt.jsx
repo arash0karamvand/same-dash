@@ -18,7 +18,7 @@ export default function FactoryBuilt() {
 
   const subtitle = builtDate
     ? `سفارش‌های ساخته‌شده در ${formatJalali(builtDate)}`
-    : 'همه سفارش‌هایی که ساختشان تمام شده و آماده باربری هستند'
+    : 'سفارش‌های ساخته‌شده؛ تا تایید نهایی و ارسال به باربری در باربری دیده نمی‌شوند'
 
   return (
     <WorkflowOrdersPage
@@ -31,6 +31,7 @@ export default function FactoryBuilt() {
       showCustomer={false}
       showAmounts={false}
       showProductionDate
+      rowUrgency
       filters={(
         <div className={fromLegacy("workflow-filter-bar")}>
           <Field label="تاریخ پایان ساخت">
@@ -47,7 +48,29 @@ export default function FactoryBuilt() {
           </button>
         </div>
       )}
-      actions={[]}
+      actions={[
+        {
+          key: 'confirm-ready',
+          label: 'تایید نهایی',
+          variant: 'success',
+          permission: 'manage_factory_orders',
+          when: (o) => o.workflow_stage === 'production_done' && !o.delivery_ready_at,
+          run: (id) => factoryApi.confirmReady(id),
+        },
+        {
+          key: 'send-freight',
+          label: 'ارسال به باربری',
+          variant: 'primary',
+          permission: 'manage_factory_orders',
+          when: (o) => (
+            o.workflow_stage === 'production_done'
+            && Boolean(o.delivery_ready_at)
+            && !o.early_disposition_pending
+            && (!o.early_ship_allowed_date || o.early_ship_allowed_date <= todayIso())
+          ),
+          run: (id) => factoryApi.sendToFreight(id),
+        },
+      ]}
     />
   )
 }

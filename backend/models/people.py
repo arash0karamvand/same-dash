@@ -67,6 +67,10 @@ class Customer(SoftDeleteModel):
         return self.wallet_transactions.aggregate(total=Sum("amount"))["total"] or Decimal("0")
 
     @property
+    def cashback_balance(self):
+        return self.cashback_transactions.aggregate(total=Sum("amount"))["total"] or Decimal("0")
+
+    @property
     def total_purchases(self):
         """Paid purchases backed by active, balanced sale/payment journals."""
         from .accounting import JournalEntry, JournalLine

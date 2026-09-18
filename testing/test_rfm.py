@@ -25,6 +25,7 @@ from logic.rfm import (
     extract_raw_metrics,
     match_segment,
     recalculate_all_rfm,
+    recalculate_customer_rfm,
     score_by_min_thresholds,
     score_by_r_thresholds,
     seed_rfm_defaults,
@@ -144,6 +145,20 @@ class RfmEngineTest(TestCase):
         self.assertEqual(by_customer[self.sleeping.id].segment.slug, "hibernating")
         self.assertEqual(by_customer[self.newbie.id].segment.slug, "newcomers")
         self.assertEqual(by_customer[self.champ.id].rfm_code[0], "5")
+
+    def test_incremental_recalculate_and_clear(self):
+        update_settings({"score_method": "threshold"})
+        score = recalculate_customer_rfm(self.newbie, send_level_up_sms=False)
+        self.assertEqual(score.segment.slug, "newcomers")
+        empty = make_customer("بدون‌خرید", "09120000078")
+        self.assertIsNone(recalculate_customer_rfm(empty, send_level_up_sms=False))
+        self.assertFalse(CustomerRfmScore.objects.filter(customer=empty).exists())
+
+    def test_full_run_stores_quantile_breaks(self):
+        result = recalculate_all_rfm(send_actions=False)
+        self.assertIn("quantile_breaks", result)
+        self.assertTrue(result["quantile_breaks"]["r"])
+        self.assertTrue(RfmSettings.get_solo().last_run_stats.get("quantile_breaks"))
 
     def test_match_segment_priority(self):
         seed_rfm_defaults()
@@ -267,11 +282,17 @@ class RfmApiTest(TestCase):
         seed_builtin_roles()
         seed_rfm_defaults()
 
-    def test_operator_cannot_view(self):
+    def test_operator_can_view_but_not_manage(self):
         make_user("op-rfm", role=roles.OPERATOR)
         client = Client()
         client.login(username="op-rfm", password="secret123")
         resp = client.get("/api/rfm/summary/")
+        self.assertEqual(resp.status_code, 200)
+        resp = client.post(
+            "/api/rfm/recalculate/",
+            data=json.dumps({"send_sms": False}),
+            content_type="application/json",
+        )
         self.assertEqual(resp.status_code, 403)
 
     def test_office_role_can_view_and_admin_can_recalculate(self):

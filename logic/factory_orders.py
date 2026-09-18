@@ -1,7 +1,6 @@
 """دسترسی و فیلتر صف کارخانه / باربری."""
 
 from django.db.models import Count, Q
-from django.utils import timezone
 from django.utils.dateparse import parse_date
 
 from auth.org_roles import is_executive_user
@@ -28,10 +27,7 @@ PRODUCTION_STAGES = {
     FactoryOrder.WORKFLOW_STAGE_IN_PRODUCTION,
 }
 BUILT_STAGES = {FactoryOrder.WORKFLOW_STAGE_PRODUCTION_DONE}
-FREIGHT_STAGES = {
-    FactoryOrder.WORKFLOW_STAGE_PRODUCTION_DONE,
-    FactoryOrder.WORKFLOW_STAGE_IN_FREIGHT,
-}
+FREIGHT_STAGES = {FactoryOrder.WORKFLOW_STAGE_IN_FREIGHT}
 
 
 def parse_date_param(value):
@@ -61,7 +57,13 @@ def has_factory_oversight(user):
 
 def base_factory_queryset():
     return (
-        FactoryOrder.objects.select_related("customer")
+        FactoryOrder.objects.select_related(
+            "customer",
+            "delivery_ready_by",
+            "early_disposition_by",
+            "freight_received_by",
+            "factory_received_by",
+        )
         .prefetch_related(
             "line_items",
             "line_items__product__product_materials__material",
@@ -93,7 +95,7 @@ def apply_section_filters(qs, user, params):
             qs = qs.filter(workflow_stage__in=FREIGHT_STAGES)
             delivery_date = parse_date_param(params.get("delivery_date"))
             if delivery_date:
-                qs = qs.filter(delivery_date=delivery_date)
+                qs = qs.filter(Q(delivery_date=delivery_date) | Q(shipped_early=True))
         else:
             qs = qs.filter(workflow_stage__in=PRODUCTION_STAGES)
             if queue == QUEUE_NEEDS_BUILD:
@@ -132,8 +134,9 @@ def apply_section_filters(qs, user, params):
         if section not in {SECTION_FREIGHT, ""}:
             return qs.none()
         qs = qs.filter(workflow_stage__in=FREIGHT_STAGES)
-        delivery_date = parse_date_param(params.get("delivery_date")) or timezone.localdate()
-        qs = qs.filter(delivery_date=delivery_date)
+        delivery_date = parse_date_param(params.get("delivery_date"))
+        if delivery_date:
+            qs = qs.filter(Q(delivery_date=delivery_date) | Q(shipped_early=True))
         return qs.order_by("delivery_date", "-created_at")
 
     if is_factory_user(user) and is_freight_user(user):
@@ -144,8 +147,9 @@ def apply_section_filters(qs, user, params):
                 qs = qs.filter(production_done_at__date=built_date)
         elif section == SECTION_FREIGHT:
             qs = qs.filter(workflow_stage__in=FREIGHT_STAGES)
-            delivery_date = parse_date_param(params.get("delivery_date")) or timezone.localdate()
-            qs = qs.filter(delivery_date=delivery_date)
+            delivery_date = parse_date_param(params.get("delivery_date"))
+            if delivery_date:
+                qs = qs.filter(Q(delivery_date=delivery_date) | Q(shipped_early=True))
         else:
             qs = qs.filter(workflow_stage__in=PRODUCTION_STAGES)
             if queue == QUEUE_NEEDS_BUILD:
@@ -182,7 +186,13 @@ def factory_queryset_for_user(user, params=None):
 def get_factory_order(pk):
     try:
         return (
-            FactoryOrder.objects.select_related("customer")
+            FactoryOrder.objects.select_related(
+                "customer",
+                "delivery_ready_by",
+                "early_disposition_by",
+                "freight_received_by",
+                "factory_received_by",
+            )
             .prefetch_related("line_items")
             .get(pk=pk)
         )

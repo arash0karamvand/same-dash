@@ -247,12 +247,12 @@ export default function Customers({ portal }) {
               onKeyDown={(e) => e.key === 'Enter' && load()}
             />
           </Field>
-          <Field label="سطح باشگاه">
+          <Field label="بخش RFM">
             <Select
               value={levelFilter}
               onChange={setLevelFilter}
               options={[
-                { value: '', label: 'همه سطوح' },
+                { value: '', label: 'همه بخش‌ها' },
                 ...levels.map((lv) => ({ value: String(lv.id), label: lv.name })),
               ]}
               placeholder="همه سطوح"
@@ -289,7 +289,7 @@ export default function Customers({ portal }) {
                     <th>موبایل</th>
                     <th>آدرس</th>
                     <th>کد باشگاه</th>
-                    <th>سطح</th>
+                    <th>بخش</th>
                     <th>کیف پول</th>
                     <th>مجموع خرید</th>
                     <th>آخرین خرید</th>
@@ -590,16 +590,16 @@ export default function Customers({ portal }) {
                 ))}
               </div>
             )}
-            <h4>تاریخچه تغییر سطح</h4>
+            <h4>تاریخچه تغییر بخش</h4>
             {history.level_history.length === 0 ? (
-              <EmptyState text="تغییر سطحی ثبت نشده." />
+              <EmptyState text="تغییر بخشی ثبت نشده." />
             ) : (
               <div className={fromLegacy("table-wrap")}>
                 <table className={fromLegacy("table")}>
                   <thead>
                     <tr>
-                      <th>سطح قبلی</th>
-                      <th>سطح جدید</th>
+                      <th>بخش قبلی</th>
+                      <th>بخش جدید</th>
                       <th>مجموع خرید</th>
                       <th>تاریخ</th>
                     </tr>

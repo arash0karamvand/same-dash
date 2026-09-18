@@ -69,6 +69,7 @@ class Sale(ReferenceCodeModel, SoftDeleteModel):
         ("percent", "درصدی"),
         ("amount", "مبلغ ثابت"),
         ("wallet", "موجودی حساب"),
+        ("cashback", "کش‌بک"),
     ]
     ACCOUNTING_MODE_CHOICES = [("automatic", "حسابداری خودکار"), ("manual", "حسابداری دستی")]
     ORDER_KIND_NORMAL = "normal"
@@ -220,6 +221,24 @@ class Sale(ReferenceCodeModel, SoftDeleteModel):
         related_name="factory_received_sales",
     )
     production_done_at = models.DateTimeField(null=True, blank=True)
+    delivery_ready_at = models.DateTimeField(null=True, blank=True)
+    delivery_ready_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="delivery_ready_sales",
+    )
+    early_disposition_required = models.BooleanField(default=False)
+    early_ship_allowed_date = models.DateField(null=True, blank=True)
+    early_disposition_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="early_disposition_sales",
+    )
+    shipped_early = models.BooleanField(default=False)
     freight_received_at = models.DateTimeField(null=True, blank=True)
     freight_received_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,

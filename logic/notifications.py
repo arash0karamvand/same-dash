@@ -196,6 +196,12 @@ def _ticket_flags(note, user):
         "can_close": is_ticket and party and status != "closed",
         "can_reopen": is_ticket and party and status == "closed",
         "can_reply": is_ticket and party and status != "closed",
+        "can_set_early_ship_date": bool(
+            is_ticket
+            and payload.get("purpose") == "early_ship_disposition"
+            and status != "closed"
+            and is_holder
+        ),
         "is_party": party,
         "is_admin_view": is_system_admin(user) and not party,
     }
@@ -617,6 +623,13 @@ def open_org_thread(user, notification_id):
         receipt = NotificationReceipt.objects.filter(notification=note, user=user).first()
         if receipt and not receipt.is_read:
             mark_read(receipt, read=True)
+        if payload.get("purpose") == "early_ship_disposition" and payload.get("sale_id"):
+            from logic.early_ship import attach_disposition_claimer
+            from backend.models import Sale as SaleModel
+
+            sale = SaleModel.objects.filter(pk=payload.get("sale_id")).first()
+            if sale:
+                attach_disposition_claimer(sale, user)
     else:
         claimed_id = _payload_user_id(payload, "claimed_by_id")
         if (

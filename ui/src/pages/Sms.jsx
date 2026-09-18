@@ -37,8 +37,8 @@ function formatTimeFa(hhmm) {
   return `${toPersianDigits(h)}:${toPersianDigits(m)}`
 }
 
-export default function Sms() {
-  useRegisterPageGuide('sms', PAGE_GUIDE_DEFAULTS.sms)
+export default function Sms({ embedded = false }) {
+  useRegisterPageGuide(embedded ? '' : 'sms', PAGE_GUIDE_DEFAULTS.sms)
   const { user } = useAuth()
   const confirm = useConfirm()
   const canSend = hasPermission(user, 'send_sms')
@@ -218,7 +218,7 @@ export default function Sms() {
       if (form.target === 'single') {
         result = await smsApi.send({ message: form.message, customer_id: form.customer_id })
       } else if (form.target === 'level') {
-        result = await smsApi.sendToLevel({ message: form.message, level_id: form.level_id })
+        result = await smsApi.sendToSegment({ message: form.message, segment_id: form.level_id })
       } else {
         result = await smsApi.sendToAll({ message: form.message })
       }
@@ -350,7 +350,7 @@ export default function Sms() {
         message_template: discountForm.message_template || undefined,
       }
       if (discountForm.target === 'single') payload.customer_id = discountForm.customer_id
-      if (discountForm.target === 'level') payload.level_id = discountForm.level_id
+      if (discountForm.target === 'level') payload.segment_id = discountForm.level_id
       const result = await smsApi.sendDiscount(payload)
       setInfo(`تخفیف ویژه: ${result.successful} موفق، ${result.failed} ناموفق`)
       if (canViewLogs) loadLogs()
@@ -367,7 +367,7 @@ export default function Sms() {
   const sendTimeLabel = formatTimeFa(preview?.send_time || settingsForm.send_time)
 
   return (
-    <div className={fromLegacy("page sms-page")}>
+    <div className={fromLegacy(embedded ? 'sms-page' : 'page sms-page')}>
       <div className={fromLegacy("sms-tabs")}>
         {canManageClub && (
           <button
@@ -556,7 +556,7 @@ export default function Sms() {
                 onChange={(v) => setDiscountForm({ ...discountForm, target: v })}
                 options={[
                   { value: 'single', label: 'یک مشتری' },
-                  { value: 'level', label: 'یک سطح باشگاه' },
+                  { value: 'level', label: 'یک بخش RFM' },
                   { value: 'all', label: 'همه مشتریان فعال' },
                 ]}
               />
@@ -575,7 +575,7 @@ export default function Sms() {
             )}
 
             {discountForm.target === 'level' && (
-              <Field label="سطح">
+              <Field label="بخش RFM">
                 <Select
                   value={discountForm.level_id}
                   onChange={(v) => setDiscountForm({ ...discountForm, level_id: v })}
@@ -919,7 +919,7 @@ export default function Sms() {
                 onChange={(v) => setForm({ ...form, target: v })}
                 options={[
                   { value: 'single', label: 'یک مشتری' },
-                  { value: 'level', label: 'مشتریان فعال یک سطح' },
+                  { value: 'level', label: 'مشتریان فعال یک بخش RFM' },
                   { value: 'all', label: 'همه مشتریان فعال' },
                 ]}
               />
@@ -938,7 +938,7 @@ export default function Sms() {
             )}
 
             {form.target === 'level' && (
-              <Field label="سطح">
+              <Field label="بخش RFM">
                 <Select
                   value={form.level_id}
                   onChange={(v) => setForm({ ...form, level_id: v })}

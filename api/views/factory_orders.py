@@ -1,9 +1,19 @@
 """API صف کارخانه و باربری — جدول جدا؛ فقط پس از تایید اداری."""
 
-from api.helpers import api_view, fail, success
+from api.helpers import api_view, fail, parse_json, success
 from api.serializers import factory_order_to_dict
-from auth.permissions import MANAGE_FACTORY_ORDERS, MANAGE_FREIGHT_ORDERS, has_permission
+from auth.permissions import (
+    APPROVE_SALE_ACCOUNTING,
+    MANAGE_FACTORY_ORDERS,
+    MANAGE_FREIGHT_ORDERS,
+    has_permission,
+)
 from logic.audit import log_action
+from logic.early_ship import (
+    confirm_factory_delivery_ready,
+    send_factory_order_to_freight,
+    set_early_ship_allowed_date,
+)
 from logic.factory_orders import (
     can_list_factory_orders,
     can_run_factory_action,
@@ -90,6 +100,50 @@ def factory_order_complete(request, pk):
         complete_factory_production,
         "پایان ساخت — سفارش",
     )
+
+
+@api_view("POST")
+def factory_order_confirm_ready(request, pk):
+    return _factory_action(
+        request,
+        pk,
+        MANAGE_FACTORY_ORDERS,
+        confirm_factory_delivery_ready,
+        "تایید نهایی ساخته‌شده — سفارش",
+    )
+
+
+@api_view("POST")
+def factory_order_send_to_freight(request, pk):
+    return _factory_action(
+        request,
+        pk,
+        MANAGE_FACTORY_ORDERS,
+        send_factory_order_to_freight,
+        "ارسال به باربری — سفارش",
+    )
+
+
+@api_view("POST")
+def factory_order_early_ship_date(request, pk):
+    if not has_permission(request.user, APPROVE_SALE_ACCOUNTING):
+        return fail("Permission denied", status=403)
+    order = get_factory_order(pk)
+    if order is None:
+        return fail("سفارش کارخانه یافت نشد", status=404)
+    data = parse_json(request)
+    try:
+        order = set_early_ship_allowed_date(order, request.user, data.get("allowed_date"))
+    except ValueError as exc:
+        return fail(str(exc), status=400)
+    log_action(
+        request.user,
+        "update",
+        f"تعیین تاریخ ارسال زودتر از موعد #{order.id}",
+        entity_type="FactoryOrder",
+        entity_id=order.id,
+    )
+    return success(factory_order_to_dict(order, include_lines=True, user=request.user))
 
 
 @api_view("POST")

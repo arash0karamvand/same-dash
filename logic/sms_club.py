@@ -3,12 +3,12 @@
 from decimal import Decimal
 
 from backend.models import SmsClubSettings
-from logic.sms import send_sms, send_sms_to_level, send_sms_to_all_active_customers, _bulk_result
+from logic.sms import send_sms, send_sms_to_segment, send_sms_to_all_active_customers, _bulk_result
 
 TEMPLATE_VARS = {
     "common": ["name", "shop_name", "phone", "code"],
     "order_placed": ["amount", "invoice"],
-    "level_up": ["level"],
+    "level_up": ["level", "segment"],
     "discount": ["discount_label", "discount_amount", "discount_percent"],
 }
 
@@ -115,6 +115,7 @@ def maybe_send_level_up(customer, new_level, user=None):
         s.level_up_template,
         **_base_ctx(customer, s.shop_name),
         level=new_level.name,
+        segment=new_level.name,
     )
     return send_sms(customer.phone, msg, customer=customer, sms_type="level_up", user=user)
 
@@ -143,6 +144,7 @@ def send_discount_bulk(
     user=None,
     customer_ids=None,
     level_id=None,
+    segment_id=None,
     send_to_all=False,
     message_template=None,
 ):
@@ -154,10 +156,11 @@ def send_discount_bulk(
         raise ValueError("مقدار تخفیف باید بزرگ‌تر از صفر باشد.")
 
     logs = []
+    target_segment = segment_id or level_id
     if send_to_all:
         customers = Customer.objects.filter(is_active=True)
-    elif level_id:
-        customers = Customer.objects.filter(is_active=True, level_id=level_id)
+    elif target_segment:
+        customers = Customer.objects.filter(is_active=True, rfm_score__segment_id=target_segment)
     elif customer_ids:
         customers = Customer.objects.filter(is_active=True, pk__in=customer_ids)
     else:

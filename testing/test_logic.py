@@ -9,11 +9,13 @@ from backend.models import (
     AccountingEntry,
     Customer,
     CustomerLevelHistory,
+    CustomerRfmScore,
     FactoryOrder,
     JournalEntry,
     JournalLine,
     LoyaltyLevel,
     OfficeOrder,
+    RfmSegment,
     SMSLog,
 )
 from logic.accounting import delete_accounting_entry
@@ -30,11 +32,12 @@ from logic.sale_workflow import (
 from logic.checks_excel_export import checks_excel_bytes
 from logic.installments import pay_installment
 from logic.sales import delete_sale, record_payment, record_sale, update_sale
+from logic.rfm import seed_rfm_defaults
 from logic.sms import (
     is_valid_phone,
     send_sms,
     send_sms_to_all_active_customers,
-    send_sms_to_level,
+    send_sms_to_segment,
 )
 
 User = get_user_model()
@@ -64,15 +67,15 @@ class LevelLogicTest(TestCase):
 
 class SalesLogicTest(TestCase):
     def setUp(self):
-        LoyaltyLevel.objects.create(name="برنز", min_purchase=0, max_purchase=10_000_000)
-        LoyaltyLevel.objects.create(name="نقره‌ای", min_purchase=10_000_000, max_purchase=30_000_000)
+        seed_rfm_defaults()
         self.customer = Customer.objects.create(full_name="تست", phone="09120000005")
 
     def test_record_sale_updates_totals_level_and_accounting_when_paid(self):
         record_sale(self.customer, Decimal("12000000"), discount=Decimal("2000000"))
         self.customer.refresh_from_db()
         self.assertEqual(self.customer.total_purchases, Decimal("10000000"))
-        self.assertEqual(self.customer.level.name, "نقره‌ای")
+        score = CustomerRfmScore.objects.get(customer=self.customer)
+        self.assertEqual(score.segment.slug, "newcomers")
         journal = JournalEntry.objects.get(entry_type="sale")
         entry = journal.lines.get(account__slug="product_sales")
         self.assertEqual(entry.credit, Decimal("10000000"))
@@ -83,7 +86,7 @@ class SalesLogicTest(TestCase):
         record_sale(self.customer, Decimal("5000000"), payment_status="unpaid")
         self.customer.refresh_from_db()
         self.assertEqual(self.customer.total_purchases, Decimal("0"))
-        self.assertIsNone(self.customer.level)
+        self.assertFalse(CustomerRfmScore.objects.filter(customer=self.customer).exists())
         self.assertEqual(JournalLine.objects.filter(account__slug="receivables").count(), 1)
 
     def test_partial_payment_updates_customer_and_receivable(self):
@@ -122,18 +125,16 @@ class SalesLogicTest(TestCase):
         )
 
     def test_delete_sale_reverses_customer_totals_and_level(self):
-        silver = LoyaltyLevel.objects.get(name="نقره‌ای")
-        bronze = LoyaltyLevel.objects.get(name="برنز")
         sale = record_sale(self.customer, Decimal("12000000"), discount=Decimal("2000000"))
         self.customer.refresh_from_db()
         self.assertEqual(self.customer.total_purchases, Decimal("10000000"))
-        self.assertEqual(self.customer.level_id, silver.id)
+        self.assertTrue(CustomerRfmScore.objects.filter(customer=self.customer).exists())
 
         deleted = delete_sale(sale)
         self.assertGreater(deleted, 0)
         self.customer.refresh_from_db()
         self.assertEqual(self.customer.total_purchases, Decimal("0"))
-        self.assertEqual(self.customer.level_id, bronze.id)
+        self.assertFalse(CustomerRfmScore.objects.filter(customer=self.customer).exists())
         self.assertIsNone(self.customer.last_purchase_at)
         sale.refresh_from_db()
         self.assertTrue(sale.is_deleted)
@@ -479,11 +480,18 @@ class SmsLogicTest(TestCase):
         self.assertEqual(result["successful"], 0)
         self.assertEqual(SMSLog.objects.count(), 2)
 
-    def test_send_to_level_only_active_customers(self):
-        level = LoyaltyLevel.objects.create(name="Gold", min_purchase=0)
-        Customer.objects.create(full_name="Active", phone="09120000009", level=level, is_active=True)
-        Customer.objects.create(full_name="Inactive", phone="09120000010", level=level, is_active=False)
-        result = send_sms_to_level(level.id, "پیشنهاد ویژه", user=self.user)
+    def test_send_to_segment_only_active_customers(self):
+        seed_rfm_defaults()
+        segment = RfmSegment.objects.get(slug="newcomers")
+        active = Customer.objects.create(full_name="Active", phone="09120000009", is_active=True)
+        inactive = Customer.objects.create(full_name="Inactive", phone="09120000010", is_active=False)
+        CustomerRfmScore.objects.create(
+            customer=active, segment=segment, rfm_code="511", r_score=5, f_score=1, m_score=1
+        )
+        CustomerRfmScore.objects.create(
+            customer=inactive, segment=segment, rfm_code="511", r_score=5, f_score=1, m_score=1
+        )
+        result = send_sms_to_segment(segment.id, "پیشنهاد ویژه", user=self.user)
         self.assertEqual(len(result["results"]), 1)
 
 

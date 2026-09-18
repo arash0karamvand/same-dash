@@ -19,13 +19,14 @@ class WalletTransaction(AppendOnlyModel):
         ("sale", "پرداخت فروش"),
         ("refund", "بازگشت"),
         ("adjustment", "اصلاح"),
+        ("cashback", "کش‌بک"),
     ]
     customer = models.ForeignKey(
         Customer, on_delete=models.PROTECT, related_name="wallet_transactions"
     )
     amount = models.DecimalField(**MONEY_KWARGS)
     transaction_type = models.CharField(
-        max_length=12, choices=TYPE_CHOICES, default="adjustment"
+        max_length=16, choices=TYPE_CHOICES, default="adjustment"
     )
     description = models.CharField(max_length=255, blank=True)
     sale = models.ForeignKey(
@@ -202,6 +203,9 @@ class ReminderCampaign(models.Model):
     shop_name = models.CharField(max_length=100, default="سام اکسون")
     loyalty_levels = models.ManyToManyField(
         LoyaltyLevel, blank=True, related_name="reminder_campaigns"
+    )
+    rfm_segments = models.ManyToManyField(
+        "backend.RfmSegment", blank=True, related_name="reminder_campaigns"
     )
     min_months_since_purchase = models.PositiveIntegerField(null=True, blank=True)
     last_run_at = models.DateTimeField(null=True, blank=True)

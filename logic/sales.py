@@ -7,7 +7,7 @@ from django.db import transaction
 
 from backend.models import JournalEntry, JournalLine, Sale
 from logic.accounting import create_accounting_entry, create_journal
-from logic.levels import update_customer_level
+from logic.rfm import recalculate_customer_rfm
 
 
 def balance_due(sale):
@@ -46,7 +46,7 @@ def normalize_payment_method(method, default="cash"):
     return value
 
 
-def resolve_discount_amount(amount, discount_type, discount_value, customer=None):
+def resolve_discount_amount(amount, discount_type, discount_value, customer=None, exclude_sale_id=None):
     """محاسبه تخفیف نهایی (ریال) از نوع و مقدار ورودی."""
     amount = Decimal(amount)
     discount_value = Decimal(discount_value or 0)
@@ -66,6 +66,19 @@ def resolve_discount_amount(amount, discount_type, discount_value, customer=None
         discount = min(use, wallet, amount)
         if discount <= 0:
             raise ValueError("مبلغ استفاده از کیف پول نامعتبر است.")
+    elif discount_type == "cashback":
+        if customer is None:
+            raise ValueError("برای استفاده از کش‌بک، مشتری الزامی است.")
+        from logic.cashback import quote_cashback
+
+        quote = quote_cashback(customer, amount, exclude_sale_id=exclude_sale_id)
+        cap = Decimal(quote["usable_amount"])
+        if cap <= 0:
+            raise ValueError("کش‌بک قابل‌استفاده برای این فاکتور وجود ندارد.")
+        use = discount_value if discount_value > 0 else cap
+        discount = min(use, cap, amount)
+        if discount <= 0:
+            raise ValueError("مبلغ استفاده از کش‌بک نامعتبر است.")
     else:
         discount = discount_value
 
@@ -133,6 +146,7 @@ def _record_deposit_payment(sale, amount, description="", recorded_by=None):
         sale.sold_at,
         reason="دریافت بیعانه",
         user=recorded_by,
+        sale=sale,
     )
 
 
@@ -166,13 +180,17 @@ def _refund_wallet_discount(customer, amount, sale, user=None):
     )
 
 
-def _apply_purchase_to_customer(customer, amount, sold_at, reason, user=None):
+def _apply_purchase_to_customer(customer, amount, sold_at, reason, user=None, sale=None):
     amount = Decimal(amount)
     if amount <= 0:
         return
     customer.last_purchase_at = sold_at
     customer.save(update_fields=["last_purchase_at"])
-    update_customer_level(customer, reason=reason, user=user)
+    recalculate_customer_rfm(customer, user=user)
+    if sale is not None:
+        from logic.cashback import accrue_cashback
+
+        accrue_cashback(customer, sale=sale, user=user)
 
 
 def _reverse_purchase_from_customer(customer, amount):
@@ -323,6 +341,11 @@ def record_sale(
     discount_type = (discount_type or "amount").strip()
     if discount_value is None:
         discount_value = discount
+    from logic.cashback import maybe_autoselect_cashback_discount
+
+    discount_type, discount_value = maybe_autoselect_cashback_discount(
+        customer, amount, discount_type, discount_value
+    )
     discount = resolve_discount_amount(amount, discount_type, discount_value, customer=customer)
     payment_method = normalize_payment_method(payment_method)
     from logic.accounting_accounts import resolve_sale_accounting_mode
@@ -428,6 +451,10 @@ def record_sale(
 
     if discount_type == "wallet" and discount > 0:
         _apply_wallet_discount(customer, discount, sale, user=recorded_by)
+    if discount_type == "cashback" and discount > 0:
+        from logic.cashback import apply_cashback_spend
+
+        apply_cashback_spend(customer, sale, discount, user=recorded_by)
 
     if resolved_items:
         from backend.models import SaleLineItem
@@ -471,6 +498,7 @@ def record_sale(
             sale.sold_at,
             reason="ثبت فروش (مبلغ پرداخت‌شده)",
             user=recorded_by,
+            sale=sale,
         )
     elif resolved_accounting_mode == Sale.ACCOUNTING_MODE_AUTOMATIC:
         _create_sale_accounting(sale, outstanding, is_approved=False)
@@ -480,6 +508,7 @@ def record_sale(
             sale.sold_at,
             reason="ثبت فروش (مبلغ پرداخت‌شده)",
             user=recorded_by,
+            sale=sale,
         )
 
     if order_kind == Sale.ORDER_KIND_DEPOSIT:
@@ -509,23 +538,26 @@ def delete_sale(sale, user=None):
     if wallet_used > 0:
         _refund_wallet_discount(customer, wallet_used, sale, user=user)
 
+    from logic.cashback import reverse_sale_cashback
+
+    reverse_sale_cashback(customer, sale, user=user)
+
     from logic.products import restore_variant_stock_for_sale
 
     restore_variant_stock_for_sale(sale, recorded_by=user)
 
     _reverse_purchase_from_customer(customer, paid_amount)
     _refresh_customer_last_purchase(customer, exclude_sale_id=sale.pk)
-    update_customer_level(
-        customer,
-        reason=f"حذف فروش #{sale.pk}",
-        user=user,
-        send_level_up_sms=False,
-    )
 
     from logic.order_queues import soft_delete_workflow_orders_for_sale
 
     soft_delete_workflow_orders_for_sale(sale)
     sale.soft_delete()
+    recalculate_customer_rfm(
+        customer,
+        user=user,
+        send_level_up_sms=False,
+    )
     return deleted_entries
 
 
@@ -578,6 +610,7 @@ def record_payment(sale, amount, description="", recorded_by=None, account=None)
         sale.sold_at,
         reason="دریافت پرداخت فاکتور",
         user=recorded_by,
+        sale=sale,
     )
 
     return sale
@@ -601,9 +634,8 @@ def reverse_payment(sale, amount, user=None):
 
     _sync_receivable_entry(sale)
     _reverse_purchase_from_customer(sale.customer, amount)
-    update_customer_level(
+    recalculate_customer_rfm(
         sale.customer,
-        reason=f"برگشت پرداخت فاکتور #{sale.pk}",
         user=user,
         send_level_up_sms=False,
     )
@@ -673,7 +705,10 @@ def cancel_order(sale, recorded_by=None):
     from logic.products import restore_variant_stock_for_sale
 
     restore_variant_stock_for_sale(sale, recorded_by=recorded_by)
-    update_customer_level(customer, reason=f"لغو سفارش #{sale.pk}", user=recorded_by, send_level_up_sms=False)
+    from logic.cashback import reverse_sale_cashback
+
+    reverse_sale_cashback(customer, sale, user=recorded_by)
+    recalculate_customer_rfm(customer, user=recorded_by, send_level_up_sms=False)
     return sale
 
 
@@ -749,6 +784,7 @@ def update_sale(
     """ویرایش فروش — مبلغ، تخفیف، اقلام، اقساط و فیلدهای متنی."""
     old_paid = sale.paid_amount
     old_wallet = sale.discount if sale.discount_type == "wallet" else Decimal(0)
+    old_cashback = sale.discount if sale.discount_type == "cashback" else Decimal(0)
     customer = sale.customer
 
     if line_items is not None:
@@ -776,12 +812,24 @@ def update_sale(
 
     if old_wallet > 0:
         _refund_wallet_discount(customer, old_wallet, sale)
+    if old_cashback > 0:
+        from logic.cashback import apply_cashback_spend
+
+        apply_cashback_spend(customer, sale, Decimal(0), user=recorded_by)
 
     sale.discount = resolve_discount_amount(
-        sale.amount, sale.discount_type, sale.discount_value, customer=customer
+        sale.amount,
+        sale.discount_type,
+        sale.discount_value,
+        customer=customer,
+        exclude_sale_id=sale.pk,
     )
     if sale.discount_type == "wallet" and sale.discount > 0:
         _apply_wallet_discount(customer, sale.discount, sale)
+    if sale.discount_type == "cashback" and sale.discount > 0:
+        from logic.cashback import apply_cashback_spend
+
+        apply_cashback_spend(customer, sale, sale.discount, user=recorded_by)
 
     if sale.amount <= 0:
         raise ValueError("مبلغ فروش باید مثبت باشد.")
@@ -848,13 +896,17 @@ def update_sale(
             paid_delta,
             sale.sold_at,
             reason="اصلاح مبلغ پرداخت‌شده فاکتور",
+            sale=sale,
+            user=recorded_by,
         )
-    elif paid_delta < 0:
-        update_customer_level(
+    else:
+        recalculate_customer_rfm(
             sale.customer,
-            reason="کاهش مبلغ پرداخت‌شده فاکتور",
             send_level_up_sms=False,
         )
+        from logic.cashback import accrue_cashback
+
+        accrue_cashback(sale.customer, sale=sale, user=recorded_by)
 
     return sale
 

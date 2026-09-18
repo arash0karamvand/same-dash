@@ -2,6 +2,15 @@
 
 import { PORTALS } from '../config/portals'
 
+const LEGACY_PAGES = {
+  levels: 'rfm',
+  sms: 'rfm',
+}
+
+export function canonicalizePage(page) {
+  return LEGACY_PAGES[page] || page
+}
+
 export function parseRoute(pathname = window.location.pathname) {
   const normalized = (pathname || '/').replace(/\/$/, '') || '/'
   if (normalized === '/') {
@@ -9,7 +18,7 @@ export function parseRoute(pathname = window.location.pathname) {
   }
   const segments = normalized.split('/').filter(Boolean)
   const portal = segments[0]
-  const page = segments[1] || null
+  const page = canonicalizePage(segments[1] || null)
   if (!PORTALS.some((p) => p.id === portal)) {
     return { portal: null, page: null }
   }
@@ -19,13 +28,13 @@ export function parseRoute(pathname = window.location.pathname) {
 export function resolvePage(portal, page) {
   if (!portal) return 'dashboard'
   const p = PORTALS.find((x) => x.id === portal)
-  return page || p?.defaultPage || portal
+  return canonicalizePage(page) || p?.defaultPage || portal
 }
 
 export function routeToPath(portal, page) {
   if (!portal) return '/'
   const p = PORTALS.find((x) => x.id === portal)
-  const resolved = page || p?.defaultPage
+  const resolved = canonicalizePage(page) || p?.defaultPage
   if (!resolved || resolved === p?.defaultPage) return `/${portal}`
   return `/${portal}/${resolved}`
 }

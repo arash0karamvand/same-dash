@@ -2,7 +2,7 @@
 
 جدول فیلدهای پولی (همه DecimalField با MONEY_KWARGS):
   LoyaltyLevel          min_purchase, max_purchase
-  Customer              wallet_balance, total_purchases
+  Customer              wallet_balance, cashback_balance, total_purchases
   Sale                  amount, discount_value, discount, final_amount, paid_amount
   SaleInstallment       amount
   SaleLineItem          unit_price, line_total
@@ -42,6 +42,7 @@ BUSINESS_MONEY_MODEL_FIELDS = (
     ("OfficeOrderInstallment", ("amount",)),
     ("CustomerLevelHistory", ("total_purchases_at_change",)),
     ("WalletTransaction", ("amount", "balance_after")),
+    ("CashbackTransaction", ("amount",)),
     ("SmsClubSettings", ("default_discount_value",)),
 )
 

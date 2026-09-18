@@ -18,9 +18,9 @@ def apply_customer_filters(qs, params):
             | Q(membership_code__icontains=search)
         )
 
-    level_id = params.get("level_id") or params.get("level")
+    level_id = params.get("level_id") or params.get("level") or params.get("segment_id")
     if level_id not in (None, ""):
-        qs = qs.filter(level_id=level_id)
+        qs = qs.filter(rfm_score__segment_id=level_id)
 
     active = params.get("is_active") if params.get("is_active") not in (None, "") else params.get("active")
     if active in ("1", "true", "True"):
@@ -69,7 +69,7 @@ def parse_birthday(data):
 
 
 def list_customers(params):
-    qs = Customer.objects.select_related("level").all()
+    qs = Customer.objects.select_related("level", "rfm_score", "rfm_score__segment").all()
     return apply_customer_filters(qs, params)
 
 
@@ -115,7 +115,7 @@ def update_customer(customer, data):
 
 
 def get_customer(pk, with_level=False):
-    qs = Customer.objects.select_related("level") if with_level else Customer.objects
+    qs = Customer.objects.select_related("level", "rfm_score", "rfm_score__segment") if with_level else Customer.objects
     try:
         return qs.get(pk=pk)
     except Customer.DoesNotExist:
@@ -125,9 +125,26 @@ def get_customer(pk, with_level=False):
 def customer_history_payload(customer, sale_to_dict, level_history_to_dict):
     sales = customer.sales.prefetch_related("line_items").order_by("-sold_at")
     history = customer.level_history.select_related("previous_level", "new_level").all()
+    items = [level_history_to_dict(h) for h in history]
+    rfm_logs = customer.rfm_action_logs.filter(
+        action_type="segment_change"
+    ).select_related("segment", "previous_segment")
+    for log in rfm_logs:
+        items.append(
+            {
+                "id": f"rfm-{log.id}",
+                "customer_id": log.customer_id,
+                "previous_level": log.previous_segment.name if log.previous_segment_id else None,
+                "new_level": log.segment.name if log.segment_id else None,
+                "reason": "تغییر بخش RFM",
+                "total_purchases_at_change": 0,
+                "changed_at": log.sent_at.isoformat(),
+            }
+        )
+    items.sort(key=lambda row: row.get("changed_at") or "", reverse=True)
     return {
         "sales": [sale_to_dict(s, include_lines=True) for s in sales],
-        "level_history": [level_history_to_dict(h) for h in history],
+        "level_history": items,
     }
 
 

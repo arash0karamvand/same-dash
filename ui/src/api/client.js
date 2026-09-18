@@ -355,6 +355,9 @@ export const factoryApi = {
   get: (id) => get(`/api/factory/orders/${id}/`),
   receive: (id) => post(`/api/factory/orders/${id}/receive/`),
   complete: (id) => post(`/api/factory/orders/${id}/complete/`),
+  confirmReady: (id) => post(`/api/factory/orders/${id}/confirm-ready/`),
+  sendToFreight: (id) => post(`/api/factory/orders/${id}/send-to-freight/`),
+  setEarlyShipDate: (id, data) => post(`/api/factory/orders/${id}/early-ship-date/`, data),
   freightReceive: (id) => post(`/api/factory/orders/${id}/freight-receive/`),
   freightComplete: (id) => post(`/api/factory/orders/${id}/freight-complete/`),
 }
@@ -461,6 +464,19 @@ export const rfmApi = {
   },
   recalculate: (data = {}) => post('/api/rfm/recalculate/', data),
   sendSms: (customerId, data = {}) => post(`/api/rfm/customers/${customerId}/send-sms/`, data),
+  sendSegmentSms: (segmentId, data = {}) => post(`/api/rfm/segments/${segmentId}/send-sms/`, data),
+  cashbackPrograms: () => get('/api/rfm/cashback/programs/'),
+  createCashbackProgram: (data) => post('/api/rfm/cashback/programs/', data),
+  updateCashbackProgram: (id, data) => put(`/api/rfm/cashback/programs/${id}/`, data),
+  removeCashbackProgram: (id) => del(`/api/rfm/cashback/programs/${id}/`),
+  cashbackQuote: (opts = {}) => {
+    const p = new URLSearchParams()
+    if (opts.customerId) p.set('customer_id', opts.customerId)
+    if (opts.amount != null) p.set('amount', opts.amount)
+    if (opts.excludeSaleId) p.set('exclude_sale_id', opts.excludeSaleId)
+    const q = p.toString()
+    return get(`/api/rfm/cashback/quote/${q ? `?${q}` : ''}`)
+  },
 }
 
 function accountingParams(opts = {}) {
@@ -639,6 +655,7 @@ export const smsApi = {
   },
   send: (data) => post('/api/sms/send/', data),
   sendToLevel: (data) => post('/api/sms/send-to-level/', data),
+  sendToSegment: (data) => post('/api/sms/send-to-level/', data),
   sendToAll: (data) => post('/api/sms/send-to-all/', data),
   birthdaySettings: () => get('/api/sms/birthday/settings/'),
   updateBirthdaySettings: (data) => put('/api/sms/birthday/settings/', data),

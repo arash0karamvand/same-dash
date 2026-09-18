@@ -3,6 +3,7 @@
 from datetime import timedelta
 from decimal import Decimal, InvalidOperation
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db.models import Count, Max, Q, Sum
 from django.utils import timezone
 from django.utils.text import slugify
@@ -18,6 +19,52 @@ from backend.models import (
 )
 from logic.sms import send_sms
 from logic.sms_club import render_template
+
+
+def can_view_rfm_panel(user):
+    """مشاهده پنل یکپارچه RFM / باشگاه / پیامک."""
+    from auth.permissions import (
+        MANAGE_BIRTHDAY_SMS,
+        MANAGE_RFM,
+        MANAGE_REMINDERS,
+        MANAGE_SMS_CLUB,
+        SEND_SMS,
+        VIEW_LOYALTY,
+        VIEW_RFM,
+        VIEW_SMS_LOGS,
+        has_permission,
+    )
+
+    return any(
+        has_permission(user, code)
+        for code in (
+            VIEW_RFM,
+            MANAGE_RFM,
+            VIEW_LOYALTY,
+            SEND_SMS,
+            VIEW_SMS_LOGS,
+            MANAGE_SMS_CLUB,
+            MANAGE_BIRTHDAY_SMS,
+            MANAGE_REMINDERS,
+        )
+    )
+
+
+def customer_segment(customer):
+    """بخش RFM فعلی مشتری، یا None."""
+    if customer is None:
+        return None
+    try:
+        score = customer.rfm_score
+    except (ObjectDoesNotExist, AttributeError):
+        return None
+    return score.segment if score else None
+
+
+def customer_segment_name(customer, empty="—"):
+    segment = customer_segment(customer)
+    return segment.name if segment else empty
+
 
 SCORE_MIN = 1
 SCORE_MAX = 5
@@ -238,6 +285,90 @@ def extract_raw_metrics(settings=None, now=None):
             }
         )
     return rows
+
+
+def extract_raw_metrics_for_customer(customer, settings=None, now=None):
+    """مقادیر خام R/F/M برای یک مشتری — اگر فروش شمارش‌پذیر نداشته باشد None."""
+    settings = settings or RfmSettings.get_solo()
+    now = now or timezone.now()
+    qs = countable_sales_qs().filter(customer=customer)
+    last_sold = qs.aggregate(last_sold=Max("sold_at"))["last_sold"]
+    if not last_sold:
+        return None
+    fm_qs = qs
+    if (settings.fm_window or RfmSettings.WINDOW_LOOKBACK) == RfmSettings.WINDOW_LOOKBACK:
+        days = max(1, _as_int(settings.lookback_days, 730))
+        fm_qs = fm_qs.filter(sold_at__gte=now - timedelta(days=days))
+    amount_field = (
+        settings.monetary_field
+        if settings.monetary_field in (RfmSettings.MONETARY_FINAL, RfmSettings.MONETARY_PAID)
+        else RfmSettings.MONETARY_FINAL
+    )
+    fm = fm_qs.aggregate(frequency=Count("id"), monetary=Sum(amount_field))
+    today = timezone.localdate(now)
+    last_date = timezone.localtime(last_sold).date()
+    return {
+        "customer_id": customer.id,
+        "r_raw": max(0, (today - last_date).days),
+        "f_raw": int(fm.get("frequency") or 0),
+        "m_raw": fm.get("monetary") or Decimal("0"),
+        "last_purchase_at": last_sold,
+    }
+
+
+def _quantile_breaks_from_scored(scored):
+    def collect(raw_key, score_key, invert):
+        buckets = {}
+        for row in scored:
+            buckets.setdefault(row[score_key], []).append(row[raw_key])
+        out = []
+        for score, values in buckets.items():
+            nums = [_as_decimal(v) for v in values]
+            if not nums:
+                continue
+            if invert:
+                out.append({"score": int(score), "max_value": int(max(nums))})
+            else:
+                out.append({"score": int(score), "min_value": int(min(nums))})
+        return out
+
+    return {
+        "r": collect("r_raw", "r_score", True),
+        "f": collect("f_raw", "f_score", False),
+        "m": collect("m_raw", "m_score", False),
+    }
+
+
+def _score_from_breaks(raw, breaks, invert):
+    if invert:
+        rows = sorted(breaks or [], key=lambda item: _as_int(item.get("score"), SCORE_MIN), reverse=True)
+        for row in rows:
+            if _as_decimal(raw) <= _as_decimal(row.get("max_value"), 0):
+                return _clamp_score(row.get("score"))
+        return SCORE_MIN
+    rows = sorted(breaks or [], key=lambda item: _as_int(item.get("score"), SCORE_MIN), reverse=True)
+    for row in rows:
+        if _as_decimal(raw) >= _as_decimal(row.get("min_value"), 0):
+            return _clamp_score(row.get("score"))
+    return SCORE_MIN
+
+
+def _score_single_row(row, settings):
+    method = settings.score_method or RfmSettings.SCORE_METHOD_QUANTILE
+    use_threshold = method == RfmSettings.SCORE_METHOD_THRESHOLD
+    breaks = (settings.last_run_stats or {}).get("quantile_breaks") or {}
+    if not use_threshold and not breaks:
+        use_threshold = True
+    if use_threshold:
+        row["r_score"] = score_by_r_thresholds(row["r_raw"], settings.r_thresholds)
+        row["f_score"] = score_by_min_thresholds(row["f_raw"], settings.f_thresholds, "min_count")
+        row["m_score"] = score_by_min_thresholds(row["m_raw"], settings.m_thresholds, "min_amount")
+    else:
+        row["r_score"] = _score_from_breaks(row["r_raw"], breaks.get("r") or [], invert=True)
+        row["f_score"] = _score_from_breaks(row["f_raw"], breaks.get("f") or [], invert=False)
+        row["m_score"] = _score_from_breaks(row["m_raw"], breaks.get("m") or [], invert=False)
+    row["rfm_code"] = f"{row['r_score']}{row['f_score']}{row['m_score']}"
+    return row
 
 
 def _apply_scores(raw_rows, settings):
@@ -519,6 +650,7 @@ def _sms_context(customer, segment, score_row):
         "code": customer.membership_code or "",
         "rfm": score_row.get("rfm_code", ""),
         "segment": segment.name if segment else "",
+        "level": segment.name if segment else "",
     }
 
 
@@ -698,8 +830,103 @@ def recalculate_all_rfm(send_actions=True, now=None):
         "scored": len(scored),
         "unmatched": unmatched,
         **sms_stats,
+        "quantile_breaks": _quantile_breaks_from_scored(scored),
     }
     settings.last_run_at = now
     settings.last_run_stats = stats
     settings.save(update_fields=["last_run_at", "last_run_stats", "updated_at"])
     return stats
+
+
+def _upsert_customer_score(customer, row, segment, now):
+    defaults = {
+        "r_raw": row["r_raw"],
+        "f_raw": row["f_raw"],
+        "m_raw": row["m_raw"],
+        "r_score": row["r_score"],
+        "f_score": row["f_score"],
+        "m_score": row["m_score"],
+        "rfm_code": row["rfm_code"],
+        "last_purchase_at": row["last_purchase_at"],
+        "segment": segment,
+        "computed_at": now,
+    }
+    score, _created = CustomerRfmScore.objects.update_or_create(
+        customer=customer,
+        defaults=defaults,
+    )
+    return score
+
+
+def recalculate_customer_rfm(customer, send_level_up_sms=True, user=None, now=None):
+    """امتیاز RFM یک مشتری را بعد از فروش/حذف به‌روز می‌کند و در صورت تغییر بخش پیامک ارتقا می‌فرستد."""
+    seed_rfm_defaults()
+    settings = RfmSettings.get_solo()
+    now = now or timezone.now()
+    try:
+        previous = customer.rfm_score
+        previous_segment = previous.segment
+        previous_segment_id = previous.segment_id
+    except ObjectDoesNotExist:
+        previous = None
+        previous_segment = None
+        previous_segment_id = None
+
+    raw = extract_raw_metrics_for_customer(customer, settings, now=now)
+    if raw is None:
+        CustomerRfmScore.objects.filter(customer=customer).delete()
+        return None
+
+    row = _score_single_row(raw, settings)
+    segments = list(RfmSegment.objects.filter(is_active=True).order_by("sort_order", "id"))
+    segment = match_segment(row["r_score"], row["f_score"], row["m_score"], segments)
+    row["segment_id"] = segment.id if segment else None
+    score = _upsert_customer_score(customer, row, segment, now)
+
+    if segment and segment.id != previous_segment_id:
+        RfmActionLog.objects.create(
+            customer=customer,
+            segment=segment,
+            previous_segment=previous_segment,
+            action_type=RfmSegment.ACTION_SEGMENT_CHANGE,
+        )
+        if send_level_up_sms:
+            from logic.sms_club import maybe_send_level_up
+
+            maybe_send_level_up(customer, segment, user=user)
+    return score
+
+
+def send_sms_to_segment_customers(segment_id, message=None, user=None, ignore_cooldown=False):
+    """ارسال قالب/متن پیامک به مشتریان فعال یک بخش RFM."""
+    scores = CustomerRfmScore.objects.filter(
+        segment_id=segment_id,
+        customer__is_active=True,
+        customer__is_deleted=False,
+    ).select_related("customer", "segment")
+    sent = 0
+    skipped = 0
+    failed = 0
+    results = []
+    for score in scores:
+        try:
+            result = send_segment_sms(
+                score,
+                message=(message or "").strip() or None,
+                user=user,
+                ignore_cooldown=ignore_cooldown,
+            )
+            results.append(result)
+            if result.get("skipped"):
+                skipped += 1
+            else:
+                sent += 1
+        except Exception:
+            failed += 1
+    return {
+        "successful": sent,
+        "skipped": skipped,
+        "failed": failed,
+        "results": results,
+    }
+

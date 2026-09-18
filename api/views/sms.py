@@ -12,7 +12,7 @@ from logic.sms import (
     send_sms,
     send_sms_to_all_active_customers,
     send_sms_to_customer,
-    send_sms_to_level,
+    send_sms_to_segment,
 )
 from logic.audit import log_action
 
@@ -98,22 +98,22 @@ def sms_send_to_level(request):
 
     data = parse_json(request)
     message = (data.get("message") or "").strip()
-    level_id = data.get("level_id")
+    level_id = data.get("segment_id") or data.get("level_id")
     if not message:
         return fail("Message text is required", status=400)
     if not level_id:
-        return fail("level_id is required", status=400)
+        return fail("segment_id is required", status=400)
 
     try:
-        result = send_sms_to_level(level_id, message, user=request.user, sms_type="promotion")
+        result = send_sms_to_segment(level_id, message, user=request.user, sms_type="promotion")
     except ValueError as exc:
         return fail(str(exc), status=400)
 
     log_action(
         request.user,
         "sms",
-        f"ارسال پیامک به سطح — موفق: {result.get('successful', 0)}",
-        details={"level_id": level_id},
+        f"ارسال پیامک به بخش RFM — موفق: {result.get('successful', 0)}",
+        details={"segment_id": level_id},
     )
     return success(sms_result_to_dict(result), status=201)
 

@@ -173,9 +173,9 @@ export default function Dashboard() {
       </div>
 
       <div className={fromLegacy("grid-2")}>
-        <Card title="توزیع مشتریان در سطوح">
+        <Card title="توزیع مشتریان در بخش‌های RFM">
           {stats.level_distribution.length === 0 ? (
-            <EmptyState text="هنوز سطحی تعریف نشده است." />
+            <EmptyState text="هنوز بخشی تعریف نشده است." />
           ) : (
             <div className={fromLegacy("bar-chart")}>
               {stats.level_distribution.map((level) => (

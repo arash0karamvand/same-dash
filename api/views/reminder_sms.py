@@ -2,9 +2,15 @@
 
 from api.helpers import api_view, fail, parse_json, success
 from auth.permissions import MANAGE_REMINDERS, has_permission
-from backend.models import LoyaltyLevel, ReminderCampaign
+from backend.models import ReminderCampaign
 from logic.audit import log_action
-from logic.reminder_sms import campaign_to_dict, preview_campaign, run_campaign, run_due_campaigns
+from logic.reminder_sms import (
+    _set_campaign_segments,
+    campaign_to_dict,
+    preview_campaign,
+    run_campaign,
+    run_due_campaigns,
+)
 
 
 @api_view("GET", "POST")
@@ -13,7 +19,7 @@ def reminder_list(request):
         return fail("Permission denied", status=403)
 
     if request.method == "GET":
-        campaigns = ReminderCampaign.objects.prefetch_related("loyalty_levels").order_by("name")
+        campaigns = ReminderCampaign.objects.prefetch_related("rfm_segments").order_by("name")
         return success({"results": [campaign_to_dict(c) for c in campaigns]})
 
     data = parse_json(request)
@@ -33,9 +39,8 @@ def reminder_list(request):
         shop_name=(data.get("shop_name") or "سام اکسون").strip()[:100],
         min_months_since_purchase=data.get("min_months_since_purchase") or None,
     )
-    level_ids = data.get("level_ids") or []
-    if level_ids:
-        campaign.loyalty_levels.set(LoyaltyLevel.objects.filter(pk__in=level_ids, is_active=True))
+    segment_ids = data.get("segment_ids") or data.get("level_ids") or []
+    _set_campaign_segments(campaign, segment_ids)
     log_action(
         request.user,
         "create",
@@ -51,7 +56,7 @@ def reminder_detail(request, pk):
     if not has_permission(request.user, MANAGE_REMINDERS):
         return fail("Permission denied", status=403)
     try:
-        campaign = ReminderCampaign.objects.prefetch_related("loyalty_levels").get(pk=pk)
+        campaign = ReminderCampaign.objects.prefetch_related("rfm_segments").get(pk=pk)
     except ReminderCampaign.DoesNotExist:
         return fail("کمپین یافت نشد.", status=404)
 
@@ -79,9 +84,8 @@ def reminder_detail(request, pk):
     if "min_months_since_purchase" in data:
         raw = data.get("min_months_since_purchase")
         campaign.min_months_since_purchase = int(raw) if raw else None
-    if "level_ids" in data:
-        level_ids = data.get("level_ids") or []
-        campaign.loyalty_levels.set(LoyaltyLevel.objects.filter(pk__in=level_ids, is_active=True))
+    if "level_ids" in data or "segment_ids" in data:
+        _set_campaign_segments(campaign, data.get("segment_ids") or data.get("level_ids") or [])
     campaign.save()
     return success(campaign_to_dict(campaign))
 
@@ -102,7 +106,7 @@ def reminder_send(request, pk):
     if not has_permission(request.user, MANAGE_REMINDERS):
         return fail("Permission denied", status=403)
     try:
-        campaign = ReminderCampaign.objects.prefetch_related("loyalty_levels").get(pk=pk)
+        campaign = ReminderCampaign.objects.prefetch_related("rfm_segments").get(pk=pk)
     except ReminderCampaign.DoesNotExist:
         return fail("کمپین یافت نشد.", status=404)
     data = parse_json(request) or {}

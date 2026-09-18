@@ -9,18 +9,22 @@ import WorkflowOrdersPage from './WorkflowOrdersPage'
 import { fromLegacy } from '../styles/tw.js'
 
 export default function FreightOrders() {
-  const [deliveryDate, setDeliveryDate] = useState(todayIso())
+  const [deliveryDate, setDeliveryDate] = useState('')
 
   const extraParams = {
     section: 'freight',
-    delivery_date: deliveryDate,
+    ...(deliveryDate ? { delivery_date: deliveryDate } : {}),
   }
+
+  const subtitle = deliveryDate
+    ? `تحویل‌های ${formatJalali(deliveryDate)} و ارسال‌های زودتر از موعد — اطلاعات مشتری بدون مبلغ`
+    : 'صف ارسال به مشتری و سفارش‌های ارسال‌شده زودتر از موعد — اطلاعات مشتری بدون مبلغ'
 
   return (
     <WorkflowOrdersPage
       title="باربری"
-      subtitle={`تحویل‌های ${formatJalali(deliveryDate)} — اطلاعات مشتری بدون مبلغ`}
-      emptyTitle="برای این تاریخ سفارشی برای تحویل نیست"
+      subtitle={subtitle}
+      emptyTitle="سفارشی در صف باربری نیست"
       listApi={factoryApi.list}
       extraParams={extraParams}
       showCustomer
@@ -32,7 +36,9 @@ export default function FreightOrders() {
             <PersianDateInput
               value={deliveryDate}
               onChange={setDeliveryDate}
-              placeholder="انتخاب تاریخ"
+              placeholder="همه تاریخ‌ها"
+              onClear={() => setDeliveryDate('')}
+              clearLabel="همه"
             />
           </Field>
           <button type="button" className={fromLegacy("link workflow-filter-today")} onClick={() => setDeliveryDate(todayIso())}>
@@ -41,14 +47,6 @@ export default function FreightOrders() {
         </div>
       )}
       actions={[
-        {
-          key: 'receive',
-          label: 'شروع ارسال',
-          variant: 'success',
-          permission: 'manage_freight_orders',
-          when: (o) => o.workflow_stage === 'production_done',
-          run: (id) => factoryApi.freightReceive(id),
-        },
         {
           key: 'complete',
           label: 'تحویل شد',

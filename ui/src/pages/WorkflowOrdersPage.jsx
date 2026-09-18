@@ -23,6 +23,26 @@ const WORKFLOW_COLORS = {
   completed: 'var(--success)',
 }
 
+const READY_DELIVERY_COLOR = '#22c55e'
+
+function amountCell(order) {
+  if (order.amounts_masked) return '—'
+  return (
+    <>
+      <div>{formatMoney(order.final_amount)}</div>
+      <div className={fromLegacy('muted small')}>مانده {formatMoney(order.balance_due ?? 0)}</div>
+    </>
+  )
+}
+
+function rowToneClass(order, enabled) {
+  if (!enabled) return ''
+  if (order.delivery_ready_at) return 'workflow-row-ready'
+  if (order.urgency === 'red') return 'workflow-row-urgent-red'
+  if (order.urgency === 'orange') return 'workflow-row-urgent-orange'
+  return ''
+}
+
 export default function WorkflowOrdersPage({
   title,
   subtitle,
@@ -41,6 +61,7 @@ export default function WorkflowOrdersPage({
   showWorkflowHolder = false,
   showMaterials = false,
   showAccountingMode = false,
+  rowUrgency = false,
   onEditOrder = null,
   emptyTitle = 'سفارشی در این مرحله نیست',
   embedInSection = false,
@@ -61,6 +82,9 @@ export default function WorkflowOrdersPage({
     const fromDb = stageChoices.find((o) => o.value === stage)?.meta?.color
     return fromDb || WORKFLOW_COLORS[stage] || 'var(--accent)'
   }
+
+  const badgeColor = (order) => order.stage_badge_color || (order.delivery_ready_at ? READY_DELIVERY_COLOR : stageColor(order.workflow_stage))
+  const badgeLabel = (order) => order.stage_badge_label || order.workflow_stage_display || order.workflow_stage
 
   const load = useCallback(async ({ append = false, offset: nextOffset = 0 } = {}) => {
     if (append) setLoadingMore(true)
@@ -232,9 +256,12 @@ export default function WorkflowOrdersPage({
               </thead>
               <tbody>
                 {orders.map((o) => (
-                  <tr key={o.id}>
+                  <tr key={o.id} className={fromLegacy(rowToneClass(o, rowUrgency))}>
                     <td className={fromLegacy("ltr")}>
                       {o.invoice_number || o.id}
+                      {o.shipped_early && (
+                        <div><Badge color="#f97316">ارسال زودتر از موعد</Badge></div>
+                      )}
                       {o.fulfillment_route_display && (
                         <div className={fromLegacy("muted small")}>{o.fulfillment_route_display}{o.merchant_user_name ? ` — ${o.merchant_user_name}` : ''}{o.fulfillment_warehouse_label ? ` — ${o.fulfillment_warehouse_label}` : ''}{o.fulfillment_source_branch_label ? ` — ${o.fulfillment_source_branch_label}` : ''}</div>
                       )}
@@ -255,7 +282,7 @@ export default function WorkflowOrdersPage({
                     )}
                     {showStatus && <td>{o.status_display || o.status || '—'}</td>}
                     {showAmounts && (
-                      <td>{o.amounts_masked ? '—' : formatMoney(o.final_amount)}</td>
+                      <td>{amountCell(o)}</td>
                     )}
                     {showAccountingMode && (
                       <td>
@@ -269,9 +296,12 @@ export default function WorkflowOrdersPage({
                     )}
                     {showStage && (
                     <td>
-                      <Badge color={stageColor(o.workflow_stage)}>
-                        {o.workflow_stage_display || o.workflow_stage}
+                      <Badge color={badgeColor(o)}>
+                        {badgeLabel(o)}
                       </Badge>
+                      {o.early_disposition_required && !o.early_ship_allowed_date && !o.shipped_early && (
+                        <div className={fromLegacy("muted small")}>منتظر تعیین تکلیف اداری</div>
+                      )}
                       {o.holder_detail && (
                         <div className={fromLegacy("muted small workflow-holder-detail")}>{o.holder_detail}</div>
                       )}
@@ -298,7 +328,7 @@ export default function WorkflowOrdersPage({
 
           <div className={fromLegacy("workflow-cards-mobile")}>
             {orders.map((o) => (
-              <div key={o.id} className={fromLegacy("m-card workflow-order-card")}>
+              <div key={o.id} className={fromLegacy(`m-card workflow-order-card ${rowToneClass(o, rowUrgency)}`.trim())}>
                 <div className={fromLegacy("m-card-head")}>
                   <div>
                     <strong>{o.customer_name || '—'}</strong>
@@ -306,10 +336,13 @@ export default function WorkflowOrdersPage({
                     {showBranch && (
                       <div className={fromLegacy("muted small")}>{o.branch_label || o.branch || '—'}</div>
                     )}
+                    {o.shipped_early && (
+                      <div style={{ marginTop: 4 }}><Badge color="#f97316">ارسال زودتر از موعد</Badge></div>
+                    )}
                   </div>
                   {showStage && (
-                    <Badge color={stageColor(o.workflow_stage)}>
-                      {o.workflow_stage_display || o.workflow_stage}
+                    <Badge color={badgeColor(o)}>
+                      {badgeLabel(o)}
                     </Badge>
                   )}
                 </div>
@@ -318,7 +351,13 @@ export default function WorkflowOrdersPage({
                     <div><span className={fromLegacy("muted")}>تلفن</span><span className={fromLegacy("ltr")}>{o.customer_phone}</span></div>
                   )}
                   {showAmounts && (
-                    <div><span className={fromLegacy("muted")}>مبلغ</span><strong>{o.amounts_masked ? '—' : formatMoney(o.final_amount)}</strong></div>
+                    <div>
+                      <span className={fromLegacy("muted")}>مبلغ</span>
+                      <strong>{o.amounts_masked ? '—' : formatMoney(o.final_amount)}</strong>
+                      {!o.amounts_masked && (
+                        <div className={fromLegacy("muted small")}>مانده {formatMoney(o.balance_due ?? 0)}</div>
+                      )}
+                    </div>
                   )}
                   <div><span className={fromLegacy("muted")}>تحویل</span>{o.delivery_date ? formatDate(o.delivery_date) : '—'}</div>
                   {showProductionDate && (

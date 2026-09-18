@@ -148,10 +148,18 @@ def send_sms_to_customer(customer_id, message, user=None, sms_type="manual"):
     return _single_result(log)
 
 
-def send_sms_to_level(level_id, message, user=None, sms_type="promotion"):
-    """ارسال به مشتریان فعال یک سطح."""
-    customers = Customer.objects.filter(level_id=level_id, is_active=True)
+def send_sms_to_segment(segment_id, message, user=None, sms_type="promotion"):
+    """ارسال به مشتریان فعال یک بخش RFM."""
+    customers = Customer.objects.filter(
+        is_active=True,
+        rfm_score__segment_id=segment_id,
+    )
     return _send_to_customers(customers, message, sms_type, user)
+
+
+def send_sms_to_level(level_id, message, user=None, sms_type="promotion"):
+    """سازگاری قدیمی — شناسه سطح همان بخش RFM است."""
+    return send_sms_to_segment(level_id, message, user=user, sms_type=sms_type)
 
 
 def send_sms_to_all_active_customers(message, user=None, sms_type="promotion"):

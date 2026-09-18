@@ -163,6 +163,9 @@ export default function CustomerSearch({ value, onSelect, onCreateNew }) {
           {active.wallet_balance > 0 && (
             <p className={fromLegacy("muted small")}>موجودی کیف پول: {formatMoney(active.wallet_balance)}</p>
           )}
+          {active.cashback_balance > 0 && (
+            <p className={fromLegacy("muted small")}>مانده کش‌بک: {formatMoney(active.cashback_balance)}</p>
+          )}
         </div>
       )}
       {query.trim() && !loading && results.length === 0 && !active?.id && !registerOpen && (

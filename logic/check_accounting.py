@@ -243,6 +243,7 @@ def clear_registered_check(installment, recorded_by=None):
         sale.sold_at,
         reason="وصول چک",
         user=recorded_by,
+        sale=sale,
     )
 
     installment.status = "paid"

@@ -144,6 +144,21 @@ urlpatterns = [
     path("factory/orders/<int:pk>/receive/", factory_orders.factory_order_receive, name="factory-order-receive"),
     path("factory/orders/<int:pk>/complete/", factory_orders.factory_order_complete, name="factory-order-complete"),
     path(
+        "factory/orders/<int:pk>/confirm-ready/",
+        factory_orders.factory_order_confirm_ready,
+        name="factory-order-confirm-ready",
+    ),
+    path(
+        "factory/orders/<int:pk>/send-to-freight/",
+        factory_orders.factory_order_send_to_freight,
+        name="factory-order-send-to-freight",
+    ),
+    path(
+        "factory/orders/<int:pk>/early-ship-date/",
+        factory_orders.factory_order_early_ship_date,
+        name="factory-order-early-ship-date",
+    ),
+    path(
         "factory/orders/<int:pk>/freight-receive/",
         factory_orders.factory_order_freight_receive,
         name="factory-order-freight-receive",
@@ -287,6 +302,10 @@ urlpatterns = [
     path("rfm/customers/", rfm.rfm_customers, name="rfm-customers"),
     path("rfm/recalculate/", rfm.rfm_recalculate, name="rfm-recalculate"),
     path("rfm/customers/<int:pk>/send-sms/", rfm.rfm_send_sms, name="rfm-send-sms"),
+    path("rfm/segments/<int:pk>/send-sms/", rfm.rfm_send_segment_sms, name="rfm-send-segment-sms"),
+    path("rfm/cashback/programs/", rfm.rfm_cashback_program_list, name="rfm-cashback-programs"),
+    path("rfm/cashback/programs/<int:pk>/", rfm.rfm_cashback_program_detail, name="rfm-cashback-program-detail"),
+    path("rfm/cashback/quote/", rfm.rfm_cashback_quote, name="rfm-cashback-quote"),
 
     # --- SMS ---
     path("sms/logs/", sms.sms_logs, name="sms-logs"),

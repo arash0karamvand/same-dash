@@ -4,23 +4,48 @@
 """
 
 
+from django.core.exceptions import ObjectDoesNotExist
+
+from logic.rfm import customer_segment
+
+
 def level_to_dict(level):
     if level is None:
         return None
     return {
         "id": level.id,
         "name": level.name,
-        "min_purchase": int(level.min_purchase),
-        "max_purchase": int(level.max_purchase) if level.max_purchase is not None else None,
-        "discount_percent": float(level.discount_percent),
-        "points": level.points,
-        "description": level.description,
+        "min_purchase": int(getattr(level, "min_purchase", 0) or 0),
+        "max_purchase": int(level.max_purchase) if getattr(level, "max_purchase", None) is not None else None,
+        "discount_percent": float(getattr(level, "discount_percent", 0) or 0),
+        "points": getattr(level, "points", 0) or 0,
+        "description": getattr(level, "description", "") or "",
         "color": level.color,
-        "is_active": level.is_active,
+        "is_active": getattr(level, "is_active", True),
+    }
+
+
+def rfm_segment_as_level_dict(segment):
+    if segment is None:
+        return None
+    return {
+        "id": segment.id,
+        "name": segment.name,
+        "min_purchase": 0,
+        "max_purchase": None,
+        "discount_percent": 0,
+        "points": 0,
+        "description": segment.description or "",
+        "color": segment.color,
+        "is_active": segment.is_active,
     }
 
 
 def customer_to_dict(customer):
+    try:
+        segment = customer_segment(customer)
+    except ObjectDoesNotExist:
+        segment = None
     return {
         "id": customer.id,
         "full_name": customer.full_name,
@@ -28,7 +53,7 @@ def customer_to_dict(customer):
         "membership_code": customer.membership_code or "",
         "email": customer.email,
         "address": customer.address or "",
-        "level": level_to_dict(customer.level),
+        "level": rfm_segment_as_level_dict(segment),
         "total_purchases": int(customer.total_purchases),
         "last_purchase_at": customer.last_purchase_at.isoformat() if customer.last_purchase_at else None,
         "notes": customer.notes,
@@ -36,7 +61,9 @@ def customer_to_dict(customer):
         "joined_at": customer.joined_at.isoformat(),
         "birthday": customer.birthday.isoformat() if customer.birthday else None,
         "wallet_balance": int(customer.wallet_balance),
+        "cashback_balance": int(customer.cashback_balance),
     }
+
 
 
 def line_item_to_dict(item, user=None):
@@ -85,6 +112,7 @@ def sale_to_dict(sale, include_installments=False, include_lines=False, user=Non
         "customer_phone": "" if mask_customer else (sale.customer.phone if sale.customer_id else ""),
         "customer_address": "" if mask_customer else (sale.customer.address or ""),
         "customer_wallet_balance": 0 if mask_customer else (int(sale.customer.wallet_balance) if sale.customer_id else 0),
+        "customer_cashback_balance": 0 if mask_customer else (int(sale.customer.cashback_balance) if sale.customer_id else 0),
         "customer_masked": mask_customer,
         "amount": None if hide_money else int(sale.amount),
         "discount_type": sale.discount_type,
@@ -217,9 +245,11 @@ def office_order_to_dict(order, include_installments=False, include_lines=False,
         "can_edit": bool(user and can_edit_sale(user, order.source_sale)),
         "created_at": order.created_at.isoformat(),
     }
+    from logic.early_ship import freight_ready_payload
     from logic.order_cycle import sale_fulfillment_payload
 
     data.update(sale_fulfillment_payload(order))
+    data.update(freight_ready_payload(order))
     if include_installments:
         data["installments"] = [
             {
@@ -303,9 +333,11 @@ def factory_order_to_dict(order, include_lines=False, user=None):
         "final_amount": None,
         "created_at": order.created_at.isoformat(),
     }
+    from logic.early_ship import freight_ready_payload
     from logic.order_cycle import sale_fulfillment_payload
 
     data.update(sale_fulfillment_payload(order))
+    data.update(freight_ready_payload(order))
     if show_customer and order.customer_id:
         customer = order.customer
         data.update(

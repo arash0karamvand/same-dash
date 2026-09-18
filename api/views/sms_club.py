@@ -94,15 +94,15 @@ def club_send_discount(request):
             from logic.sms import _single_result
 
             result = _single_result(log)
-        elif target == "level":
-            level_id = data.get("level_id")
+        elif target in ("level", "segment"):
+            level_id = data.get("segment_id") or data.get("level_id")
             if not level_id:
-                return fail("level_id الزامی است.", status=400)
+                return fail("segment_id الزامی است.", status=400)
             result = send_discount_bulk(
                 discount_type,
                 discount_value,
                 user=request.user,
-                level_id=level_id,
+                segment_id=level_id,
                 message_template=message_template,
             )
         elif target == "all":

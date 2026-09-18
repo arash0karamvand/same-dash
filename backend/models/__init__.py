@@ -98,6 +98,9 @@ from .workflow_cycle import (
     Warehouse,
 )
 from .rfm import (
+    CashbackProgram,
+    CashbackTransaction,
+    CashbackUnlockStep,
     CustomerRfmScore,
     RfmActionLog,
     RfmSegment,

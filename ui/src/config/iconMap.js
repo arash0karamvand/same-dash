@@ -29,6 +29,7 @@ export const PAGE_ICONS = {
   materials: 'fabric',
   accounting: 'coins',
   'factory-accounting': 'coins',
+  rfm: 'chart',
   levels: 'medal',
   sms: 'envelope',
   users: 'shield',

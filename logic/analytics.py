@@ -6,6 +6,7 @@ from django.db.models import Count, Sum
 from django.utils import timezone
 
 from backend.models import Customer, Sale, SaleLineItem
+from logic.rfm import customer_segment_name
 
 
 def _countable_sales_qs():
@@ -71,7 +72,9 @@ def top_repeat_buyers_year(limit=20, min_purchases=2, days=365):
     customer_ids = [row["customer_id"] for row in stats]
     customers = {
         c.id: c
-        for c in Customer.objects.filter(id__in=customer_ids, is_active=True).select_related("level")
+        for c in Customer.objects.filter(id__in=customer_ids, is_active=True).select_related(
+            "rfm_score", "rfm_score__segment"
+        )
     }
 
     results = []
@@ -84,7 +87,7 @@ def top_repeat_buyers_year(limit=20, min_purchases=2, days=365):
                 "customer_id": customer.id,
                 "full_name": customer.full_name,
                 "phone": customer.phone,
-                "level": customer.level.name if customer.level_id else None,
+                "level": customer_segment_name(customer, empty=None),
                 "purchase_count_year": row["purchase_count"],
                 "year_purchases_total": int(row["year_total"] or 0),
             }

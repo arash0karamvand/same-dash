@@ -10,16 +10,22 @@ import { useConfirm } from '../context/ConfirmContext'
 import { PAGE_GUIDE_DEFAULTS } from '../config/pageGuideDefaults'
 import { PAGE_SIZE } from '../config/pagination'
 import { useRegisterPageGuide } from '../context/PageGuideContext'
-import { hasPermission } from '../utils/permissions'
+import { hasAnyPermission, hasPermission } from '../utils/permissions'
 import { formatDate, formatMoney } from '../utils/format'
 import { toPersianDigits } from '../utils/jalali'
 import { fromLegacy } from '../styles/tw.js'
+import Sms from './Sms'
+import RfmCashback from '../components/RfmCashback'
 
-const TABS = [
+const ANALYSIS_TABS = [
   { id: 'dashboard', label: 'داشبورد' },
   { id: 'worklist', label: 'لیست کار' },
+  { id: 'segments', label: 'بخش‌ها' },
   { id: 'settings', label: 'تنظیمات' },
 ]
+
+const SMS_TAB = { id: 'sms', label: 'پیامک' }
+const CASHBACK_TAB = { id: 'cashback', label: 'کش‌بک' }
 
 const ACTION_OPTIONS = [
   { value: 'playbook', label: 'نمایش راهنما' },
@@ -122,6 +128,14 @@ export default function Rfm() {
   const confirm = useConfirm()
   const canManage = hasPermission(user, 'manage_rfm')
   const canSend = hasPermission(user, 'send_sms')
+  const canSms = hasAnyPermission(user, [
+    'send_sms',
+    'view_sms_logs',
+    'manage_sms_club',
+    'manage_birthday_sms',
+    'manage_reminders',
+  ])
+  const tabs = [...ANALYSIS_TABS, CASHBACK_TAB, ...(canSms ? [SMS_TAB] : [])]
 
   const [tab, setTab] = useState('dashboard')
   const [error, setError] = useState('')
@@ -316,6 +330,26 @@ export default function Rfm() {
     }
   }
 
+  const sendSegmentSms = async () => {
+    if (!canSend || !segmentFilter || segmentFilter === 'other') return
+    const segment = segments.find((item) => String(item.id) === String(segmentFilter))
+    if (!await confirm({
+      title: 'ارسال پیامک به بخش',
+      message: `پیامک قالب این بخش برای مشتریان «${segment?.name || 'انتخاب‌شده'}» ارسال شود؟`,
+      confirmText: 'ارسال',
+    })) return
+    try {
+      const result = await rfmApi.sendSegmentSms(segmentFilter, { force: true })
+      setInfo(
+        `ارسال بخش: ${toPersianDigits(result.successful || 0)} موفق، `
+        + `${toPersianDigits(result.skipped || 0)} ردشده، `
+        + `${toPersianDigits(result.failed || 0)} ناموفق.`,
+      )
+    } catch (err) {
+      setError(err.message)
+    }
+  }
+
   const openSegmentList = (segmentId) => {
     setSegmentFilter(segmentId == null ? 'other' : String(segmentId))
     setTab('worklist')
@@ -333,7 +367,7 @@ export default function Rfm() {
       {info && <div className={fromLegacy('alert-info')}>{info}</div>}
 
       <div className={fromLegacy('branch-tabs settings-tabs')}>
-        {TABS.map((item) => (
+        {tabs.map((item) => (
           <button
             key={item.id}
             type="button"
@@ -345,10 +379,15 @@ export default function Rfm() {
         ))}
       </div>
 
-      {loading ? (
+      {tab === 'sms' && canSms ? (
+        <Sms embedded />
+      ) : loading ? (
         <div className={fromLegacy('loading')}>در حال بارگذاری…</div>
       ) : (
         <>
+          {tab === 'cashback' && (
+            <RfmCashback canManage={canManage} segments={segments} />
+          )}
           {tab === 'dashboard' && (
             <Card
               title="بخش‌بندی RFM"
@@ -395,7 +434,12 @@ export default function Rfm() {
           )}
 
           {tab === 'worklist' && (
-            <Card title="لیست کار و مشتریان">
+            <Card
+              title="لیست کار و مشتریان"
+              actions={canSend && segmentFilter && segmentFilter !== 'other' ? (
+                <Button onClick={sendSegmentSms}>ارسال پیامک به این بخش</Button>
+              ) : null}
+            >
               <FilterBar>
                 <Field label="جستجو">
                   <input
@@ -582,7 +626,11 @@ export default function Rfm() {
                   />
                 </div>
               )}
+            </>
+          )}
 
+          {tab === 'segments' && (
+            <>
               <Card
                 title="بخش‌ها و اکشن‌ها"
                 actions={canManage ? <Button onClick={openCreate}>+ بخش جدید</Button> : null}

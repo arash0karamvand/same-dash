@@ -470,6 +470,8 @@ export default function Office() {
               setForm={setForm}
               walletBalance={editOrder.customer_wallet_balance ?? 0}
               customerSelected
+              customerId={editOrder.customer_id}
+              excludeSaleId={editOrder.id}
             />
 
             <Field label="وضعیت پرداخت">

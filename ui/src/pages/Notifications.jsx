@@ -11,6 +11,7 @@ import { useRegisterPageGuide } from '../context/PageGuideContext'
 import { fromLegacy } from '../styles/tw.js'
 import { formatDate, formatMoney } from '../utils/format'
 import { isSystemAdmin } from '../utils/permissions'
+import { todayIso } from '../utils/jalali'
 
 const EMPTY_COMPOSE = {
   target: '',
@@ -48,6 +49,7 @@ export default function Notifications() {
   const [invoiceLoading, setInvoiceLoading] = useState(false)
   const [threads, setThreads] = useState({})
   const [replyDraft, setReplyDraft] = useState({})
+  const [earlyShipDraft, setEarlyShipDraft] = useState({})
   const [invoiceSale, setInvoiceSale] = useState(null)
 
   useEffect(() => {
@@ -174,6 +176,25 @@ export default function Notifications() {
       if (item.payload?.to_department && data.payload?.claimed_by_id) {
         await load()
       }
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  const saveEarlyShipDate = async (item) => {
+    const noteId = item.notification_id
+    const allowedDate = earlyShipDraft[noteId] || item.payload?.early_ship_allowed_date || todayIso()
+    setBusyId(noteId)
+    try {
+      const data = await notificationsApi.act(noteId, {
+        action: 'set_early_ship_date',
+        allowed_date: allowedDate,
+      })
+      setThreads((prev) => ({ ...prev, [noteId]: data }))
+      setInfo('تاریخ مجاز ارسال ثبت شد.')
+      await load()
     } catch (e) {
       setError(e.message)
     } finally {
@@ -408,6 +429,20 @@ export default function Notifications() {
                             placeholder="پاسخ…"
                           />
                           <Button type="button" disabled={busy} onClick={() => sendReply(item)}>ارسال پاسخ</Button>
+                        </div>
+                      )}
+                      {thread.can_set_early_ship_date && (
+                        <div className="ticket-reply">
+                          <Field label="تاریخ مجاز ارسال زودتر از موعد">
+                            <PersianDateInput
+                              value={earlyShipDraft[item.notification_id] || thread.payload?.early_ship_allowed_date || ''}
+                              onChange={(value) => setEarlyShipDraft((prev) => ({ ...prev, [item.notification_id]: value }))}
+                              placeholder="انتخاب تاریخ"
+                            />
+                          </Field>
+                          <Button type="button" disabled={busy} onClick={() => saveEarlyShipDate(item)}>
+                            ثبت تاریخ ارسال
+                          </Button>
                         </div>
                       )}
                     </div>

@@ -206,6 +206,26 @@ def notification_act(request, pk):
         return fail("Unauthorized", status=401)
     data = parse_json(request)
     action = (data.get("action") or "").strip()
+    if action == "set_early_ship_date":
+        try:
+            thread = open_org_thread(request.user, pk)
+        except LookupError:
+            return fail("گفتگو یافت نشد.", status=404)
+        note = Notification.objects.filter(pk=thread["notification_id"]).first()
+        if note is None:
+            return fail("گفتگو یافت نشد.", status=404)
+        from logic.early_ship import set_early_ship_from_ticket
+
+        try:
+            set_early_ship_from_ticket(note, request.user, data.get("allowed_date"))
+        except PermissionError as exc:
+            return fail(str(exc), status=403)
+        except ValueError as exc:
+            return fail(str(exc), status=400)
+        try:
+            return success(open_org_thread(request.user, note.id))
+        except LookupError:
+            return fail("گفتگو یافت نشد.", status=404)
     if action in ("close", "reopen"):
         try:
             thread = open_org_thread(request.user, pk)

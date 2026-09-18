@@ -5,12 +5,13 @@ from datetime import timedelta
 from django.db.models import Q
 from django.utils import timezone
 
-from backend.models import Customer, ReminderCampaign, ReminderSendLog
+from backend.models import Customer, ReminderCampaign, ReminderSendLog, RfmSegment
 from logic.membership import ensure_membership_code
+from logic.rfm import customer_segment_name
 from logic.sms import send_sms, _bulk_result
 from logic.sms_club import render_template
 
-TEMPLATE_VARS = ("name", "shop_name", "phone", "code", "level")
+TEMPLATE_VARS = ("name", "shop_name", "phone", "code", "level", "segment")
 
 
 def _period_key(now=None):
@@ -36,7 +37,7 @@ def _months_ago(months, from_dt=None):
 
 
 def campaign_to_dict(campaign):
-    levels = list(campaign.loyalty_levels.filter(is_active=True).values("id", "name", "color"))
+    segments = list(campaign.rfm_segments.filter(is_active=True).values("id", "name", "color"))
     return {
         "id": campaign.id,
         "name": campaign.name,
@@ -44,19 +45,28 @@ def campaign_to_dict(campaign):
         "interval_months": campaign.interval_months,
         "message_template": campaign.message_template,
         "shop_name": campaign.shop_name,
-        "level_ids": [l["id"] for l in levels],
-        "levels": levels,
+        "segment_ids": [item["id"] for item in segments],
+        "level_ids": [item["id"] for item in segments],
+        "levels": segments,
+        "segments": segments,
         "min_months_since_purchase": campaign.min_months_since_purchase,
         "last_run_at": campaign.last_run_at.isoformat() if campaign.last_run_at else None,
         "template_vars": list(TEMPLATE_VARS),
     }
 
 
+def _set_campaign_segments(campaign, ids):
+    ids = ids or []
+    campaign.rfm_segments.set(RfmSegment.objects.filter(pk__in=ids, is_active=True))
+
+
 def _eligible_customers(campaign):
-    qs = Customer.objects.filter(is_active=True, is_deleted=False).select_related("level")
-    level_ids = list(campaign.loyalty_levels.values_list("id", flat=True))
-    if level_ids:
-        qs = qs.filter(level_id__in=level_ids)
+    qs = Customer.objects.filter(is_active=True, is_deleted=False).select_related(
+        "rfm_score", "rfm_score__segment"
+    )
+    segment_ids = list(campaign.rfm_segments.values_list("id", flat=True))
+    if segment_ids:
+        qs = qs.filter(rfm_score__segment_id__in=segment_ids)
     if campaign.min_months_since_purchase:
         cutoff = _months_ago(campaign.min_months_since_purchase)
         qs = qs.filter(Q(last_purchase_at__lt=cutoff) | Q(last_purchase_at__isnull=True))
@@ -86,12 +96,13 @@ def build_message(campaign, customer):
         shop_name=campaign.shop_name,
         phone=customer.phone,
         code=customer.membership_code,
-        level=customer.level.name if customer.level_id else "—",
+        level=customer_segment_name(customer),
+        segment=customer_segment_name(customer),
     )
 
 
 def preview_campaign(campaign_id=None):
-    campaigns = ReminderCampaign.objects.prefetch_related("loyalty_levels").all()
+    campaigns = ReminderCampaign.objects.prefetch_related("rfm_segments").all()
     if campaign_id:
         campaigns = campaigns.filter(pk=campaign_id)
     now = timezone.now()
@@ -105,7 +116,7 @@ def preview_campaign(campaign_id=None):
                     "customer_id": customer.id,
                     "full_name": customer.full_name,
                     "phone": customer.phone,
-                    "level": customer.level.name if customer.level_id else "—",
+                    "level": customer_segment_name(customer),
                     "preview_message": build_message(campaign, customer),
                     "already_sent": _already_sent_in_period(campaign, customer.id, period),
                 }
@@ -159,7 +170,7 @@ def run_campaign(campaign, user=None, force=False):
 
 def run_due_campaigns(user=None):
     results = []
-    for campaign in ReminderCampaign.objects.filter(is_enabled=True).prefetch_related("loyalty_levels"):
+    for campaign in ReminderCampaign.objects.filter(is_enabled=True).prefetch_related("rfm_segments"):
         if _should_run_campaign(campaign):
             results.append({"campaign_id": campaign.id, **run_campaign(campaign, user=user)})
     return results

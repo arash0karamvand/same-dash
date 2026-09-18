@@ -4,7 +4,7 @@ from django.db.models import Count, Sum
 from django.utils import timezone
 
 from auth.permissions import MANAGE_ATTENDANCE, has_permission, is_system_admin
-from backend.models import Customer, LoyaltyLevel, Sale, SMSLog, StaffAttendance
+from backend.models import Customer, CustomerRfmScore, RfmSegment, Sale, SMSLog, StaffAttendance
 from logic.attendance import attendance_to_dict
 from logic.sales_day import (
     filter_sales_for_jalali_day,
@@ -19,14 +19,24 @@ def build_dashboard_summary(user):
     """ساخت payload خلاصه داشبورد برای کاربر فعلی."""
     total_sales_amount = Sale.objects.aggregate(total=Sum("final_amount"))["total"] or 0
 
+    from logic.rfm import seed_rfm_defaults
+
+    seed_rfm_defaults()
+    counts = {
+        row["segment_id"]: row["n"]
+        for row in CustomerRfmScore.objects.values("segment_id").annotate(n=Count("id"))
+    }
     level_distribution = [
         {
-            "name": level.name,
-            "color": level.color,
-            "count": level.customers.count(),
+            "name": segment.name,
+            "color": segment.color,
+            "count": counts.get(segment.id, 0),
         }
-        for level in LoyaltyLevel.objects.all()
+        for segment in RfmSegment.objects.filter(is_active=True)
     ]
+    unmatched = counts.get(None, 0)
+    if unmatched:
+        level_distribution.append({"name": "سایر", "color": "#94a3b8", "count": unmatched})
 
     recent_sales = Sale.objects.select_related("customer", "seller").order_by("-sold_at")[:5]
     all_sales = Sale.objects.all()

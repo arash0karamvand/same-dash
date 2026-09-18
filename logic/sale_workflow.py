@@ -176,6 +176,7 @@ def approve_office_order(
             sale.sold_at,
             reason="تایید اداری — مبلغ پرداخت‌شده",
             user=user,
+            sale=sale,
         )
     return office_order
 
@@ -300,12 +301,20 @@ def get_office_workflow_snapshot(office_order, factory_order=None):
         }
 
     if stage == FactoryOrder.WORKFLOW_STAGE_PRODUCTION_DONE:
+        ready = bool(factory_order.delivery_ready_at)
+        pending = bool(
+            factory_order.early_disposition_required and not factory_order.early_ship_allowed_date
+        )
+        if ready:
+            detail = "منتظر تعیین تکلیف اداری" if pending else "آماده تحویل — در انتظار ارسال به باربری"
+        else:
+            detail = "ساخته شده — منتظر تایید نهایی"
         return {
             "workflow_stage": STAGE_PRODUCTION_DONE,
-            "workflow_stage_display": WORKFLOW_STAGE_LABELS[STAGE_PRODUCTION_DONE],
-            "holder_department": "باربری",
-            "holder_name": _user_display(factory_order.factory_received_by),
-            "holder_detail": "آماده تحویل در باربری",
+            "workflow_stage_display": "آماده تحویل" if ready else WORKFLOW_STAGE_LABELS[STAGE_PRODUCTION_DONE],
+            "holder_department": "کارخانه",
+            "holder_name": _user_display(factory_order.delivery_ready_by or factory_order.factory_received_by),
+            "holder_detail": detail,
             "can_rollback": True,
             "rollback_label": "بازگشت به خط ساخت",
             "rollback_action": "from_production_done",
@@ -397,6 +406,9 @@ def rollback_factory_production_done(factory_order, user, reason=""):
     from logic.order_queues import as_factory_order, transition_order
 
     restore_materials_for_factory_order(factory_order)
+    from logic.early_ship import CLEAR_READY_FIELDS, close_disposition_threads
+
+    close_disposition_threads(factory_order, user)
     sale = transition_order(
         factory_order,
         STAGE_IN_PRODUCTION,
@@ -404,6 +416,7 @@ def rollback_factory_production_done(factory_order, user, reason=""):
         note=reason,
         description=_append_workflow_note(factory_order.description, "بازگشت به ساخت", reason),
         production_done_at=None,
+        **CLEAR_READY_FIELDS,
     )
     return as_factory_order(sale)
 
@@ -422,6 +435,7 @@ def rollback_factory_freight_receive(factory_order, user, reason=""):
         description=_append_workflow_note(factory_order.description, "خروج از تحویل", reason),
         freight_received_at=None,
         freight_received_by_id=None,
+        shipped_early=False,
     )
     return as_factory_order(sale)
 
@@ -528,23 +542,9 @@ def complete_factory_production(factory_order, user):
 
 @transaction.atomic
 def receive_factory_freight(factory_order, user):
-    today = timezone.localdate()
-    if factory_order.delivery_date != today:
-        raise ValueError("فقط سفارش‌های با تاریخ تحویل امروز قابل دریافت هستند.")
-    if factory_order.workflow_stage_id != factory_order.WORKFLOW_STAGE_PRODUCTION_DONE:
-        raise ValueError("این سفارش هنوز آماده باربری نیست.")
-    from logic.materials import deduct_materials_for_factory_order
-    from logic.order_queues import as_factory_order, transition_order
+    from logic.early_ship import send_factory_order_to_freight
 
-    deduct_materials_for_factory_order(factory_order)
-    sale = transition_order(
-        factory_order,
-        STAGE_IN_FREIGHT,
-        user,
-        freight_received_at=timezone.now(),
-        freight_received_by_id=user.pk if user else None,
-    )
-    return as_factory_order(sale)
+    return send_factory_order_to_freight(factory_order, user)
 
 
 @transaction.atomic

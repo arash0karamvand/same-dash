@@ -3004,6 +3004,21 @@ input[type='number']::-webkit-inner-spin-button {
   line-height: 1.4;
 }
 
+.workflow-row-urgent-orange,
+.workflow-order-card.workflow-row-urgent-orange {
+  background: color-mix(in srgb, #f59e0b 16%, transparent);
+}
+
+.workflow-row-urgent-red,
+.workflow-order-card.workflow-row-urgent-red {
+  background: color-mix(in srgb, #ef4444 16%, transparent);
+}
+
+.workflow-row-ready,
+.workflow-order-card.workflow-row-ready {
+  background: color-mix(in srgb, #22c55e 14%, transparent);
+}
+
 .workflow-cards-mobile {
   display: none;
 }

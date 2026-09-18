@@ -34,6 +34,7 @@ export function useRegisterPageGuide(key, defaultText = '') {
   if (!ctx) throw new Error('useRegisterPageGuide باید داخل PageGuideProvider باشد.')
 
   useEffect(() => {
+    if (!key) return
     ctx.setPageGuide(key, defaultText)
     return () => ctx.clearPageGuide()
     // setPageGuide/clearPageGuide پایدارند

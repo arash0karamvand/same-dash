@@ -262,8 +262,6 @@ PERMISSION_GROUPS = [
             CREATE_CUSTOMER,
             EDIT_CUSTOMER,
             DELETE_CUSTOMER,
-            VIEW_RFM,
-            MANAGE_RFM,
         ],
     },
     {
@@ -323,8 +321,15 @@ PERMISSION_GROUPS = [
     },
     {
         "id": "loyalty",
-        "label": "باشگاه و سطوح",
-        "permissions": [VIEW_LOYALTY, MANAGE_LOYALTY, RECALCULATE_LEVELS, MANAGE_REMINDERS],
+        "label": "باشگاه و RFM",
+        "permissions": [
+            VIEW_LOYALTY,
+            MANAGE_LOYALTY,
+            RECALCULATE_LEVELS,
+            VIEW_RFM,
+            MANAGE_RFM,
+            MANAGE_REMINDERS,
+        ],
     },
     {
         "id": "products",

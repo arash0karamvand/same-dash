@@ -7,6 +7,7 @@ from auth.permissions import (
     DELETE_CUSTOMER,
     EDIT_CUSTOMER,
     MANAGE_LOYALTY,
+    MANAGE_RFM,
     RECALCULATE_LEVELS,
     VIEW_CUSTOMERS,
     has_permission,
@@ -18,10 +19,9 @@ from logic.customers import (
     customer_history_payload,
     get_customer,
     list_customers,
-    recalculate_all_customer_levels,
     update_customer,
 )
-from logic.levels import update_customer_level
+from logic.rfm import recalculate_all_rfm, recalculate_customer_rfm
 from logic.sms_club import maybe_send_welcome
 
 
@@ -105,34 +105,39 @@ def customer_history(request, pk):
     return success(customer_history_payload(customer, sale_to_dict, level_history_to_dict))
 
 
-@api_view("POST", permission=MANAGE_LOYALTY)
+@api_view("POST")
 def recalculate_level(request, pk):
+    if not has_permission(request.user, MANAGE_LOYALTY) and not has_permission(request.user, MANAGE_RFM):
+        return fail("Permission denied", status=403)
     customer = get_customer(pk, with_level=True)
     if customer is None:
         return fail("Customer not found", status=404)
 
-    new_level = update_customer_level(customer, reason="Manual recalculation via API")
+    score = recalculate_customer_rfm(customer, user=request.user)
     customer.refresh_from_db()
     log_action(
         request.user,
         "update",
-        f"بازمحاسبه سطح مشتری {customer.full_name}",
+        f"بازمحاسبه RFM مشتری {customer.full_name}",
         entity_type="Customer",
         entity_id=customer.id,
     )
+    segment_name = score.segment.name if score and score.segment_id else None
     return success(
         {
             "customer": customer_to_dict(customer),
-            "level": new_level.name if new_level else None,
+            "level": segment_name,
         }
     )
 
 
-@api_view("POST", permission=RECALCULATE_LEVELS)
+@api_view("POST")
 def recalculate_all_levels(request):
-    count = recalculate_all_customer_levels(update_customer_level)
-    log_action(request.user, "update", f"بازمحاسبه سطح {count} مشتری")
-    return success({"recalculated_count": count})
+    if not has_permission(request.user, RECALCULATE_LEVELS) and not has_permission(request.user, MANAGE_RFM):
+        return fail("Permission denied", status=403)
+    result = recalculate_all_rfm(send_actions=False)
+    log_action(request.user, "update", f"بازمحاسبه RFM {result.get('scored', 0)} مشتری")
+    return success({"recalculated_count": result.get("scored", 0), **result})
 
 
 @api_view("GET")

@@ -1,9 +1,13 @@
 """مدل‌های بخش‌بندی RFM مشتریان — تنظیمات، بخش‌ها، کش امتیاز و لاگ اکشن."""
 
+from django.conf import settings
 from django.db import models
+from django.db.models import Sum
 
-from .base import MONEY_KWARGS
+from .base import AppendOnlyModel, MONEY_KWARGS
 from .people import Customer
+
+PERCENT_KWARGS = {"max_digits": 6, "decimal_places": 2}
 
 
 def default_r_thresholds():
@@ -85,6 +89,7 @@ class RfmSegment(models.Model):
     ACTION_CALL = "call"
     ACTION_SMS = "sms"
     ACTION_VIP = "vip"
+    ACTION_SEGMENT_CHANGE = "segment_change"
     ACTION_CHOICES = [
         (ACTION_PLAYBOOK, "نمایش راهنما"),
         (ACTION_CALL, "تماس فروش"),
@@ -150,6 +155,118 @@ class CustomerRfmScore(models.Model):
         return f"{self.customer_id}:{self.rfm_code}"
 
 
+class CashbackProgram(models.Model):
+    REDEEM_AUTO = "auto_each_sale"
+    REDEEM_WALLET = "wallet_credit"
+    REDEEM_MANUAL = "manual"
+    REDEEM_CHOICES = [
+        (REDEEM_AUTO, "هر فاکتور از مبلغ کم شود"),
+        (REDEEM_WALLET, "شارژ یک‌باره کیف پول"),
+        (REDEEM_MANUAL, "بدون مصرف خودکار"),
+    ]
+
+    name = models.CharField(max_length=80)
+    is_active = models.BooleanField(default=True)
+    sort_order = models.PositiveIntegerField(default=0)
+    description = models.TextField(blank=True)
+    earn_percent = models.DecimalField(default=0, **PERCENT_KWARGS)
+    base_usable_percent = models.DecimalField(default=100, **PERCENT_KWARGS)
+    redeem_mode = models.CharField(
+        max_length=20, choices=REDEEM_CHOICES, default=REDEEM_MANUAL
+    )
+    segments = models.ManyToManyField(
+        RfmSegment, blank=True, related_name="cashback_programs"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["sort_order", "id"]
+
+    def __str__(self):
+        return self.name
+
+
+class CashbackUnlockStep(models.Model):
+    program = models.ForeignKey(
+        CashbackProgram, on_delete=models.CASCADE, related_name="unlock_steps"
+    )
+    extra_purchase_percent = models.DecimalField(**PERCENT_KWARGS)
+    extra_usable_percent = models.DecimalField(**PERCENT_KWARGS)
+
+    class Meta:
+        ordering = ["extra_purchase_percent", "id"]
+
+    def __str__(self):
+        return f"{self.program_id}:{self.extra_purchase_percent}"
+
+
+class CashbackTransaction(AppendOnlyModel):
+    TYPE_EARN = "earn"
+    TYPE_SPEND = "spend"
+    TYPE_WALLET = "wallet_credit"
+    TYPE_REVERSAL = "reversal"
+    TYPE_CHOICES = [
+        (TYPE_EARN, "کسب"),
+        (TYPE_SPEND, "مصرف روی فاکتور"),
+        (TYPE_WALLET, "شارژ کیف پول"),
+        (TYPE_REVERSAL, "برگشت"),
+    ]
+
+    customer = models.ForeignKey(
+        Customer, on_delete=models.PROTECT, related_name="cashback_transactions"
+    )
+    program = models.ForeignKey(
+        CashbackProgram,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="transactions",
+    )
+    amount = models.DecimalField(**MONEY_KWARGS)
+    transaction_type = models.CharField(max_length=16, choices=TYPE_CHOICES)
+    description = models.CharField(max_length=255, blank=True)
+    sale = models.ForeignKey(
+        "backend.Sale",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="cashback_transactions",
+    )
+    recorded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="cashback_transactions",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.CheckConstraint(
+                condition=~models.Q(amount=0), name="ck_cashback_amount_nonzero"
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["customer", "created_at"], name="ix_cashback_customer_date"),
+            models.Index(fields=["sale", "transaction_type"], name="ix_cashback_sale_type"),
+        ]
+
+    @property
+    def balance_after(self):
+        if not self.pk:
+            return None
+        return (
+            CashbackTransaction.objects.filter(
+                customer=self.customer,
+                created_at__lte=self.created_at,
+            ).aggregate(total=Sum("amount"))["total"]
+            or 0
+        )
+
+
 class RfmActionLog(models.Model):
     customer = models.ForeignKey(
         Customer, on_delete=models.CASCADE, related_name="rfm_action_logs"
@@ -160,6 +277,13 @@ class RfmActionLog(models.Model):
         blank=True,
         on_delete=models.SET_NULL,
         related_name="action_logs",
+    )
+    previous_segment = models.ForeignKey(
+        RfmSegment,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="previous_action_logs",
     )
     action_type = models.CharField(max_length=16, default=RfmSegment.ACTION_SMS)
     sms_log = models.ForeignKey(

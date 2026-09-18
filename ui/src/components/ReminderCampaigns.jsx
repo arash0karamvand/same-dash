@@ -1,7 +1,7 @@
 // کمپین یادآوری دوره‌ای باشگاه — فقط مدیر
 
 import { useCallback, useEffect, useState } from 'react'
-import { levelsApi, smsApi } from '../api/client'
+import { rfmApi } from '../api/client'
 import { useConfirm } from '../context/ConfirmContext'
 import { Button, Card, EmptyState, Field, Modal } from '../components/ui'
 import { fromLegacy } from '../styles/tw.js'
@@ -33,7 +33,7 @@ export default function ReminderCampaigns() {
     try {
       const [cData, lData, pData] = await Promise.all([
         smsApi.reminderList(),
-        levelsApi.list(),
+        rfmApi.segments(),
         smsApi.reminderPreview(false),
       ])
       setCampaigns(cData.results || [])
@@ -131,7 +131,7 @@ export default function ReminderCampaigns() {
 
       <Card title="یادآوری دوره‌ای باشگاه" actions={<Button onClick={openCreate}>+ کمپین جدید</Button>}>
         <p className={fromLegacy("muted")}>
-          هر چند ماه یک‌بار به مشتریان (بر اساس سطح باشگاه) پیام یادآوری ارسال می‌شود. فقط مدیر سیستم.
+          هر چند ماه یک‌بار به مشتریان (بر اساس بخش RFM) پیام یادآوری ارسال می‌شود.
         </p>
 
         {campaigns.length === 0 ? (
@@ -147,7 +147,7 @@ export default function ReminderCampaigns() {
                     <span className={fromLegacy("muted")}> — هر {c.interval_months} ماه</span>
                     {!c.is_enabled && <span className={fromLegacy("badge-muted")}> غیرفعال</span>}
                     <div className={fromLegacy("muted small")}>
-                      سطوح: {c.levels?.length ? c.levels.map((l) => l.name).join('، ') : 'همه'}
+                      بخش‌ها: {c.levels?.length ? c.levels.map((l) => l.name).join('، ') : 'همه'}
                       {prev && ` — ${prev.will_send_count} نفر در صف ارسال`}
                     </div>
                   </div>
@@ -178,7 +178,7 @@ export default function ReminderCampaigns() {
             <span className={fromLegacy("muted small")}>متغیرها: {'{name}'} {'{shop_name}'} {'{code}'} {'{level}'} {'{phone}'}</span>
           </Field>
           <div>
-            <div className={fromLegacy("field-label")}>سطوح باشگاه (خالی = همه)</div>
+            <div className={fromLegacy("field-label")}>بخش‌های RFM (خالی = همه)</div>
             <div className={fromLegacy("level-check-grid")}>
               {levels.map((l) => (
                 <label key={l.id} className={fromLegacy("checkbox-row")}>

@@ -1494,6 +1494,8 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
                 setForm={setForm}
                 walletBalance={walletBalance}
                 customerSelected={customerSelected}
+                customerId={editing?.customer_id}
+                excludeSaleId={editing?.id}
               />
 
               <Field label="پرداخت‌شده"><MoneyInput min="0" value={form.paid_amount} onChange={(e) => setForm({ ...form, paid_amount: e.target.value })} /></Field>
@@ -1521,6 +1523,9 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
                 onSelect={(c) => {
                   setSelectedCustomer(c)
                   if (c && (c.wallet_balance ?? 0) <= 0 && form.discount_type === 'wallet') {
+                    setForm((f) => ({ ...f, discount_type: 'amount', discount_value: '' }))
+                  }
+                  if (c && (c.cashback_balance ?? 0) <= 0 && form.discount_type === 'cashback') {
                     setForm((f) => ({ ...f, discount_type: 'amount', discount_value: '' }))
                   }
                 }}
@@ -1612,6 +1617,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
                 setForm={setForm}
                 walletBalance={walletBalance}
                 customerSelected={customerSelected}
+                customerId={selectedCustomer?.id}
               />
 
               {isDeposit(form) && (

@@ -16,6 +16,7 @@ from backend.models import (
 )
 
 from logic.pagination import MAX_PAGE_SIZE, PAGE_SIZE
+from logic.rfm import customer_segment_name
 
 DEFAULT_RECORD_FILTER_LIMIT = PAGE_SIZE
 MAX_RECORD_FILTER_LIMIT = MAX_PAGE_SIZE
@@ -263,7 +264,7 @@ def _serialize_customer(row):
         "id": row.id,
         "title": row.full_name,
         "subtitle": row.phone,
-        "type_display": row.level.name if row.level_id else "—",
+        "type_display": customer_segment_name(row),
         "amount": int(row.total_purchases),
         "date": row.joined_at.isoformat() if row.joined_at else None,
     }
@@ -329,7 +330,7 @@ def query_filtered_records(params, *, include_executive_logs=False):
         results = [_serialize_sale(r) for r in rows]
 
     elif model_key == "customer":
-        qs = Customer.objects.filter(is_deleted=False).select_related("level")
+        qs = Customer.objects.filter(is_deleted=False).select_related("rfm_score", "rfm_score__segment")
         qs = apply_customer_search_filters(qs, params)
         total = qs.count()
         rows = qs.order_by("-joined_at")[offset : offset + limit]
