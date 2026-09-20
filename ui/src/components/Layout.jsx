@@ -193,7 +193,7 @@ export default function Layout({ portal, page, onNavigate, children }) {
           </nav>
         )}
 
-        <div className={tw.sidebarFooter}>نسخه ۲.۰</div>
+        <div className={tw.sidebarFooter}>نسخه ۲.۱ بتا</div>
       </aside>
 
       <div className={tw.main}>
