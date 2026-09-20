@@ -72,6 +72,13 @@ def product_to_dict(p, include_variants=True, *, audience="sales"):
             for v in p.variants.filter(is_active=True).order_by("sort_order", "id")
         ]
 
+    from logic.workshop_recipes import build_workset_from_product, recipe_summary
+
+    frame = getattr(p, "frame", None)
+    workset = getattr(p, "furniture_workset", None) or (getattr(frame, "workset", None) if frame else None)
+    from logic.furniture_worksets import ARM_STYLE_LABELS, PIECE_KIND_LABELS, piece_label
+    suite_config = list(getattr(p, "suite_config", None) or [])
+
     data = {
         "id": p.id,
         "name": p.name,
@@ -83,6 +90,36 @@ def product_to_dict(p, include_variants=True, *, audience="sales"):
         "unit": p.unit,
         "attributes": p.attributes or {},
         "frame_id": p.frame_id,
+        "frame": (
+            {
+                "id": frame.id,
+                "name": frame.name,
+                "piece_kind": frame.piece_kind or "",
+                "piece_kind_display": PIECE_KIND_LABELS.get(frame.piece_kind, frame.piece_kind or ""),
+                "arm_style": frame.arm_style or "",
+                "arm_style_display": ARM_STYLE_LABELS.get(frame.arm_style, frame.arm_style or ""),
+                "piece_label": piece_label(frame.piece_kind, frame.arm_style),
+            }
+            if frame
+            else None
+        ),
+        "furniture_workset_id": workset.id if workset else None,
+        "furniture_workset": {"id": workset.id, "name": workset.name, "seat_count": workset.seat_count} if workset else None,
+        "suite_config": suite_config,
+        "paint_recipe": recipe_summary(getattr(p, "paint_recipe", None)),
+        "fabric_recipe": recipe_summary(getattr(p, "fabric_recipe", None)),
+        "foam_recipe": recipe_summary(getattr(p, "foam_recipe", None)),
+        "cushion_recipe": recipe_summary(getattr(p, "cushion_recipe", None)),
+        "webbing_recipe": recipe_summary(getattr(p, "webbing_recipe", None)),
+        "paint_recipe_id": p.paint_recipe_id,
+        "fabric_recipe_id": p.fabric_recipe_id,
+        "foam_recipe_id": p.foam_recipe_id,
+        "cushion_recipe_id": p.cushion_recipe_id,
+        "webbing_recipe_id": p.webbing_recipe_id,
+        "build_model": getattr(p, "build_model", None) or "frame_line",
+        "needs_paint": bool(getattr(p, "needs_paint", True)),
+        "pipeline_end": getattr(p, "pipeline_end", None) or "upholstery",
+        "workset": build_workset_from_product(p),
         "is_active": p.is_active,
         "category_id": p.category_id,
         "category": category_to_dict(p.category) if p.category_id else None,
@@ -297,6 +334,11 @@ def create_product(data, *, allow_sales_price=True, allow_materials=False):
     if allow_materials and "materials" in data:
         sync_product_materials(product, data.get("materials"))
 
+    from logic.workshop_recipes import apply_product_workset
+
+    apply_product_workset(product, data)
+    product.save()
+
     return product
 
 
@@ -353,6 +395,11 @@ def update_product(product, data, *, allow_sales_price=True, allow_materials=Fal
     if allow_materials and "materials" in data:
         sync_product_materials(product, data.get("materials"))
 
+    from logic.workshop_recipes import apply_product_workset
+
+    apply_product_workset(product, data)
+    product.save()
+
     return product
 
 
@@ -363,22 +410,43 @@ def resolve_catalog_price(product, variant=None):
     return Decimal(product.default_price or 0)
 
 
-def filter_products(queryset, *, search="", category_id=None, active_only=True):
+def filter_products(queryset, *, search="", category_id=None, active_only=True, workset_id=None):
     if active_only:
         queryset = queryset.filter(is_active=True, is_deleted=False)
     if category_id:
         queryset = queryset.filter(category_id=category_id)
+    if workset_id:
+        queryset = queryset.filter(
+            Q(furniture_workset_id=workset_id) | Q(frame__workset_id=workset_id, frame__is_deleted=False)
+        )
     if search:
         q = Q(name__icontains=search) | Q(sku__icontains=search) | Q(brand__icontains=search)
         q |= Q(variants__color_name__icontains=search)
+        q |= Q(frame__workset__name__icontains=search)
         queryset = queryset.filter(q).distinct()
-    return queryset.select_related("category").prefetch_related("variants", "product_materials__material")
+    return queryset.select_related(
+        "category",
+        "frame",
+        "frame__workset",
+        "furniture_workset",
+        "paint_recipe",
+        "fabric_recipe",
+        "foam_recipe",
+        "cushion_recipe",
+        "webbing_recipe",
+    ).prefetch_related("variants", "product_materials__material")
+
+
+def _resolve_line_workset(product, item):
+    from logic.workshop_recipes import merge_workset_config
+
+    incoming = item.get("workset_config") if isinstance(item.get("workset_config"), dict) else None
+    return merge_workset_config(product, incoming)
 
 
 def resolve_line_item_from_catalog(item):
     """نگاشت ردیف فروش از کاتالوگ — قیمت فقط از تعریف محصول."""
-    from backend.models import Frame, FrameModel
-    from logic.frames import default_frame_config
+    from backend.models import Frame, FrameModel, FurnitureWorkset
 
     product_id = item.get("product_id")
     variant_id = item.get("variant_id")
@@ -398,11 +466,15 @@ def resolve_line_item_from_catalog(item):
     frame_config = item.get("frame_config") if isinstance(item.get("frame_config"), dict) else {}
 
     if variant_id:
-        variant = ProductVariant.objects.select_related("product").filter(pk=variant_id, is_active=True).first()
+        variant = ProductVariant.objects.select_related(
+            "product", "product__furniture_workset", "product__frame", "product__frame__workset"
+        ).filter(pk=variant_id, is_active=True).first()
         if variant:
             product = variant.product
     elif product_id:
-        product = Product.objects.filter(pk=product_id, is_active=True, is_deleted=False).first()
+        product = Product.objects.select_related("furniture_workset", "frame", "frame__workset").filter(
+            pk=product_id, is_active=True, is_deleted=False
+        ).first()
         if product:
             variant = product.variants.filter(is_active=True).order_by("sort_order", "id").first()
 
@@ -417,12 +489,15 @@ def resolve_line_item_from_catalog(item):
 
     if not product or not name:
         return None
-    if price <= 0:
+    require_price = item.get("require_price", True)
+    if require_price and price <= 0:
         raise ValueError(f"محصول «{name}» قیمت ندارد — ابتدا در بخش محصولات قیمت را تنظیم کنید.")
 
     frame_id = item.get("frame_id") or product.frame_id
     if frame_id:
-        frame = Frame.objects.filter(pk=frame_id, is_deleted=False, is_active=True).first()
+        frame = Frame.objects.select_related("workset").filter(
+            pk=frame_id, is_deleted=False, is_active=True
+        ).first()
         if not frame:
             raise ValueError("کلاف انتخاب‌شده یافت نشد.")
         frame_model_id = item.get("frame_model_id")
@@ -432,10 +507,21 @@ def resolve_line_item_from_catalog(item):
             ).first()
             if not frame_model:
                 raise ValueError("مدل کلاف انتخاب‌شده یافت نشد.")
-        elif frame.models.filter(is_active=True).exists():
-            raise ValueError("مدل کلاف را انتخاب کنید.")
+        else:
+            frame_model = frame.models.filter(is_active=True).order_by("sort_order", "id").first()
         if not frame_config:
-            frame_config = default_frame_config(frame)
+            frame_config = {}
+
+    furniture_workset = None
+    workset_id = item.get("furniture_workset_id")
+    if workset_id:
+        furniture_workset = FurnitureWorkset.objects.filter(pk=workset_id, is_deleted=False).first()
+        if not furniture_workset:
+            raise ValueError("دست انتخاب‌شده یافت نشد.")
+    elif getattr(product, "furniture_workset_id", None):
+        furniture_workset = product.furniture_workset
+    elif frame and frame.workset_id:
+        furniture_workset = frame.workset
 
     return {
         "product": product,
@@ -450,6 +536,8 @@ def resolve_line_item_from_catalog(item):
         "frame": frame,
         "frame_model": frame_model,
         "frame_config": frame_config or {},
+        "workset_config": _resolve_line_workset(product, item),
+        "furniture_workset": furniture_workset,
     }
 
 

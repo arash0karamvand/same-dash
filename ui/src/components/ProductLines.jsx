@@ -1,7 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { productsApi } from '../api/client'
-import FrameServiceConfigModal from './FrameServiceConfigModal'
-import Icon from './icons/Icon'
+import { furnitureWorksetsApi } from '../api/client'
 import { Button, Field, Modal } from './ui'
 import { formatMoney } from '../utils/format'
 import { toPersianDigits } from '../utils/jalali'
@@ -13,6 +11,9 @@ const EMPTY_LINE = {
   frame_id: '',
   frame_model_id: '',
   frame_config: {},
+  workset_config: {},
+  furniture_workset_id: '',
+  furniture_workset_name: '',
   product_name: '',
   product_model: '',
   fabric: '',
@@ -26,47 +27,53 @@ function catalogPrice(product) {
   return Number(product?.default_price || product?.display_price || 0)
 }
 
-function lineFromPick(pick, quantity = 1) {
-  const variant = pick.variant || pick.product.variants?.[0]
+function pieceSummary(product) {
+  const pieces = product?.suite_config || product?.workset?.pieces || []
+  if (!pieces.length) return product?.product_model || ''
+  return pieces.map((piece) => `${piece.quantity}× ${piece.piece_label}`).join('، ')
+}
+
+function fabricSummary(product) {
+  const pieces = product?.suite_config || product?.workset?.pieces || []
+  const names = [...new Set(pieces.map((piece) => piece.fabric?.name).filter(Boolean))]
+  if (names.length) return names.join('، ')
+  return product?.fabric || product?.fabric_recipe?.name || ''
+}
+
+function lineFromProduct(product, quantity = 1) {
+  const variant = product.variants?.[0]
   return {
     ...EMPTY_LINE,
-    product_id: pick.product.id,
+    product_id: product.id,
     variant_id: variant?.id || '',
-    product_name: pick.product.name,
-    product_model: pick.product.product_model || '',
-    fabric: pick.product.fabric || '',
+    frame_id: product.frame_id || '',
+    furniture_workset_id: product.furniture_workset_id || '',
+    furniture_workset_name: product.furniture_workset?.name || '',
+    workset_config: product.workset || { pieces: product.suite_config || [] },
+    product_name: product.name,
+    product_model: product.furniture_workset?.name || product.product_model || '',
+    fabric: fabricSummary(product),
     color_name: variant?.color_name || '',
     color_hex: variant?.color_hex || '',
-    unit_price: String(catalogPrice(pick.product)),
+    unit_price: String(catalogPrice(product)),
     quantity,
   }
 }
 
-function locationQty(variant, stockSourceKey) {
-  if (!variant) return null
-  if (stockSourceKey && variant.stock_by_location?.length) {
-    const row = variant.stock_by_location.find((item) => item.key === stockSourceKey)
-    if (row) return row.quantity
-  }
-  if (variant.stock_summary) return variant.stock_summary
-  if (variant.stock != null && variant.stock !== '') return variant.stock
-  return null
-}
-
-export default function ProductLines({ lines, onChange, stockSourceKey = '' }) {
+export default function ProductLines({
+  lines,
+  onChange,
+  seatCount = '',
+  onSeatCountChange,
+  stockSourceKey = '',
+}) {
   const [pickerOpen, setPickerOpen] = useState(false)
-  const [activeLineIdx, setActiveLineIdx] = useState(null)
-  const [search, setSearch] = useState('')
-  const [categoryFilter, setCategoryFilter] = useState('')
-  const [products, setProducts] = useState([])
-  const [categories, setCategories] = useState([])
+  const [worksets, setWorksets] = useState([])
+  const [selectedWorkset, setSelectedWorkset] = useState(null)
+  const [worksetProducts, setWorksetProducts] = useState([])
+  const [qtys, setQtys] = useState({})
   const [loading, setLoading] = useState(false)
-  const [selectedPicks, setSelectedPicks] = useState([])
-  const [focusedProductId, setFocusedProductId] = useState(null)
-  const [frameConfigOpen, setFrameConfigOpen] = useState(false)
-  const [frameConfigQueue, setFrameConfigQueue] = useState([])
-  const [frameConfigDraftLines, setFrameConfigDraftLines] = useState([])
-  const [frameConfigTarget, setFrameConfigTarget] = useState(null)
+  const [search, setSearch] = useState('')
 
   useEffect(() => {
     if (!pickerOpen) return
@@ -74,407 +81,234 @@ export default function ProductLines({ lines, onChange, stockSourceKey = '' }) {
     const load = async () => {
       setLoading(true)
       try {
-        const [prods, cats] = await Promise.all([
-          productsApi.list({
-            search: search.trim(),
-            category_id: categoryFilter || undefined,
-            limit: 50,
-          }),
-          productsApi.categories({ active: true }),
-        ])
-        if (!cancelled) {
-          setProducts(prods.results || [])
-          setCategories(cats.results || [])
-        }
+        const data = await furnitureWorksetsApi.list({ search: search.trim(), limit: 80 })
+        if (!cancelled) setWorksets(data.results || [])
       } catch {
-        if (!cancelled) setProducts([])
+        if (!cancelled) setWorksets([])
       } finally {
         if (!cancelled) setLoading(false)
       }
     }
-    const t = setTimeout(load, 250)
+    const t = setTimeout(load, 200)
     return () => { cancelled = true; clearTimeout(t) }
-  }, [pickerOpen, search, categoryFilter])
+  }, [pickerOpen, search])
+
+  const openWorkset = async (workset) => {
+    setSelectedWorkset(workset)
+    setLoading(true)
+    try {
+      const data = await furnitureWorksetsApi.products(workset.id)
+      const results = data.results || []
+      setWorksetProducts(results)
+      const next = {}
+      results.forEach((p) => { next[p.id] = 0 })
+      setQtys(next)
+      if (onSeatCountChange && !seatCount && workset.seat_count) {
+        onSeatCountChange(String(workset.seat_count))
+      }
+    } catch {
+      setWorksetProducts([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const picked = useMemo(
+    () => worksetProducts.filter((p) => Number(qtys[p.id] || 0) > 0 && catalogPrice(p) > 0),
+    [worksetProducts, qtys],
+  )
+  const pickTotal = picked.reduce((s, p) => s + catalogPrice(p) * Number(qtys[p.id] || 0), 0)
+
+  const confirmPick = () => {
+    if (!picked.length) return
+    const newLines = picked.map((p) => lineFromProduct(p, Number(qtys[p.id] || 1)))
+    onChange([...lines.filter((l) => l.product_id), ...newLines])
+    setPickerOpen(false)
+    setSelectedWorkset(null)
+    setWorksetProducts([])
+    setQtys({})
+  }
 
   const updateLine = (idx, patch) => {
     onChange(lines.map((row, i) => (i === idx ? { ...row, ...patch } : row)))
   }
-
   const removeLine = (idx) => onChange(lines.filter((_, i) => i !== idx))
 
-  const resetPicker = () => {
-    setSelectedPicks([])
-    setFocusedProductId(null)
-    setSearch('')
-    setCategoryFilter('')
-  }
-
-  const openPicker = (idx = null) => {
-    setActiveLineIdx(idx)
-    resetPicker()
-    setPickerOpen(true)
-  }
-
-  const isPicked = (id) => selectedPicks.some((x) => x.product.id === id)
-
-  const selectProduct = (p) => {
-    if (!isPicked(p.id)) {
-      setSelectedPicks((prev) => [...prev, { product: p, variant: p.variants?.[0] || null }])
-    }
-    setFocusedProductId(p.id)
-  }
-
-  const toggleProduct = (p) => {
-    if (isPicked(p.id)) {
-      const next = selectedPicks.filter((x) => x.product.id !== p.id)
-      setSelectedPicks(next)
-      setFocusedProductId((id) => (id === p.id ? (next[next.length - 1]?.product.id || null) : id))
-      return
-    }
-    setSelectedPicks((prev) => [...prev, { product: p, variant: p.variants?.[0] || null }])
-    setFocusedProductId(p.id)
-  }
-
-  const setPickVariant = (productId, variant) => {
-    setSelectedPicks((prev) =>
-      prev.map((x) => (x.product.id === productId ? { ...x, variant } : x)),
-    )
-    setFocusedProductId(productId)
-  }
-
-  const pickWithVariant = (p, variant) => {
-    setSelectedPicks((prev) => {
-      const exists = prev.some((x) => x.product.id === p.id)
-      if (exists) return prev.map((x) => (x.product.id === p.id ? { ...x, variant } : x))
-      return [...prev, { product: p, variant }]
+  const grouped = useMemo(() => {
+    const map = new Map()
+    lines.forEach((line, idx) => {
+      const key = line.furniture_workset_name || 'سایر'
+      if (!map.has(key)) map.set(key, [])
+      map.get(key).push({ line, idx })
     })
-    setFocusedProductId(p.id)
-  }
-
-  const pricedPicks = selectedPicks.filter((x) => catalogPrice(x.product) > 0)
-
-  const finalizeLines = (newLines) => {
-    let nextLines
-    if (activeLineIdx != null && activeLineIdx < lines.length) {
-      nextLines = [
-        ...lines.slice(0, activeLineIdx),
-        ...newLines,
-        ...lines.slice(activeLineIdx + 1),
-      ]
-    } else {
-      nextLines = [...lines.filter((l) => l.product_id), ...newLines]
-    }
-    onChange(nextLines)
-    setPickerOpen(false)
-    setFrameConfigOpen(false)
-    setFrameConfigQueue([])
-    setFrameConfigDraftLines([])
-    setFrameConfigTarget(null)
-  }
-
-  const startFrameConfigFlow = (draftLines, queue) => {
-    if (!queue.length) {
-      finalizeLines(draftLines)
-      return
-    }
-    const [next, ...rest] = queue
-    setFrameConfigDraftLines(draftLines)
-    setFrameConfigQueue(rest)
-    setFrameConfigTarget(next)
-    setFrameConfigOpen(true)
-  }
-
-  const confirmPick = () => {
-    if (!pricedPicks.length) return
-
-    const newLines = pricedPicks.map((pick, i) => {
-      const qty = (activeLineIdx != null && i === 0 && lines[activeLineIdx]?.quantity)
-        ? lines[activeLineIdx].quantity
-        : 1
-      return lineFromPick(pick, qty)
-    })
-
-    const frameQueue = newLines
-      .map((line, idx) => ({ line, idx, pick: pricedPicks[idx] }))
-      .filter(({ pick }) => pick?.product?.frame_id)
-
-    if (frameQueue.length) {
-      startFrameConfigFlow(newLines, frameQueue)
-      return
-    }
-    finalizeLines(newLines)
-  }
-
-  const applyFrameConfig = (config) => {
-    if (!frameConfigTarget) return
-    const updated = frameConfigDraftLines.map((line, idx) =>
-      idx === frameConfigTarget.idx
-        ? {
-            ...line,
-            frame_id: config.frame_id,
-            frame_model_id: config.frame_model_id || '',
-            frame_config: config.frame_config || {},
-          }
-        : line,
-    )
-    if (frameConfigQueue.length) {
-      startFrameConfigFlow(updated, frameConfigQueue)
-    } else {
-      finalizeLines(updated)
-    }
-  }
-
-  const focusedPick =
-    selectedPicks.find((x) => x.product.id === focusedProductId) ||
-    selectedPicks[selectedPicks.length - 1] ||
-    null
-  const focusedProduct = focusedPick?.product || null
-  const focusedVariant = focusedPick?.variant || null
-  const pickerPrice = focusedProduct ? catalogPrice(focusedProduct) : 0
+    return [...map.entries()]
+  }, [lines])
 
   const total = lines.reduce((s, l) => s + Number(l.unit_price || 0) * Number(l.quantity || 1), 0)
 
-  const filteredCategories = useMemo(
-    () => [{ id: '', name: 'همه' }, ...categories],
-    [categories],
-  )
-
-  const confirmLabel = pricedPicks.length > 1
-    ? `افزودن ${toPersianDigits(pricedPicks.length)} محصول به فاکتور`
-    : 'افزودن به فاکتور'
-
   return (
-    <div className={fromLegacy("product-lines")}>
-      {lines.map((line, idx) => (
-        <div key={idx} className={fromLegacy("sale-line-card")}>
-          <div className={fromLegacy("sale-line-head")}>
-            <strong>ردیف {toPersianDigits(idx + 1)}</strong>
-            {line.color_hex && (
-              <span className={fromLegacy("line-color-badge")} style={{ background: line.color_hex }} title={line.color_name} />
-            )}
-            <Button type="button" variant="ghost" size="sm" className={fromLegacy("sale-line-remove")} onClick={() => removeLine(idx)}>
-              حذف
-            </Button>
-          </div>
-          <div className={fromLegacy("sale-line-body")}>
-            {line.product_id ? (
-              <div className={fromLegacy("sale-line-product-readonly")}>
-                <div className={fromLegacy("sale-line-product-name")}>
+    <div className={fromLegacy('product-lines')}>
+      {onSeatCountChange && (
+        <Field label="تعداد نفر (دستی)">
+          <input
+            className={fromLegacy('ltr')}
+            type="number"
+            min="1"
+            value={seatCount}
+            onChange={(e) => onSeatCountChange(e.target.value)}
+            placeholder="مثلاً ۸"
+          />
+        </Field>
+      )}
+
+      {grouped.map(([name, rows]) => (
+        <div key={name}>
+          {name !== 'سایر' && <p className={fromLegacy('muted small')}>دست: {name}</p>}
+          {rows.map(({ line, idx }) => {
+            const pieces = line.workset_config?.pieces || []
+            return (
+              <div key={idx} className={fromLegacy('sale-line-card')}>
+                <div className={fromLegacy('sale-line-head')}>
                   <strong>{line.product_name}</strong>
-                  {line.color_name && <span className={fromLegacy("muted")}> — {line.color_name}</span>}
+                  <Button type="button" variant="ghost" size="sm" className={fromLegacy('sale-line-remove')} onClick={() => removeLine(idx)}>
+                    حذف
+                  </Button>
                 </div>
-                <div className={fromLegacy("sale-line-meta-grid")}>
-                  {line.product_model && <span><em className={fromLegacy("muted")}>مدل:</em> {line.product_model}</span>}
-                  {line.fabric && <span><em className={fromLegacy("muted")}>پارچه:</em> {line.fabric}</span>}
-                  {line.frame_id && (
-                    <span><em className={fromLegacy("muted")}>کلاف:</em> {line.frame_config?.seat_count ? `${line.frame_config.seat_count} نفره` : 'پیکربندی شده'}</span>
-                  )}
+                <div className={fromLegacy('sale-line-body')}>
+                  <div className={fromLegacy('sale-line-meta-grid')}>
+                    {pieces.length > 0 ? (
+                      <span>
+                        <em className={fromLegacy('muted')}>قطعات:</em>{' '}
+                        {pieces.map((piece) => `${toPersianDigits(piece.quantity)}× ${piece.piece_label}`).join('، ')}
+                      </span>
+                    ) : line.product_model ? (
+                      <span><em className={fromLegacy('muted')}>مدل:</em> {line.product_model}</span>
+                    ) : null}
+                    {line.fabric && <span><em className={fromLegacy('muted')}>پارچه:</em> {line.fabric}</span>}
+                    {pieces.filter((piece) => piece.paint?.name || piece.needs_paint === false).map((piece) => (
+                      <span key={`${piece.piece_kind}-${piece.arm_style}`}>
+                        <em className={fromLegacy('muted')}>{piece.piece_label}:</em>{' '}
+                        {piece.needs_paint === false ? 'بدون رنگ' : piece.paint?.name}
+                        {piece.fabric?.name ? ` / ${piece.fabric.name}` : ''}
+                      </span>
+                    ))}
+                    {line.unit_price && <span><em className={fromLegacy('muted')}>قیمت:</em> {formatMoney(line.unit_price)}</span>}
+                  </div>
+                  <Field label="تعداد دست">
+                    <input className={fromLegacy('ltr')} type="number" min="1" value={line.quantity} onChange={(e) => updateLine(idx, { quantity: e.target.value })} />
+                  </Field>
                   {line.unit_price && (
-                    <span><em className={fromLegacy("muted")}>قیمت واحد:</em> {formatMoney(line.unit_price)}</span>
+                    <p className={fromLegacy('muted small')}>جمع ردیف: {formatMoney(Number(line.unit_price) * Number(line.quantity || 1))}</p>
                   )}
                 </div>
-                <Button type="button" variant="ghost" onClick={() => openPicker(idx)}>تغییر محصول</Button>
               </div>
-            ) : (
-              <Field label="محصول">
-                <Button type="button" onClick={() => openPicker(idx)}>انتخاب از کاتالوگ</Button>
-              </Field>
-            )}
-            <Field label="تعداد">
-              <input className={fromLegacy("ltr")} type="number" min="1" value={line.quantity} onChange={(e) => updateLine(idx, { quantity: e.target.value })} />
-            </Field>
-            {line.product_id && line.unit_price && (
-              <p className={fromLegacy("muted small")}>جمع ردیف: {formatMoney(Number(line.unit_price) * Number(line.quantity || 1))}</p>
-            )}
-          </div>
+            )
+          })}
         </div>
       ))}
 
-      <div className={fromLegacy("product-lines-toolbar")}>
-        <Button type="button" onClick={() => openPicker()}>انتخاب از کاتالوگ</Button>
+      <div className={fromLegacy('product-lines-toolbar')}>
+        <Button type="button" onClick={() => { setSelectedWorkset(null); setSearch(''); setPickerOpen(true) }}>
+          {lines.length ? 'از دست دیگر' : 'انتخاب دست'}
+        </Button>
       </div>
-      {lines.length > 0 && <p className={fromLegacy("muted")}>جمع محصولات: {formatMoney(total)}</p>}
+      {lines.length > 0 && <p className={fromLegacy('muted')}>جمع محصولات: {formatMoney(total)}</p>}
 
-      <Modal title="انتخاب محصول" open={pickerOpen} onClose={() => setPickerOpen(false)} wide>
-        <div className={fromLegacy("product-picker")}>
-          <div className={fromLegacy("product-picker-filters")}>
+      <Modal
+        title={selectedWorkset ? `محصول‌های ${selectedWorkset.name}` : 'انتخاب دست'}
+        open={pickerOpen}
+        onClose={() => { setPickerOpen(false); setSelectedWorkset(null) }}
+        wide
+      >
+        {!selectedWorkset ? (
+          <div className={fromLegacy('product-picker')}>
             <input
-              className={fromLegacy("search-input")}
+              className={fromLegacy('search-input')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="جستجوی محصول…"
+              placeholder="جستجوی دست…"
             />
-            <p className={fromLegacy("muted small product-picker-hint")}>چند محصول را با هم انتخاب کنید، سپس به فاکتور اضافه کنید.</p>
-            <div className={fromLegacy("category-scroll compact")}>
-              {filteredCategories.map((c) => (
-                <button
-                  key={c.id || 'all'}
-                  type="button"
-                  className={fromLegacy(`category-chip${String(categoryFilter) === String(c.id || '') ? ' active' : ''}`)}
-                  onClick={() => setCategoryFilter(c.id ? String(c.id) : '')}
-                >
-                  {c.icon ? `${c.icon} ` : ''}{c.name}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {loading ? (
-            <p className={fromLegacy("muted")}>در حال جستجو…</p>
-          ) : products.length === 0 ? (
-            <p className={fromLegacy("muted")}>محصولی یافت نشد.</p>
-          ) : (
-            <div className={fromLegacy("product-picker-grid")}>
-              {products.map((p) => {
-                const picked = isPicked(p.id)
-                const pick = selectedPicks.find((x) => x.product.id === p.id)
-                return (
-                  <div
-                    key={p.id}
-                    role="button"
-                    tabIndex={0}
-                    className={fromLegacy(`product-picker-item${picked ? ' selected' : ''}${focusedProductId === p.id ? ' focused' : ''}`)}
-                    onClick={() => selectProduct(p)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault()
-                        selectProduct(p)
-                      }
-                    }}
+            {loading ? (
+              <p className={fromLegacy('muted')}>در حال بارگذاری…</p>
+            ) : worksets.length === 0 ? (
+              <p className={fromLegacy('muted')}>دستی یافت نشد.</p>
+            ) : (
+              <div className={fromLegacy('product-picker-grid')}>
+                {worksets.map((w) => (
+                  <button
+                    key={w.id}
+                    type="button"
+                    className={fromLegacy('product-picker-item')}
+                    onClick={() => openWorkset(w)}
                   >
-                    <button
-                      type="button"
-                      className={fromLegacy(`product-picker-check${picked ? ' on' : ''}`)}
-                      aria-label={picked ? 'حذف از انتخاب' : 'انتخاب'}
-                      aria-pressed={picked}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        toggleProduct(p)
-                      }}
-                    >
-                      {picked ? <Icon name="check" size={12} /> : null}
-                    </button>
-                    <strong>{p.name}</strong>
-                    <span className={fromLegacy("muted")}>{formatMoney(catalogPrice(p))}</span>
-                    {p.product_model && <span className={fromLegacy("muted small")}>مدل: {p.product_model}</span>}
-                    {p.fabric && <span className={fromLegacy("muted small")}>پارچه: {p.fabric}</span>}
-                    {p.variants?.length > 0 && (
-                      <div className={fromLegacy("product-color-swatches small")}>
-                        {p.variants.map((v) => (
-                          <span
-                            key={v.id}
-                            role="button"
-                            tabIndex={0}
-                            className={fromLegacy(`color-swatch${pick?.variant?.id === v.id ? ' active' : ''}`)}
-                            style={{ background: v.color_hex }}
-                            title={`${v.color_name}${locationQty(v, stockSourceKey) != null ? ` — موجودی ${toPersianDigits(locationQty(v, stockSourceKey))}` : ''}`}
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              pickWithVariant(p, v)
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' || e.key === ' ') {
-                                e.preventDefault()
-                                e.stopPropagation()
-                                pickWithVariant(p, v)
-                              }
-                            }}
-                          />
-                        ))}
-                      </div>
-                    )}
-                    {pick?.variant && locationQty(pick.variant, stockSourceKey) != null && (
-                      <span className={fromLegacy("muted small")}>
-                        موجودی: {toPersianDigits(locationQty(pick.variant, stockSourceKey))}
-                        {pick.variant.stock_summary && !stockSourceKey ? ` (${pick.variant.stock_summary})` : ''}
+                    <strong>{w.name}</strong>
+                    <span className={fromLegacy('muted small')}>{toPersianDigits(w.piece_count || 0)} قطعه</span>
+                    {(w.pieces || []).length > 0 && (
+                      <span className={fromLegacy('muted small')}>
+                        {(w.pieces || []).map((piece) => `${toPersianDigits(piece.quantity)}× ${piece.piece_label}`).join('، ')}
                       </span>
                     )}
-                  </div>
-                )
-              })}
-            </div>
-          )}
-
-          {selectedPicks.length > 0 && (
-            <div className={fromLegacy("product-picker-selected")}>
-              {selectedPicks.map((pick) => (
-                <button
-                  key={pick.product.id}
-                  type="button"
-                  className={fromLegacy("product-picker-chip")}
-                  onClick={() => toggleProduct(pick.product)}
-                >
-                  <span>
-                    {pick.product.name}
-                    {pick.variant?.color_name ? ` — ${pick.variant.color_name}` : ''}
-                  </span>
-                  <Icon name="x" size={12} />
-                </button>
-              ))}
-            </div>
-          )}
-
-          {focusedProduct && (
-            <div className={fromLegacy("variant-picker-panel")}>
-              <h4>{focusedProduct.name}</h4>
-              <div className={fromLegacy("sale-line-meta-grid")}>
-                {focusedProduct.product_model && <span><em className={fromLegacy("muted")}>مدل:</em> {focusedProduct.product_model}</span>}
-                {focusedProduct.fabric && <span><em className={fromLegacy("muted")}>پارچه:</em> {focusedProduct.fabric}</span>}
+                    {w.seat_count ? <span className={fromLegacy('muted small')}>{toPersianDigits(w.seat_count)} نفر</span> : null}
+                  </button>
+                ))}
               </div>
-              {focusedProduct.variants?.length ? (
-                <div className={fromLegacy("variant-picker-options")}>
-                  {focusedProduct.variants.map((v) => (
-                    <button
-                      key={v.id}
-                      type="button"
-                      className={fromLegacy(`variant-option${focusedVariant?.id === v.id ? ' active' : ''}`)}
-                      onClick={() => setPickVariant(focusedProduct.id, v)}
-                    >
-                      <span className={fromLegacy("color-swatch")} style={{ background: v.color_hex }} />
-                      <span>{v.color_name}</span>
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-              {pickerPrice > 0 ? (
-                <p className={fromLegacy("muted")}>قیمت: <strong>{formatMoney(pickerPrice)}</strong></p>
-              ) : (
-                <p className={fromLegacy("alert-error")} style={{ marginTop: 8 }}>این محصول قیمت ندارد — ابتدا در بخش محصولات قیمت را تنظیم کنید.</p>
-              )}
-            </div>
-          )}
-
-          <div className={fromLegacy("form-actions")}>
-            {selectedPicks.length > 0 && (
-              <p className={fromLegacy("muted small product-picker-count")}>
-                {toPersianDigits(selectedPicks.length)} محصول انتخاب شده
+            )}
+          </div>
+        ) : (
+          <div className={fromLegacy('product-picker')}>
+            <button type="button" className={fromLegacy('link')} onClick={() => setSelectedWorkset(null)}>← دست‌های دیگر</button>
+            {selectedWorkset.pieces?.length > 0 && (
+              <p className={fromLegacy('muted small')}>
+                ترکیب دست: {selectedWorkset.pieces.map((piece) => `${toPersianDigits(piece.quantity)}× ${piece.piece_label}`).join('، ')}
               </p>
             )}
-            <Button type="button" variant="ghost" onClick={() => setPickerOpen(false)}>انصراف</Button>
-            <Button
-              type="button"
-              onClick={confirmPick}
-              disabled={!pricedPicks.length}
-            >
-              {confirmLabel}
-            </Button>
+            {loading ? (
+              <p className={fromLegacy('muted')}>در حال بارگذاری…</p>
+            ) : worksetProducts.length === 0 ? (
+              <p className={fromLegacy('muted')}>برای این دست محصولی با قیمت تعریف نشده.</p>
+            ) : (
+              <div className={fromLegacy('product-picker-grid')}>
+                {worksetProducts.map((p) => {
+                  const price = catalogPrice(p)
+                  return (
+                    <div key={p.id} className={fromLegacy('product-picker-item')}>
+                      <strong>{p.name}</strong>
+                      <span className={fromLegacy('muted')}>{pieceSummary(p)}</span>
+                      {fabricSummary(p) ? <span className={fromLegacy('muted small')}>پارچه: {fabricSummary(p)}</span> : null}
+                      {price > 0 ? (
+                        <span>{formatMoney(price)}</span>
+                      ) : (
+                        <span className={fromLegacy('alert-error')}>بدون قیمت</span>
+                      )}
+                      <Field label="تعداد دست">
+                        <input
+                          className={fromLegacy('ltr')}
+                          type="number"
+                          min="0"
+                          value={qtys[p.id] || 0}
+                          onChange={(e) => setQtys((q) => ({ ...q, [p.id]: e.target.value }))}
+                          disabled={price <= 0}
+                        />
+                      </Field>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+            {picked.length > 0 && (
+              <p className={fromLegacy('muted')}>
+                جمع این دست: {formatMoney(pickTotal)} — {toPersianDigits(picked.length)} محصول
+              </p>
+            )}
+            <div className={fromLegacy('form-actions')}>
+              <Button type="button" variant="ghost" onClick={() => { setPickerOpen(false); setSelectedWorkset(null) }}>انصراف</Button>
+              <Button type="button" onClick={confirmPick} disabled={!picked.length}>
+                افزودن به فاکتور
+              </Button>
+            </div>
           </div>
-        </div>
+        )}
       </Modal>
-
-      <FrameServiceConfigModal
-        open={frameConfigOpen}
-        frame={{ id: frameConfigTarget?.pick?.product?.frame_id }}
-        initialConfig={frameConfigTarget?.line?.frame_config}
-        initialModelId={frameConfigTarget?.line?.frame_model_id}
-        onClose={() => {
-          setFrameConfigOpen(false)
-          setFrameConfigQueue([])
-          setFrameConfigDraftLines([])
-          setFrameConfigTarget(null)
-        }}
-        onConfirm={applyFrameConfig}
-      />
     </div>
   )
 }

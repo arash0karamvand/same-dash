@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { salesApi } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import { useConfig } from '../context/ConfigContext'
+import { useConfirm } from '../context/ConfirmContext'
 import { Badge, Button, Card, EmptyState, Field, FilterBar, LoadMoreButton } from '../components/ui'
 import { PAGE_SIZE, withPageParams } from '../config/pagination'
 import { formatDate, formatMoney } from '../utils/format'
@@ -68,6 +69,7 @@ export default function WorkflowOrdersPage({
 }) {
   const { user } = useAuth()
   const { choices } = useConfig()
+  const confirm = useConfirm()
   const stageChoices = choices('workflow_stage')
   const [orders, setOrders] = useState([])
   const [total, setTotal] = useState(0)
@@ -118,10 +120,14 @@ export default function WorkflowOrdersPage({
     load({ offset: 0 })
   }, [load])
 
-  const runAction = async (order, fn) => {
+  const runAction = async (order, action) => {
+    if (action.confirm) {
+      const opts = typeof action.confirm === 'function' ? action.confirm(order) : action.confirm
+      if (!(await confirm(opts))) return
+    }
     setBusyId(order.id)
     try {
-      await fn(order.id, order)
+      await action.run(order.id, order)
       await load()
     } catch (e) {
       setError(e.message)
@@ -154,7 +160,7 @@ export default function WorkflowOrdersPage({
           size="sm"
           variant={a.variant || 'primary'}
           disabled={busyId === o.id}
-          onClick={() => runAction(o, a.run)}
+          onClick={() => runAction(o, a)}
         >
           {typeof a.label === 'function' ? a.label(o) : a.label}
         </Button>
@@ -168,8 +174,28 @@ export default function WorkflowOrdersPage({
         {li.product_name} × {li.quantity}
         {li.fabric ? ` — ${li.fabric}` : ''}
         {li.frame_id ? ` — کلاف (${li.frame_config?.seat_count || '—'} نفره)` : ''}
+        {li.workset_config?.paint?.name ? ` — رنگ ${li.workset_config.paint.name}` : ''}
+        {li.workset_config?.fabric?.name ? ` — پارچه ${li.workset_config.fabric.name}` : ''}
+        {li.workset_config?.foam?.name ? ` — اسفنج ${li.workset_config.foam.name}` : ''}
+        {li.workset_config?.webbing?.name ? ` — تسمه ${li.workset_config.webbing.name}` : ''}
+        {li.workset_config?.cushion?.name ? ` — کوسن ${li.workset_config.cushion.name}` : ''}
       </div>
     ))
+
+  const renderWorksetSummary = (o) => {
+    const summary = o.workset_summary || {}
+    const parts = [
+      summary.frame && `کلاف ${summary.frame}`,
+      summary.paint && `رنگ ${summary.paint}`,
+      summary.fabric && `پارچه ${summary.fabric}`,
+      summary.foam && `اسفنج ${summary.foam}`,
+      summary.webbing && `تسمه ${summary.webbing}`,
+      summary.cushion && `کوسن ${summary.cushion}`,
+      summary.pipeline_end === 'assembly' && 'مونتاژ',
+    ].filter(Boolean)
+    if (!parts.length) return null
+    return <div className={fromLegacy('muted small')}>دست کار: {parts.join(' • ')}</div>
+  }
 
   const renderMaterialRequirements = (o) => {
     const items = o.material_requirements || []
@@ -189,6 +215,9 @@ export default function WorkflowOrdersPage({
               {(item.source === 'frame' || (item.sources || []).includes('frame')) && (
                 <span className={fromLegacy("muted small")}> — کلاف</span>
               )}
+              {item.source && !['product', 'frame', 'mixed'].includes(item.source) && (
+                <span className={fromLegacy("muted small")}> — {item.source}</span>
+              )}
             </span>
             <span className={fromLegacy("order-material-qty")}>
               نیاز: <strong>{item.required_quantity}</strong> {item.unit}
@@ -197,6 +226,12 @@ export default function WorkflowOrdersPage({
               )}
               {item.available_stock != null && (
                 <> — موجود: <strong>{item.available_stock}</strong></>
+              )}
+              {item.committed_by_others > 0 && (
+                <> — در جریان <strong>{item.committed_by_others}</strong> می‌خواهند</>
+              )}
+              {item.available_after_queue != null && item.committed_by_others > 0 && (
+                <> / برای این سفارش: <strong>{item.available_after_queue}</strong></>
               )}
             </span>
             {item.line_cost != null && item.line_cost > 0 && (
@@ -263,6 +298,9 @@ export default function WorkflowOrdersPage({
                   <tr key={o.id} className={fromLegacy(rowToneClass(o, rowUrgency))}>
                     <td className={fromLegacy("ltr")}>
                       {o.invoice_number || o.id}
+                      {o.receive_kind_display && (
+                        <div className={fromLegacy("muted small")}>نوع دریافت: {o.receive_kind_display}{o.contract_party ? ` — ${o.contract_party}` : ''}</div>
+                      )}
                       {o.shipped_early && (
                         <div><Badge color="#f97316">ارسال زودتر از موعد</Badge></div>
                       )}
@@ -278,7 +316,10 @@ export default function WorkflowOrdersPage({
                         {o.customer_address && <div className={fromLegacy("muted")}>{o.customer_address}</div>}
                       </td>
                     )}
-                    <td>{renderLineItems(o)}</td>
+                    <td>
+                      {renderLineItems(o)}
+                      {showMaterials && renderWorksetSummary(o)}
+                    </td>
                     {showMaterials && <td>{renderMaterialRequirements(o)}</td>}
                     <td>{o.delivery_date ? formatDate(o.delivery_date) : '—'}</td>
                     {showProductionDate && (
@@ -375,7 +416,10 @@ export default function WorkflowOrdersPage({
                   )}
                 </div>
                 {(o.line_items || []).length > 0 && (
-                  <div className={fromLegacy("muted small")} style={{ marginTop: 8 }}>{renderLineItems(o)}</div>
+                  <div className={fromLegacy("muted small")} style={{ marginTop: 8 }}>
+                    {renderLineItems(o)}
+                    {showMaterials && renderWorksetSummary(o)}
+                  </div>
                 )}
                 {showMaterials && (o.material_requirements || []).length > 0 && (
                   <div className={fromLegacy("order-materials-mobile")} style={{ marginTop: 8 }}>

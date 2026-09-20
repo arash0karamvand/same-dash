@@ -188,6 +188,7 @@ def sale_list(request):
             }
             if data.get("stock_source_kind")
             else None,
+            seat_count=data.get("seat_count"),
         )
     except ValueError as exc:
         return fail(str(exc), status=400)
@@ -267,7 +268,7 @@ def sale_detail(request, pk):
         log_action(
             request.user,
             "delete",
-            f"حذف فروش #{sale.id} — {sale.customer.full_name}"
+            f"حذف فروش #{sale.id} — {sale.customer.full_name if sale.customer_id else 'بدون مشتری'}"
             + (f" — {deleted_entries} سند حسابداری" if deleted_entries else ""),
             entity_type="Sale",
             entity_id=sale.id,
@@ -297,6 +298,8 @@ def sale_detail(request, pk):
             kwargs["delivery_date"] = data.get("delivery_date") or None
         if "line_items" in data:
             kwargs["line_items"] = data.get("line_items") or []
+        if "seat_count" in data:
+            kwargs["seat_count"] = data.get("seat_count")
         if "installments" in data:
             kwargs["installments"] = data.get("installments") or []
         kwargs["recorded_by"] = request.user
@@ -306,7 +309,7 @@ def sale_detail(request, pk):
     log_action(
         request.user,
         "update",
-        f"ویرایش فروش #{sale.id} — {sale.customer.full_name}",
+        f"ویرایش فروش #{sale.id} — {sale.customer.full_name if sale.customer_id else 'بدون مشتری'}",
         entity_type="Sale",
         entity_id=sale.id,
     )
@@ -363,7 +366,7 @@ def sale_confirm(request, pk):
     log_action(
         request.user,
         "update",
-        f"تایید پیش‌فاکتور #{sale.id} — {sale.customer.full_name}",
+        f"تایید پیش‌فاکتور #{sale.id} — {sale.customer.full_name if sale.customer_id else 'بدون مشتری'}",
         entity_type="Sale",
         entity_id=sale.id,
     )
@@ -386,7 +389,7 @@ def sale_cancel(request, pk):
     log_action(
         request.user,
         "update",
-        f"لغو سفارش #{sale.id} — {sale.customer.full_name}",
+        f"لغو سفارش #{sale.id} — {sale.customer.full_name if sale.customer_id else 'بدون مشتری'}",
         entity_type="Sale",
         entity_id=sale.id,
     )

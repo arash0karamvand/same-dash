@@ -1,7 +1,6 @@
-"""پیکربندی دیتابیس Django (MySQL یا SQLite)."""
+"""پیکربندی دیتابیس Django — فقط MySQL."""
 
 import os
-import sys
 from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
@@ -22,15 +21,6 @@ def load_env_file(base_dir):
         if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
             value = value[1:-1]
         os.environ.setdefault(key, value)
-
-
-def _sqlite_database(base_dir):
-    return {
-        "default": {
-            "ENGINE": "django.db.backends.sqlite3",
-            "NAME": Path(base_dir) / "db.sqlite3",
-        }
-    }
 
 
 def _mysql_database():
@@ -76,19 +66,12 @@ def _mysql_database():
 
 
 def build_databases(base_dir):
-    """ساخت تنظیمات DATABASES بر اساس DB_ENGINE."""
+    """ساخت تنظیمات DATABASES — فقط MySQL."""
+    del base_dir
     engine = os.environ.get("DB_ENGINE", "mysql").strip().lower()
-
-    # تست‌ها بدون MySQL محلی — مگر TEST_USE_MYSQL=1
-    if "test" in sys.argv and not os.environ.get("TEST_USE_MYSQL"):
-        return _sqlite_database(base_dir)
-
-    if engine in ("sqlite", "sqlite3"):
-        return _sqlite_database(base_dir)
-
-    if engine in ("mysql", "mariadb"):
+    if engine in ("", "mysql", "mariadb"):
         return _mysql_database()
 
     raise ImproperlyConfigured(
-        f"DB_ENGINE نامعتبر است: {engine!r}. مقادیر مجاز: mysql, sqlite"
+        f"این پروژه فقط MySQL را پشتیبانی می‌کند. DB_ENGINE={engine!r} مجاز نیست."
     )

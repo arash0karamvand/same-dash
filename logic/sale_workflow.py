@@ -520,7 +520,12 @@ def receive_factory_order(factory_order, user):
         factory_received_at=timezone.now(),
         factory_received_by_id=user.pk if user else None,
     )
-    return as_factory_order(sale)
+    from logic.production_line import spawn_workshop_jobs_for_sale
+
+    spawned = spawn_workshop_jobs_for_sale(sale)
+    result = as_factory_order(sale)
+    result.spawned_workshop_jobs = spawned
+    return result
 
 
 @transaction.atomic
@@ -529,13 +534,20 @@ def complete_factory_production(factory_order, user):
         raise ValueError("این سفارش در مرحله ساخت کارخانه نیست.")
     from logic.materials import deduct_materials_for_factory_order
     from logic.order_queues import as_factory_order, transition_order
+    from logic.receive_kinds import destination_stage
 
     deduct_materials_for_factory_order(factory_order)
+    next_stage = destination_stage(getattr(factory_order, "receive_kind", None) or "customer")
+    extra = {"production_done_at": timezone.now()}
+    if next_stage == STAGE_IN_WAREHOUSE:
+        extra["delivery_ready_at"] = timezone.now()
+    elif next_stage == STAGE_READY_FOR_PICKUP:
+        extra["delivery_ready_at"] = timezone.now()
     sale = transition_order(
         factory_order,
-        STAGE_PRODUCTION_DONE,
+        next_stage,
         user,
-        production_done_at=timezone.now(),
+        **extra,
     )
     return as_factory_order(sale)
 

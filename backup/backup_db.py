@@ -1,18 +1,14 @@
 """اسکریپت بکاپ دیتابیس و خروجی‌گیری از اطلاعات.
 
 این اسکریپت دو خروجی می‌سازد و در فولدر backup/exports ذخیره می‌کند:
-    ۱) کپی فایل خام دیتابیس SQLite (db.sqlite3)
+    ۱) دامپ خام MySQL (mysqldump) در صورت نصب بودن کلاینت
     ۲) خروجی JSON کامل داده‌ها با استفاده از دستور dumpdata خود Django
 
 اجرا (از ریشه پروژه):
     py backup/backup_db.py
-
-هیچ پکیج خارجی لازم نیست؛ فقط از کتابخانه استاندارد و ابزار خود Django
-استفاده می‌شود.
 """
 
 import os
-import shutil
 import subprocess
 import sys
 from datetime import datetime
@@ -27,16 +23,62 @@ def timestamp():
     return datetime.now().strftime("%Y%m%d_%H%M%S")
 
 
-def backup_sqlite_file(stamp):
-    """کپی مستقیم فایل دیتابیس SQLite در صورت وجود."""
-    db_path = BASE_DIR / "db.sqlite3"
-    if not db_path.exists():
-        print("هشدار: فایل db.sqlite3 یافت نشد؛ از کپی خام صرف‌نظر شد.")
+def _load_env():
+    sys.path.insert(0, str(BASE_DIR))
+    from backend.db import load_env_file
+
+    load_env_file(BASE_DIR)
+
+
+def backup_mysql_dump(stamp):
+    """خروجی SQL خام با mysqldump."""
+    _load_env()
+    name = os.environ.get("DB_NAME", "").strip()
+    if not name:
+        print("هشدار: DB_NAME تنظیم نشده؛ از dump خام MySQL صرف‌نظر شد.")
         return None
-    target = EXPORT_DIR / f"db_backup_{stamp}.sqlite3"
-    shutil.copy2(db_path, target)
-    print(f"کپی دیتابیس ساخته شد: {target}")
-    return target
+
+    target = EXPORT_DIR / f"db_backup_{stamp}.sql"
+    cmd = [
+        "mysqldump",
+        f"--host={os.environ.get('DB_HOST', '127.0.0.1')}",
+        f"--port={os.environ.get('DB_PORT', '3306')}",
+        f"--user={os.environ.get('DB_USER', 'root')}",
+        "--default-character-set=utf8mb4",
+        "--single-transaction",
+        "--routines",
+        "--triggers",
+        name,
+    ]
+    env = os.environ.copy()
+    password = os.environ.get("DB_PASSWORD", "")
+    if password:
+        env["MYSQL_PWD"] = password
+
+    try:
+        with open(target, "w", encoding="utf-8") as out:
+            result = subprocess.run(
+                cmd,
+                stdout=out,
+                stderr=subprocess.PIPE,
+                text=True,
+                env=env,
+            )
+    except FileNotFoundError:
+        if target.exists():
+            target.unlink()
+        print("هشدار: mysqldump در PATH نیست؛ فقط خروجی JSON ساخته می‌شود.")
+        return None
+
+    if result.returncode == 0:
+        print(f"دامپ MySQL ساخته شد: {target}")
+        return target
+
+    if target.exists():
+        target.unlink()
+    print("خطا در ساخت دامپ MySQL:")
+    print(result.stderr)
+    return None
 
 
 def dump_json(stamp):
@@ -64,7 +106,7 @@ def main():
     os.makedirs(EXPORT_DIR, exist_ok=True)
     stamp = timestamp()
     print(f"شروع بکاپ در {stamp} ...")
-    backup_sqlite_file(stamp)
+    backup_mysql_dump(stamp)
     dump_json(stamp)
     print("بکاپ به پایان رسید.")
 

@@ -68,6 +68,7 @@ def material_list(request):
             active_only=False,
             approved_only=approved_only,
             approval_status=approval_status or None,
+            usage_kind=(request.GET.get("usage_kind") or "").strip() or None,
         )
         from logic.pagination import paginate
 

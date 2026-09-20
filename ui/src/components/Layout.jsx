@@ -16,6 +16,7 @@ import { PageGuideProvider } from '../context/PageGuideContext'
 import { useMediaQuery } from '../hooks/useMediaQuery'
 import { iconForNavItem, iconForPortal } from '../config/iconMap'
 import { getVisiblePortals, canSeeNavItem, getFirstAccessiblePageForPortal } from '../utils/permissions'
+import { groupNavItems } from '../utils/navGroups'
 import { buttonClass, cn, tw } from '../styles/tw'
 
 function getPortalFromList(portals, id) {
@@ -165,25 +166,30 @@ export default function Layout({ portal, page, onNavigate, children }) {
 
         {activePortal && (!isCompactNav || menuOpen) && (
           <nav className={tw.nav} aria-label="زیرمنو">
-            {(activePortal.children || [])
-              .filter((c) => canSeeNavItem(user, c))
-              .map((item) => {
-                const active = page === item.key
-                return (
-                  <button
-                    key={item.key}
-                    type="button"
-                    className={cn(tw.navItem, active && tw.navItemActive)}
-                    onClick={() => navigateSub(portal, item.key)}
-                  >
-                    {active && <span className="nav-item-active-bar nav-item-active-bar--thin" aria-hidden />}
-                    <span className={cn(tw.navIcon, active && 'opacity-100 text-accent')}>
-                      <Icon name={iconForNavItem(item)} size={17} />
-                    </span>
-                    <span>{item.label}</span>
-                  </button>
-                )
-              })}
+            {groupNavItems((activePortal.children || []).filter((c) => canSeeNavItem(user, c))).map((group) => (
+              <div key={group.label || 'general'} className={tw.navGroup}>
+                {group.label && (
+                  <p className={tw.navGroupLabel}>{group.label}</p>
+                )}
+                {group.items.map((item) => {
+                  const active = page === item.key
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      className={cn(tw.navItem, active && tw.navItemActive)}
+                      onClick={() => navigateSub(portal, item.key)}
+                    >
+                      {active && <span className="nav-item-active-bar nav-item-active-bar--thin" aria-hidden />}
+                      <span className={cn(tw.navIcon, active && 'opacity-100 text-accent')}>
+                        <Icon name={iconForNavItem(item)} size={17} />
+                      </span>
+                      <span>{item.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            ))}
           </nav>
         )}
 

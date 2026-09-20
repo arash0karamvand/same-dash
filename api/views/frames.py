@@ -16,6 +16,13 @@ from logic.frames import (
     frame_to_dict,
     update_frame,
 )
+from logic.furniture_worksets import (
+    ALLOWED_ARMS,
+    ARM_STYLE_LABELS,
+    PIECE_KIND_LABELS,
+    create_product_from_frame,
+)
+from logic.products import product_to_dict
 
 
 def _can_view(user):
@@ -36,6 +43,9 @@ def frame_options(request):
             "wood_types": [{"value": k, "label": v} for k, v in WOOD_TYPE_LABELS.items()],
             "component_types": [{"value": k, "label": v} for k, v in COMPONENT_TYPE_LABELS.items()],
             "rule_keys": [{"value": k, "label": v} for k, v in RULE_KEY_LABELS.items()],
+            "piece_kinds": [{"value": k, "label": v} for k, v in PIECE_KIND_LABELS.items()],
+            "arm_styles": [{"value": k, "label": v} for k, v in ARM_STYLE_LABELS.items()],
+            "allowed_arms": {kind: list(styles) for kind, styles in ALLOWED_ARMS.items()},
         }
     )
 
@@ -47,9 +57,15 @@ def frame_list(request):
 
     if request.method == "GET":
         search = (request.GET.get("search") or "").strip()
+        workset_id = request.GET.get("workset_id")
         include_inactive = request.GET.get("include_inactive") == "1" and _can_manage(request.user)
         qs = Frame.objects.filter(is_deleted=False)
-        qs = filter_frames(qs, search=search, active_only=not include_inactive)
+        qs = filter_frames(
+            qs,
+            search=search,
+            active_only=not include_inactive,
+            workset_id=workset_id or None,
+        )
         from logic.pagination import paginate
 
         page, meta = paginate(qs, request.GET)
@@ -129,5 +145,22 @@ def frame_requirements_preview(request, pk):
             quantity=quantity,
         )
         return success({"requirements": requirements})
+    except ValueError as exc:
+        return fail(str(exc), status=400)
+
+
+@api_view("POST")
+def frame_create_product(request, pk):
+    if not _can_manage(request.user):
+        return fail("Permission denied", status=403)
+    frame = Frame.objects.filter(pk=pk, is_deleted=False).select_related("workset").first()
+    if not frame:
+        return fail("کلاف یافت نشد.", status=404)
+    try:
+        product = create_product_from_frame(frame, parse_json(request))
+        log_action(request.user, "create", f"محصول از کلاف {frame.name}: {product.name}")
+        from api.views.products import _product_audience
+
+        return success(product_to_dict(product, audience=_product_audience(request.user)), status=201)
     except ValueError as exc:
         return fail(str(exc), status=400)

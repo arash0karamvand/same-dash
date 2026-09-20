@@ -38,7 +38,8 @@ def as_office_order(sale):
 
 
 def as_factory_order(sale):
-    return FactoryOrder.objects.get(pk=sale.pk)
+    found = FactoryOrder.objects.filter(pk=sale.pk).first()
+    return found or sale
 
 
 @transaction.atomic

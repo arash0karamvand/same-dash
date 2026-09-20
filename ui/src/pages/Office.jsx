@@ -2,8 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import { cycleApi, officeApi, salesApi } from '../api/client'
+import { useAuth } from '../context/AuthContext'
 import { useConfig } from '../context/ConfigContext'
 import CheckAccountPicker from '../components/CheckAccountPicker'
+import CustomerSearch from '../components/CustomerSearch'
 import InstallmentLines, { EMPTY_INSTALLMENT } from '../components/InstallmentLines'
 import MoneyInput from '../components/MoneyInput'
 import PersianDateInput from '../components/PersianDateInput'
@@ -13,6 +15,7 @@ import { OFFICE_APPROVE_FILTER, recordFiltersToQueryString } from '../config/rec
 import SaleDiscountFields, { saleBalanceDue } from '../components/SaleDiscountFields'
 import Select from '../components/Select'
 import { Button, Field, Modal } from '../components/ui'
+import { hasPermission } from '../utils/permissions'
 import { formatDate, formatMoney } from '../utils/format'
 import WorkflowOrdersPage from './WorkflowOrdersPage'
 import { fromLegacy } from '../styles/tw.js'
@@ -42,6 +45,26 @@ function buildOfficeListQuery(filters) {
   return recordFiltersToQueryString(filters, { limit: OFFICE_APPROVE_FILTER.resultLimit })
 }
 
+const OFFICE_RECEIVE_KINDS = [
+  { value: 'branch_floor', label: 'کف شعبه' },
+  { value: 'warehouse', label: 'انبار' },
+  { value: 'merchant', label: 'بازرگان' },
+  { value: 'repair', label: 'تعمیر' },
+]
+
+const EMPTY_FACTORY_WORK = {
+  receive_kind: 'branch_floor',
+  customer: null,
+  source_invoice_number: '',
+  contract_party: '',
+  warehouse_id: '',
+  source_branch: '',
+  description: '',
+  delivery_date: '',
+  seat_count: '',
+  line_items: [],
+}
+
 const EMPTY_EDIT = {
   description: '',
   invoice_number: '',
@@ -53,6 +76,7 @@ const EMPTY_EDIT = {
   discount_type: 'amount',
   discount_value: '',
   paid_amount: '',
+  seat_count: '',
   line_items: [],
   installments: [],
 }
@@ -73,6 +97,10 @@ function mapLineItemsFromSale(items = []) {
   return items.map((i) => ({
     product_id: i.product_id || '',
     variant_id: i.variant_id || '',
+    frame_id: i.frame_id || '',
+    furniture_workset_id: i.furniture_workset_id || '',
+    furniture_workset_name: i.furniture_workset_name || '',
+    workset_config: i.workset_config || {},
     product_name: i.product_name || '',
     product_model: i.product_model || '',
     fabric: i.fabric || '',
@@ -84,7 +112,9 @@ function mapLineItemsFromSale(items = []) {
 }
 
 export default function Office() {
+  const { user } = useAuth()
   const { choices, branches } = useConfig()
+  const canCreateFactoryWork = hasPermission(user, 'approve_sale_accounting')
   const paymentMethods = choices('payment_method')
   const [editOrder, setEditOrder] = useState(null)
   const [rejectOrder, setRejectOrder] = useState(null)
@@ -116,6 +146,10 @@ export default function Office() {
   const [listFilterQuery, setListFilterQuery] = useState(() =>
     buildOfficeListQuery({ ...OFFICE_QUEUE_FILTER_DEFAULTS, model: 'office_order' }),
   )
+  const [factoryWorkOpen, setFactoryWorkOpen] = useState(false)
+  const [factoryWork, setFactoryWork] = useState(EMPTY_FACTORY_WORK)
+  const [factoryWorkError, setFactoryWorkError] = useState('')
+  const [factoryWorkSaving, setFactoryWorkSaving] = useState(false)
 
   const showInstallments = form.payment_status === 'installment' || form.payment_method === 'check'
   const balanceDue = saleBalanceDue(form)
@@ -151,6 +185,7 @@ export default function Office() {
         discount_type: sale.discount_type || 'amount',
         discount_value: String(sale.discount_value ?? sale.discount ?? 0),
         paid_amount: String(sale.paid_amount ?? 0),
+        seat_count: sale.seat_count ? String(sale.seat_count) : '',
         line_items: mapLineItemsFromSale(sale.line_items),
         installments: mapInstallmentsFromSale(sale.installments),
       })
@@ -209,7 +244,11 @@ export default function Office() {
         product_id: i.product_id,
         variant_id: i.variant_id || null,
         quantity: Number(i.quantity || 1),
+        frame_id: i.frame_id || null,
+        furniture_workset_id: i.furniture_workset_id || null,
+        workset_config: i.workset_config || {},
       }))
+      if (form.seat_count) payload.seat_count = Number(form.seat_count)
       payload.amount = form.line_items.reduce(
         (s, i) => s + Number(i.unit_price || 0) * Number(i.quantity || 1),
         0,
@@ -351,11 +390,58 @@ export default function Office() {
 
   const checkItems = (approveDetail?.installments || []).filter((i) => i.payment_method === 'check')
 
+  const submitFactoryWork = async (e) => {
+    e.preventDefault()
+    if (!factoryWork.line_items?.length) {
+      setFactoryWorkError('حداقل یک محصول انتخاب کنید.')
+      return
+    }
+    if (factoryWork.receive_kind === 'merchant' && !factoryWork.contract_party.trim()) {
+      setFactoryWorkError('برای بازرگان طرف قرارداد را وارد کنید.')
+      return
+    }
+    setFactoryWorkSaving(true)
+    setFactoryWorkError('')
+    try {
+      await officeApi.createFactoryWork({
+        receive_kind: factoryWork.receive_kind,
+        customer_id: factoryWork.customer?.id || null,
+        source_invoice_number: factoryWork.source_invoice_number.trim() || '',
+        contract_party: factoryWork.contract_party.trim(),
+        warehouse_id: factoryWork.warehouse_id || null,
+        source_branch: factoryWork.source_branch || '',
+        description: factoryWork.description.trim(),
+        delivery_date: factoryWork.delivery_date || null,
+        seat_count: factoryWork.seat_count ? Number(factoryWork.seat_count) : null,
+        line_items: factoryWork.line_items.map((i) => ({
+          product_id: i.product_id,
+          variant_id: i.variant_id || null,
+          quantity: Number(i.quantity) || 1,
+          frame_id: i.frame_id || null,
+          workset_config: i.workset_config || {},
+          furniture_workset_id: i.furniture_workset_id || null,
+        })),
+      })
+      setFactoryWorkOpen(false)
+      setFactoryWork(EMPTY_FACTORY_WORK)
+      setReloadKey((k) => k + 1)
+    } catch (err) {
+      setFactoryWorkError(err.message)
+    } finally {
+      setFactoryWorkSaving(false)
+    }
+  }
+
   return (
     <>
       <OfficeSectionCard
         section={OFFICE_APPROVE_FILTER}
         onFiltersChange={(filters) => setListFilterQuery(buildOfficeListQuery(filters))}
+        actions={canCreateFactoryWork ? (
+          <Button type="button" onClick={() => { setFactoryWorkError(''); setFactoryWork(EMPTY_FACTORY_WORK); setFactoryWorkOpen(true) }}>
+            ثبت کار کارخانه
+          </Button>
+        ) : null}
       >
         <WorkflowOrdersPage
           key={`${reloadKey}-${listFilterQuery}`}
@@ -451,6 +537,8 @@ export default function Office() {
 
             <ProductLines
               lines={form.line_items}
+              seatCount={form.seat_count}
+              onSeatCountChange={(seat_count) => setForm({ ...form, seat_count })}
               onChange={(line_items) => setForm({ ...form, line_items })}
             />
 
@@ -707,6 +795,91 @@ export default function Office() {
             </div>
           </form>
         )}
+      </Modal>
+
+      <Modal
+        title="ثبت کار کارخانه"
+        open={factoryWorkOpen}
+        onClose={() => { if (!factoryWorkSaving) setFactoryWorkOpen(false) }}
+        wide
+      >
+        <form onSubmit={submitFactoryWork} className={fromLegacy('form')}>
+          {factoryWorkError && <div className={fromLegacy('alert alert-error')}>{factoryWorkError}</div>}
+          <Field label="نوع دریافت">
+            <Select
+              value={factoryWork.receive_kind}
+              onChange={(v) => setFactoryWork({ ...factoryWork, receive_kind: v })}
+              options={OFFICE_RECEIVE_KINDS}
+            />
+          </Field>
+          <Field label="مشتری (اختیاری)">
+            <CustomerSearch
+              value={factoryWork.customer}
+              onSelect={(customer) => setFactoryWork({ ...factoryWork, customer })}
+              onCreateNew={(customer) => setFactoryWork({ ...factoryWork, customer })}
+            />
+          </Field>
+          <Field label="شماره فاکتور مبدأ (اختیاری)">
+            <input
+              className={fromLegacy('ltr')}
+              value={factoryWork.source_invoice_number}
+              onChange={(e) => setFactoryWork({ ...factoryWork, source_invoice_number: e.target.value })}
+              placeholder="وصل به فاکتور موجود"
+            />
+          </Field>
+          {factoryWork.receive_kind === 'merchant' && (
+            <Field label="طرف قرارداد">
+              <input
+                value={factoryWork.contract_party}
+                onChange={(e) => setFactoryWork({ ...factoryWork, contract_party: e.target.value })}
+                required
+              />
+            </Field>
+          )}
+          {factoryWork.receive_kind === 'warehouse' && (
+            <Field label="انبار مقصد">
+              <Select
+                value={factoryWork.warehouse_id}
+                onChange={(v) => setFactoryWork({ ...factoryWork, warehouse_id: v })}
+                options={(cycleMe.warehouses || []).map((w) => ({ value: String(w.id), label: w.label }))}
+                placeholder="انتخاب انبار"
+              />
+            </Field>
+          )}
+          {factoryWork.receive_kind === 'branch_floor' && (
+            <Field label="شعبه مقصد">
+              <Select
+                value={factoryWork.source_branch}
+                onChange={(v) => setFactoryWork({ ...factoryWork, source_branch: v })}
+                options={(branches || []).map((b) => ({ value: b.code, label: b.label }))}
+                placeholder="انتخاب شعبه"
+              />
+            </Field>
+          )}
+          <Field label="تاریخ تحویل">
+            <PersianDateInput
+              value={factoryWork.delivery_date}
+              onChange={(v) => setFactoryWork({ ...factoryWork, delivery_date: v })}
+            />
+          </Field>
+          <Field label="توضیحات">
+            <textarea
+              rows={2}
+              value={factoryWork.description}
+              onChange={(e) => setFactoryWork({ ...factoryWork, description: e.target.value })}
+            />
+          </Field>
+          <ProductLines
+            lines={factoryWork.line_items}
+            seatCount={factoryWork.seat_count}
+            onSeatCountChange={(seat_count) => setFactoryWork({ ...factoryWork, seat_count })}
+            onChange={(line_items) => setFactoryWork({ ...factoryWork, line_items })}
+          />
+          <div className={fromLegacy('form-actions')}>
+            <Button type="button" variant="ghost" onClick={() => setFactoryWorkOpen(false)} disabled={factoryWorkSaving}>انصراف</Button>
+            <Button type="submit" disabled={factoryWorkSaving}>{factoryWorkSaving ? 'در حال ثبت…' : 'ثبت و ارسال به کارخانه'}</Button>
+          </div>
+        </form>
       </Modal>
     </>
   )

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { configApi, materialsApi, productsApi } from '../api/client'
+import { configApi, furnitureWorksetsApi, materialsApi, productsApi, workshopRecipesApi } from '../api/client'
 import MoneyInput from '../components/MoneyInput'
 import Select from '../components/Select'
 import { Badge, Button, Card, EmptyState, Field, FilterBar, LoadMoreButton, Modal } from '../components/ui'
@@ -47,6 +47,20 @@ function locationStocksFrom(locations, existing = []) {
   })
 }
 const EMPTY_PRODUCT_MATERIAL = { id: null, material_id: '', quantity: '1' }
+const EMPTY_SUITE_PIECE = {
+  piece_kind: '',
+  arm_style: '',
+  piece_label: '',
+  quantity: 1,
+  needs_paint: true,
+  pipeline_end: 'upholstery',
+  paint_recipe_id: '',
+  fabric_recipe_id: '',
+  foam_recipe_id: '',
+  webbing_recipe_id: '',
+  cushion_recipe_id: '',
+  unit_price: '',
+}
 const EMPTY_PRODUCT = {
   name: '',
   sku: '',
@@ -61,6 +75,35 @@ const EMPTY_PRODUCT = {
   attributes: {},
   variants: [{ ...EMPTY_VARIANT }],
   materials: [],
+  workset_id: '',
+  suite_pieces: [],
+}
+
+function piecesFromWorkset(workset, existing = []) {
+  const prev = new Map((existing || []).map((piece) => [`${piece.piece_kind}:${piece.arm_style}`, piece]))
+  return (workset?.pieces || []).map((piece) => {
+    const old = prev.get(`${piece.piece_kind}:${piece.arm_style}`) || {}
+    const assembly = piece.piece_kind === 'side_table' || piece.piece_kind === 'coffee_table'
+    return {
+      ...EMPTY_SUITE_PIECE,
+      piece_kind: piece.piece_kind,
+      arm_style: piece.arm_style,
+      piece_label: piece.piece_label || old.piece_label || '',
+      quantity: piece.quantity || old.quantity || 1,
+      needs_paint: old.needs_paint !== false,
+      pipeline_end: old.pipeline_end || (assembly ? 'assembly' : 'upholstery'),
+      paint_recipe_id: old.paint_recipe_id ? String(old.paint_recipe_id) : '',
+      fabric_recipe_id: old.fabric_recipe_id ? String(old.fabric_recipe_id) : '',
+      foam_recipe_id: old.foam_recipe_id ? String(old.foam_recipe_id) : '',
+      webbing_recipe_id: old.webbing_recipe_id ? String(old.webbing_recipe_id) : '',
+      cushion_recipe_id: old.cushion_recipe_id ? String(old.cushion_recipe_id) : '',
+      unit_price: old.unit_price != null && old.unit_price !== '' ? String(old.unit_price) : '',
+    }
+  })
+}
+
+function suiteTotal(pieces) {
+  return (pieces || []).reduce((sum, piece) => sum + (Number(piece.unit_price) || 0) * (Number(piece.quantity) || 1), 0)
 }
 
 function useProductMode() {
@@ -117,6 +160,8 @@ export default function Products() {
   const [saving, setSaving] = useState(false)
   const [topSelling, setTopSelling] = useState([])
   const [materialCatalog, setMaterialCatalog] = useState([])
+  const [worksetCatalog, setWorksetCatalog] = useState([])
+  const [recipeCatalog, setRecipeCatalog] = useState({ paint: [], fabric: [], foam: [], cushion: [], webbing: [] })
   const [transferOpen, setTransferOpen] = useState(false)
   const [transferForm, setTransferForm] = useState({
     variant_id: '',
@@ -159,6 +204,11 @@ export default function Products() {
       if (loadMaterials) {
         requests.push(materialsApi.list({ limit: PICKER_LIMIT, approved_only: true }).catch(() => ({ results: [] })))
       }
+      const loadWorkset = isFactory || canEditMaterials
+      if (loadWorkset) {
+        requests.push(workshopRecipesApi.list({ limit: 400 }).catch(() => ({ results: [] })))
+        requests.push(furnitureWorksetsApi.list({ limit: 200 }).catch(() => ({ results: [] })))
+      }
       const results = await Promise.all(requests)
       let i = 0
       setCategories(results[i].results || [])
@@ -176,6 +226,19 @@ export default function Products() {
       }
       if (loadMaterials) {
         setMaterialCatalog(results[i]?.results || [])
+        i += 1
+      }
+      if (loadWorkset) {
+        const recipes = results[i]?.results || []
+        setRecipeCatalog({
+          paint: recipes.filter((r) => r.kind === 'paint'),
+          fabric: recipes.filter((r) => r.kind === 'fabric'),
+          foam: recipes.filter((r) => r.kind === 'foam'),
+          cushion: recipes.filter((r) => r.kind === 'cushion'),
+          webbing: recipes.filter((r) => r.kind === 'webbing'),
+        })
+        i += 1
+        setWorksetCatalog(results[i]?.results || [])
       }
       setError('')
     } catch (e) {
@@ -184,7 +247,7 @@ export default function Products() {
       setLoading(false)
       setLoadingMore(false)
     }
-  }, [search, categoryFilter, activeFilter, canManage, mode, showCosts, canEditMaterials, user])
+  }, [search, categoryFilter, activeFilter, canManage, mode, showCosts, canEditMaterials, isFactory, user])
 
   useEffect(() => { load() }, [load])
 
@@ -200,6 +263,49 @@ export default function Products() {
     })),
     [materialCatalog],
   )
+
+  const worksetOptions = useMemo(
+    () => [{ value: '', label: 'بدون دست' }, ...worksetCatalog.map((w) => ({ value: String(w.id), label: w.name }))],
+    [worksetCatalog],
+  )
+
+  const recipeOptions = (kind) => [
+    { value: '', label: 'بدون دستور' },
+    ...(recipeCatalog[kind] || []).map((r) => ({
+      value: String(r.id),
+      label: r.color_name ? `${r.name} (${r.color_name})` : r.name,
+    })),
+  ]
+
+  const selectedRecipePreview = (kind, recipeId) => {
+    const recipe = (recipeCatalog[kind] || []).find((r) => String(r.id) === String(recipeId))
+    if (!recipe?.materials?.length) return null
+    return recipe.materials.map((row) => `${row.material_name} × ${row.quantity} ${row.unit || ''}`).join('، ')
+  }
+
+  const onWorksetChange = async (value) => {
+    let workset = worksetCatalog.find((row) => String(row.id) === String(value))
+    if (value && workset && !(workset.pieces || []).length) {
+      try {
+        workset = await furnitureWorksetsApi.get(value)
+      } catch {
+        workset = workset || { pieces: [] }
+      }
+    }
+    setProductForm((form) => ({
+      ...form,
+      workset_id: value,
+      product_model: form.product_model || workset?.name || '',
+      suite_pieces: piecesFromWorkset(workset, form.suite_pieces),
+    }))
+  }
+
+  const updateSuitePiece = (idx, key, val) => {
+    setProductForm((form) => ({
+      ...form,
+      suite_pieces: form.suite_pieces.map((piece, i) => (i === idx ? { ...piece, [key]: val } : piece)),
+    }))
+  }
 
   const openCreateProduct = () => {
     setEditingProduct(null)
@@ -238,6 +344,11 @@ export default function Products() {
         material_id: String(pm.material_id),
         quantity: String(pm.quantity ?? 1),
       })),
+      workset_id: p.furniture_workset_id ? String(p.furniture_workset_id) : '',
+      suite_pieces: piecesFromWorkset(
+        worksetCatalog.find((w) => String(w.id) === String(p.furniture_workset_id)) || { pieces: p.suite_config },
+        p.suite_config || [],
+      ),
     })
     setProductModal(true)
   }
@@ -330,7 +441,14 @@ export default function Products() {
         sku: productForm.sku.trim(),
         brand: productForm.brand.trim(),
         product_model: productForm.product_model.trim(),
-        fabric: productForm.fabric.trim(),
+        fabric: (() => {
+          const fromSuite = (productForm.suite_pieces || []).find((piece) => piece.fabric_recipe_id)
+          if (fromSuite?.fabric_recipe_id) {
+            const recipe = (recipeCatalog.fabric || []).find((row) => String(row.id) === String(fromSuite.fabric_recipe_id))
+            if (recipe?.name) return recipe.name
+          }
+          return productForm.fabric.trim()
+        })(),
         description: productForm.description.trim(),
         unit: productForm.unit.trim() || 'عدد',
         category_id: productForm.category_id ? Number(productForm.category_id) : null,
@@ -365,6 +483,24 @@ export default function Products() {
             material_id: Number(m.material_id),
             quantity: Number(m.quantity) || 1,
           }))
+        payload.furniture_workset_id = productForm.workset_id ? Number(productForm.workset_id) : null
+        payload.suite_config = (productForm.suite_pieces || []).map((piece) => ({
+          piece_kind: piece.piece_kind,
+          arm_style: piece.arm_style,
+          quantity: Number(piece.quantity) || 1,
+          needs_paint: piece.needs_paint !== false,
+          pipeline_end: piece.pipeline_end || 'upholstery',
+          paint_recipe_id: piece.needs_paint && piece.paint_recipe_id ? Number(piece.paint_recipe_id) : null,
+          fabric_recipe_id: piece.fabric_recipe_id ? Number(piece.fabric_recipe_id) : null,
+          foam_recipe_id: piece.foam_recipe_id ? Number(piece.foam_recipe_id) : null,
+          webbing_recipe_id: piece.webbing_recipe_id ? Number(piece.webbing_recipe_id) : null,
+          cushion_recipe_id: piece.cushion_recipe_id ? Number(piece.cushion_recipe_id) : null,
+          unit_price: Number(piece.unit_price) || 0,
+        }))
+        payload.build_model = 'frame_line'
+        if (productForm.suite_pieces?.length) {
+          payload.default_price = suiteTotal(productForm.suite_pieces)
+        }
       }
       if (editingProduct) {
         await productsApi.update(editingProduct.id, payload)
@@ -635,6 +771,14 @@ export default function Products() {
                     <strong>تمام‌شده: {formatMoney(p.material_cost_total)}</strong>
                   )}
                   <span className={fromLegacy("muted")}>{p.variants?.length || 0} رنگ</span>
+                  {p.furniture_workset?.name && (
+                    <span className={fromLegacy("muted small")}>دست: {p.furniture_workset.name}</span>
+                  )}
+                  {(p.suite_config || []).length > 0 && (
+                    <span className={fromLegacy("muted small")}>
+                      {(p.suite_config || []).map((piece) => `${piece.quantity}× ${piece.piece_label}`).join('، ')}
+                    </span>
+                  )}
                   {p.variants?.some((v) => v.stock_summary) && (
                     <p className={fromLegacy("muted small")}>
                       {p.variants.map((v) => v.stock_summary).filter(Boolean).join(' | ')}
@@ -642,6 +786,25 @@ export default function Products() {
                   )}
                   {showCosts && p.materials?.length > 0 && (
                     <span className={fromLegacy("muted")}>{p.materials.length} متریال</span>
+                  )}
+                  {(p.suite_config || []).length > 0 ? (
+                    <span className={fromLegacy("muted small")}>
+                      {(p.suite_config || []).map((piece) => {
+                        const fabric = piece.fabric?.name
+                        const paint = piece.needs_paint === false ? 'بدون رنگ' : piece.paint?.name
+                        return [piece.piece_label, fabric && `پارچه ${fabric}`, paint && (piece.needs_paint === false ? paint : `رنگ ${paint}`)].filter(Boolean).join(' / ')
+                      }).join(' • ')}
+                    </span>
+                  ) : (p.paint_recipe || p.fabric_recipe || p.foam_recipe || p.cushion_recipe || p.webbing_recipe) && (
+                    <span className={fromLegacy("muted small")}>
+                      {[
+                        p.needs_paint === false ? 'بدون رنگ' : (p.paint_recipe?.name && `رنگ ${p.paint_recipe.name}`),
+                        p.fabric_recipe?.name && `پارچه ${p.fabric_recipe.name}`,
+                        p.foam_recipe?.name && `اسفنج ${p.foam_recipe.name}`,
+                        p.webbing_recipe?.name && `تسمه ${p.webbing_recipe.name}`,
+                        p.cushion_recipe?.name && `کوسن ${p.cushion_recipe.name}`,
+                      ].filter(Boolean).join(' • ')}
+                    </span>
                   )}
                 </div>
 
@@ -727,13 +890,10 @@ export default function Products() {
             <Field label="مدل">
               <input value={productForm.product_model} onChange={(e) => setProductForm({ ...productForm, product_model: e.target.value })} placeholder="مثلاً کلاسیک" />
             </Field>
-            <Field label="پارچه">
-              <input value={productForm.fabric} onChange={(e) => setProductForm({ ...productForm, fabric: e.target.value })} placeholder="مثلاً مخمل، چرم" />
-            </Field>
             <Field label="واحد">
               <input value={productForm.unit} onChange={(e) => setProductForm({ ...productForm, unit: e.target.value })} placeholder="عدد" />
             </Field>
-            {canManageSales && (
+            {canManageSales && !productForm.suite_pieces.length && (
               <Field label="قیمت فروش (ریال)">
                 <MoneyInput min="0" value={productForm.default_price} onChange={(e) => setProductForm({ ...productForm, default_price: e.target.value })} required />
               </Field>
@@ -743,55 +903,6 @@ export default function Products() {
           <Field label="توضیحات">
             <textarea rows={2} value={productForm.description} onChange={(e) => setProductForm({ ...productForm, description: e.target.value })} />
           </Field>
-
-          <div className={fromLegacy("product-variants-section")}>
-            <div className={fromLegacy("section-head")}>
-              <h4>رنگ‌بندی</h4>
-              <Button type="button" variant="ghost" onClick={addVariant}>+ رنگ</Button>
-            </div>
-            {productForm.variants.map((v, idx) => (
-              <div key={idx} className={fromLegacy("variant-row")}>
-                <div className={fromLegacy("variant-color-presets")}>
-                  {COLOR_PRESETS.map((preset) => (
-                    <button
-                      key={preset.hex}
-                      type="button"
-                      className={fromLegacy("color-preset-btn")}
-                      title={preset.name}
-                      style={{ background: preset.hex, borderColor: preset.hex === '#f8fafc' ? '#cbd5e1' : preset.hex }}
-                      onClick={() => applyColorPreset(idx, preset)}
-                    />
-                  ))}
-                </div>
-                <div className={fromLegacy("form-grid-2 variant-fields")}>
-                  <Field label="نام رنگ">
-                    <input value={v.color_name} onChange={(e) => updateVariant(idx, 'color_name', e.target.value)} placeholder="مثلاً مشکی" />
-                  </Field>
-                  <Field label="کد رنگ">
-                    <input className={fromLegacy("ltr")} type="color" value={v.color_hex} onChange={(e) => updateVariant(idx, 'color_hex', e.target.value)} />
-                  </Field>
-                </div>
-                <div className="stock-location-grid">
-                  {(v.stock_by_location?.length ? v.stock_by_location : locationStocksFrom(stockLocations)).map((row) => (
-                    <Field key={row.key} label={`موجودی ${row.label || row.key}`}>
-                      <input
-                        className={fromLegacy("ltr")}
-                        type="number"
-                        min="0"
-                        value={row.quantity}
-                        onChange={(e) => updateVariantStock(idx, row.key, e.target.value)}
-                        placeholder="—"
-                        disabled={manualStockLocked}
-                      />
-                    </Field>
-                  ))}
-                </div>
-                {productForm.variants.length > 1 && (
-                  <button type="button" className={fromLegacy("link danger variant-remove")} onClick={() => removeVariant(idx)}>حذف رنگ</button>
-                )}
-              </div>
-            ))}
-          </div>
 
           {(showCosts || canEditMaterials) && (
             <div className={fromLegacy("product-variants-section")}>
@@ -838,6 +949,160 @@ export default function Products() {
               ))}
             </div>
           )}
+
+          <div className={fromLegacy("product-variants-section")}>
+            <div className={fromLegacy("section-head")}>
+              <h4>دست و رنگ/پارچه قطعات</h4>
+              <Button type="button" variant="ghost" onClick={addVariant}>+ رنگ</Button>
+            </div>
+            {(isFactory || canEditMaterials) && (
+              <Field label="دست">
+                <Select
+                  value={productForm.workset_id}
+                  onChange={onWorksetChange}
+                  options={worksetOptions}
+                  disabled={!canEditMaterials}
+                />
+              </Field>
+            )}
+            {productForm.variants.map((v, idx) => (
+              <div key={idx} className={fromLegacy("variant-row")}>
+                <div className={fromLegacy("variant-color-presets")}>
+                  {COLOR_PRESETS.map((preset) => (
+                    <button
+                      key={preset.hex}
+                      type="button"
+                      className={fromLegacy("color-preset-btn")}
+                      title={preset.name}
+                      style={{ background: preset.hex, borderColor: preset.hex === '#f8fafc' ? '#cbd5e1' : preset.hex }}
+                      onClick={() => applyColorPreset(idx, preset)}
+                    />
+                  ))}
+                </div>
+                <Field label="رنگ">
+                  <div className="color-input-one">
+                    <input
+                      className={fromLegacy("ltr")}
+                      type="color"
+                      value={v.color_hex}
+                      onChange={(e) => updateVariant(idx, 'color_hex', e.target.value)}
+                      aria-label="انتخاب رنگ"
+                    />
+                    <input
+                      value={v.color_name}
+                      onChange={(e) => updateVariant(idx, 'color_name', e.target.value)}
+                      placeholder="مثلاً مشکی"
+                    />
+                  </div>
+                </Field>
+                <div className="stock-location-grid">
+                  {(v.stock_by_location?.length ? v.stock_by_location : locationStocksFrom(stockLocations)).map((row) => (
+                    <Field key={row.key} label={`موجودی ${row.label || row.key}`}>
+                      <input
+                        className={fromLegacy("ltr")}
+                        type="number"
+                        min="0"
+                        value={row.quantity}
+                        onChange={(e) => updateVariantStock(idx, row.key, e.target.value)}
+                        placeholder="—"
+                        disabled={manualStockLocked}
+                      />
+                    </Field>
+                  ))}
+                </div>
+                {productForm.variants.length > 1 && (
+                  <button type="button" className={fromLegacy("link danger variant-remove")} onClick={() => removeVariant(idx)}>حذف رنگ</button>
+                )}
+              </div>
+            ))}
+            {(isFactory || canEditMaterials) && !productForm.workset_id && (
+              <p className={fromLegacy('muted small')}>اول دست را از تولید کلاف انتخاب کنید؛ بعد برای هر قطعه رنگ و پارچه بگذارید.</p>
+            )}
+            {productForm.workset_id && productForm.suite_pieces.length === 0 && (
+              <p className={fromLegacy('muted small')}>این دست قطعه‌ای ندارد. اول در تولید کلاف تعداد قطعات را بگذارید.</p>
+            )}
+            {productForm.suite_pieces.map((piece, idx) => (
+              <div key={`${piece.piece_kind}-${piece.arm_style}-${idx}`} className={fromLegacy('frame-model-block')}>
+                <div className={fromLegacy('section-head')}>
+                  <strong>{piece.piece_label}</strong>
+                  <span className={fromLegacy('muted small')}>تعداد از دست: {piece.quantity}</span>
+                </div>
+                <div className={fromLegacy('form-grid-2')}>
+                  <label className={fromLegacy('checkbox-row')}>
+                    <input
+                      type="checkbox"
+                      checked={piece.needs_paint !== false}
+                      onChange={(e) => updateSuitePiece(idx, 'needs_paint', e.target.checked)}
+                      disabled={!canEditMaterials}
+                    />
+                    رنگ دارد
+                  </label>
+                  {piece.needs_paint !== false && (
+                    <Field label="رنگ">
+                      <Select
+                        value={piece.paint_recipe_id}
+                        onChange={(v) => updateSuitePiece(idx, 'paint_recipe_id', v)}
+                        options={recipeOptions('paint')}
+                        disabled={!canEditMaterials}
+                      />
+                    </Field>
+                  )}
+                  <Field label="پارچه">
+                    <Select
+                      value={piece.fabric_recipe_id}
+                      onChange={(v) => updateSuitePiece(idx, 'fabric_recipe_id', v)}
+                      options={recipeOptions('fabric')}
+                      disabled={!canEditMaterials}
+                    />
+                  </Field>
+                  <Field label="اسفنج">
+                    <Select
+                      value={piece.foam_recipe_id}
+                      onChange={(v) => updateSuitePiece(idx, 'foam_recipe_id', v)}
+                      options={recipeOptions('foam')}
+                      disabled={!canEditMaterials}
+                    />
+                  </Field>
+                  <Field label="تسمه">
+                    <Select
+                      value={piece.webbing_recipe_id}
+                      onChange={(v) => updateSuitePiece(idx, 'webbing_recipe_id', v)}
+                      options={recipeOptions('webbing')}
+                      disabled={!canEditMaterials}
+                    />
+                  </Field>
+                  <Field label="کوسن">
+                    <Select
+                      value={piece.cushion_recipe_id}
+                      onChange={(v) => updateSuitePiece(idx, 'cushion_recipe_id', v)}
+                      options={recipeOptions('cushion')}
+                      disabled={!canEditMaterials}
+                    />
+                  </Field>
+                  {(canManageSales || canEditMaterials) && (
+                    <Field label="قیمت این قطعه (ریال)">
+                      <MoneyInput
+                        min="0"
+                        value={piece.unit_price}
+                        onChange={(e) => updateSuitePiece(idx, 'unit_price', e.target.value)}
+                        disabled={!canEditMaterials && !canManageSales}
+                      />
+                    </Field>
+                  )}
+                </div>
+                {['paint', 'fabric', 'foam', 'webbing', 'cushion'].map((kind) => {
+                  const preview = selectedRecipePreview(kind, piece[`${kind}_recipe_id`])
+                  const labels = { paint: 'رنگ', fabric: 'پارچه', foam: 'اسفنج', webbing: 'تسمه', cushion: 'کوسن' }
+                  return preview ? (
+                    <p key={kind} className={fromLegacy('muted small')}>مصرف {labels[kind]}: {preview}</p>
+                  ) : null
+                })}
+              </div>
+            ))}
+            {productForm.suite_pieces.length > 0 && (canManageSales || canEditMaterials) && (
+              <p className={fromLegacy('muted')}>جمع قیمت دست: {formatMoney(suiteTotal(productForm.suite_pieces))}</p>
+            )}
+          </div>
 
           <label className={fromLegacy("checkbox-row")}>
             <input type="checkbox" checked={productForm.is_active} onChange={(e) => setProductForm({ ...productForm, is_active: e.target.checked })} />

@@ -1,593 +1,484 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { framesApi, materialsApi, productsApi } from '../api/client'
+import { furnitureWorksetsApi } from '../api/client'
+import Icon from '../components/icons/Icon'
 import Select from '../components/Select'
-import { Badge, Button, Card, EmptyState, Field, FilterBar, LoadMoreButton, Modal } from '../components/ui'
-import { PAGE_SIZE, PICKER_LIMIT } from '../config/pagination'
+import { Badge, Button, Card, EmptyState, Field, FilterBar, LoadMoreButton } from '../components/ui'
+import { PAGE_SIZE } from '../config/pagination'
+import { PAGE_GUIDE_DEFAULTS } from '../config/pageGuideDefaults'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmContext'
+import { useRegisterPageGuide } from '../context/PageGuideContext'
 import { hasPermission } from '../utils/permissions'
+import { toPersianDigits } from '../utils/jalali'
 import { fromLegacy } from '../styles/tw.js'
 
-const DEFAULT_COMPONENTS = [
-  { component_type: 'three_seater', default_quantity: 1, material_rules: [] },
-  { component_type: 'armchair', default_quantity: 2, material_rules: [] },
-  { component_type: 'side_table', default_quantity: 2, material_rules: [] },
-  { component_type: 'coffee_table', default_quantity: 1, material_rules: [] },
-]
+const EMPTY_WORKSET = { name: '', design_style: '', seat_count: '', is_active: true, qtys: {} }
 
-const EMPTY_FRAME = {
-  name: '',
-  design_style: 'modern',
-  wood_type: 'ash_georgian_g1',
-  product_id: '',
-  is_active: true,
-  models: [],
-  service_template: {
-    name: 'سرویس ۸ نفره',
-    default_seat_count: 8,
-    components: DEFAULT_COMPONENTS.map((c) => ({ ...c, material_rules: [] })),
-  },
+const SEAT_COUNT = {
+  armchair: 1,
+  sofa_2: 2,
+  sofa_3: 3,
+  sofa_4: 4,
+  sofa_5: 5,
+  chaise: 2,
+  pouf: 1,
+  bench: 3,
+  loveseat: 2,
+  side_table: 0,
+  coffee_table: 0,
 }
 
-const EMPTY_WOOD = { label: '', quantity: '1', unit: 'متر', material_id: '' }
-const EMPTY_RULE = { rule_key: 'back_fabric', material_id: '', quantity: '1', unit: 'متر', is_default: true }
+function slotKey(kind, arm) {
+  return `${kind}:${arm}`
+}
 
-const TABS = [
-  { key: 'basic', label: 'اطلاعات پایه' },
-  { key: 'models', label: 'مدل‌ها و چوب' },
-  { key: 'service', label: 'سرویس و متریال' },
-]
+function groupSlots(slots) {
+  const groups = []
+  const map = new Map()
+  for (const slot of slots) {
+    if (!map.has(slot.piece_kind)) {
+      const group = { piece_kind: slot.piece_kind, group: slot.group, slots: [] }
+      map.set(slot.piece_kind, group)
+      groups.push(group)
+    }
+    map.get(slot.piece_kind).slots.push(slot)
+  }
+  return groups
+}
 
-function componentLabel(type, options) {
-  return options.component_types?.find((o) => o.value === type)?.label || type
+function qtysFromPieces(pieces = []) {
+  const qtys = {}
+  pieces.forEach((piece) => {
+    qtys[slotKey(piece.piece_kind, piece.arm_style)] = String(piece.quantity || 0)
+  })
+  return qtys
+}
+
+function piecesFromQtys(qtys, slots) {
+  return slots
+    .map((slot) => ({
+      piece_kind: slot.piece_kind,
+      arm_style: slot.arm_style,
+      quantity: Number(qtys[slotKey(slot.piece_kind, slot.arm_style)] || 0),
+    }))
+    .filter((piece) => piece.quantity > 0)
+}
+
+function armOptionsFor(group) {
+  return (group?.slots || []).map((slot) => ({
+    value: slot.arm_style,
+    label: slot.show_arm ? slot.arm_label : group.group,
+  }))
+}
+
+function PieceGlyph({ kind, arm }) {
+  const seats = SEAT_COUNT[kind] ?? 1
+  const isTable = kind === 'side_table' || kind === 'coffee_table'
+  const isPouf = kind === 'pouf'
+  const isChaise = kind === 'chaise'
+  const isBench = kind === 'bench'
+  const left = arm === 'two' || arm === 'one_left' || arm === 'one'
+  const right = arm === 'two' || arm === 'one_right'
+  const wide = kind === 'coffee_table'
+
+  return (
+    <svg className="piece-glyph-svg" viewBox="0 0 80 42" aria-hidden>
+      {isTable ? (
+        <>
+          <rect x={wide ? 10 : 20} y="12" width={wide ? 60 : 40} height="8" rx="2" />
+          <rect x={wide ? 16 : 26} y="20" width="4" height="12" rx="1" />
+          <rect x={wide ? 60 : 50} y="20" width="4" height="12" rx="1" />
+        </>
+      ) : isPouf ? (
+        <rect x="26" y="10" width="28" height="22" rx="10" />
+      ) : (
+        <>
+          {left && <rect x="4" y="8" width="7" height="24" rx="2.5" />}
+          {Array.from({ length: Math.max(seats, 1) }).map((_, index) => {
+            const gap = 2
+            const inner = 58
+            const w = (inner - gap * (seats - 1)) / seats
+            const x = 11 + index * (w + gap)
+            const h = isBench ? 12 : isChaise && index === seats - 1 ? 20 : 16
+            const y = isBench ? 16 : isChaise && index === seats - 1 ? 10 : 12
+            return <rect key={index} x={x} y={y} width={w} height={h} rx="3" />
+          })}
+          {right && <rect x="69" y="8" width="7" height="24" rx="2.5" />}
+        </>
+      )}
+    </svg>
+  )
+}
+
+function QtyStepper({ value, onChange, min = 0 }) {
+  const qty = Number(value || 0)
+  return (
+    <div className="piece-qty">
+      <button type="button" onClick={() => onChange(qty - 1)} disabled={qty <= min} aria-label="کم">
+        <Icon name="minus" size={14} />
+      </button>
+      <input
+        className={fromLegacy('ltr')}
+        type="number"
+        min={min}
+        max="99"
+        value={value || ''}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="0"
+      />
+      <button type="button" onClick={() => onChange(qty + 1)} aria-label="زیاد">
+        <Icon name="plus" size={14} />
+      </button>
+    </div>
+  )
 }
 
 export default function Frames() {
   const { user } = useAuth()
   const confirm = useConfirm()
   const canManage = hasPermission(user, 'manage_frames')
+  useRegisterPageGuide('factory-frames', PAGE_GUIDE_DEFAULTS['factory-frames'])
 
-  const [frames, setFrames] = useState([])
-  const [options, setOptions] = useState({ design_styles: [], wood_types: [], component_types: [], rule_keys: [] })
-  const [materials, setMaterials] = useState([])
-  const [products, setProducts] = useState([])
+  const [worksets, setWorksets] = useState([])
+  const [options, setOptions] = useState({ piece_slots: [], design_styles: [] })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
+  const [catalogSearch, setCatalogSearch] = useState('')
+  const [activeArm, setActiveArm] = useState({})
+  const [formOpen, setFormOpen] = useState(false)
   const [offset, setOffset] = useState(0)
-  const [hasMore, setHasMore] = useState(false)
-  const [modalOpen, setModalOpen] = useState(false)
-  const [editing, setEditing] = useState(null)
-  const [form, setForm] = useState(EMPTY_FRAME)
-  const [tab, setTab] = useState('basic')
+  const [total, setTotal] = useState(0)
+  const [editingWorkset, setEditingWorkset] = useState(null)
+  const [worksetForm, setWorksetForm] = useState(EMPTY_WORKSET)
   const [saving, setSaving] = useState(false)
 
-  const materialOptions = useMemo(
-    () => materials.map((m) => ({ value: String(m.id), label: `${m.name}${m.color_name ? ` (${m.color_name})` : ''}` })),
-    [materials],
-  )
-  const productOptions = useMemo(
-    () => [{ value: '', label: 'بدون اتصال' }, ...products.map((p) => ({ value: String(p.id), label: p.name }))],
-    [products],
-  )
+  const slots = options.piece_slots || []
+  const groupedSlots = useMemo(() => groupSlots(slots), [slots])
+  const selectedPieces = useMemo(() => piecesFromQtys(worksetForm.qtys, slots), [worksetForm.qtys, slots])
+  const selectedCount = selectedPieces.reduce((sum, piece) => sum + piece.quantity, 0)
 
-  const loadFrames = useCallback(async (reset = false) => {
+  useEffect(() => {
+    setActiveArm((prev) => {
+      const next = { ...prev }
+      groupedSlots.forEach((group) => {
+        if (!next[group.piece_kind]) next[group.piece_kind] = group.slots[0]?.arm_style || ''
+      })
+      return next
+    })
+  }, [groupedSlots])
+
+  const visibleGroups = useMemo(() => {
+    const q = catalogSearch.trim()
+    return groupedSlots.filter((group) => {
+      if (!q) return true
+      return `${group.group} ${group.slots.map((slot) => slot.arm_label || '').join(' ')}`.includes(q)
+    })
+  }, [groupedSlots, catalogSearch])
+
+  const loadWorksets = useCallback(async (reset = false) => {
     setLoading(true)
     setError('')
     try {
-      const nextOffset = reset ? 0 : offset
-      const data = await framesApi.list({ search: search.trim(), offset: nextOffset, limit: PAGE_SIZE })
+      const nextOffset = reset ? 0 : offset + PAGE_SIZE
+      const data = await furnitureWorksetsApi.list({
+        search: search.trim(),
+        offset: nextOffset,
+        limit: PAGE_SIZE,
+        include_inactive: canManage,
+      })
       const results = data.results || []
-      setFrames((prev) => (reset ? results : [...prev, ...results]))
-      setHasMore(Boolean(data.has_more))
-      if (reset) setOffset(results.length)
-      else setOffset(nextOffset + results.length)
+      setWorksets(reset ? results : (prev) => [...prev, ...results])
+      setOffset(nextOffset)
+      setTotal(data.total || 0)
     } catch (err) {
-      setError(err.message || 'خطا در بارگذاری کلاف‌ها')
+      setError(err.message || 'خطا در بارگذاری دست‌ها')
     } finally {
       setLoading(false)
     }
-  }, [offset, search])
+  }, [search, offset, canManage])
 
   useEffect(() => {
-    loadFrames(true)
-  }, [search])
-
-  useEffect(() => {
-    Promise.all([
-      framesApi.options().catch(() => ({})),
-      materialsApi.list({ limit: PICKER_LIMIT, approved_only: true }).catch(() => ({ results: [] })),
-      productsApi.list({ limit: PICKER_LIMIT }).catch(() => ({ results: [] })),
-    ]).then(([opts, mats, prods]) => {
-      setOptions(opts || {})
-      setMaterials(mats.results || [])
-      setProducts(prods.results || [])
-    })
+    furnitureWorksetsApi.options().then(setOptions).catch(() => {})
   }, [])
 
+  useEffect(() => { loadWorksets(true) }, [search])
+
+  const resetComposer = () => {
+    setEditingWorkset(null)
+    setWorksetForm({ ...EMPTY_WORKSET, qtys: {} })
+    setCatalogSearch('')
+    setFormOpen(false)
+  }
+
   const openCreate = () => {
-    setEditing(null)
-    setForm({
-      ...EMPTY_FRAME,
-      service_template: {
-        ...EMPTY_FRAME.service_template,
-        components: DEFAULT_COMPONENTS.map((c) => ({ ...c, material_rules: [] })),
-      },
+    setEditingWorkset(null)
+    setWorksetForm({ ...EMPTY_WORKSET, qtys: {} })
+    setCatalogSearch('')
+    setError('')
+    setFormOpen(true)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const openEdit = (workset) => {
+    setEditingWorkset(workset)
+    const qtys = qtysFromPieces(workset.pieces)
+    setWorksetForm({
+      name: workset.name || '',
+      design_style: workset.design_style || '',
+      seat_count: workset.seat_count ? String(workset.seat_count) : '',
+      is_active: workset.is_active !== false,
+      qtys,
     })
-    setTab('basic')
-    setModalOpen(true)
+    const arms = {}
+    ;(workset.pieces || []).forEach((piece) => {
+      if (!arms[piece.piece_kind]) arms[piece.piece_kind] = piece.arm_style
+    })
+    setActiveArm((prev) => ({ ...prev, ...arms }))
+    setCatalogSearch('')
+    setError('')
+    setFormOpen(true)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  const openEdit = async (frame) => {
-    try {
-      const full = await framesApi.get(frame.id)
-      setEditing(full)
-      setForm({
-        name: full.name || '',
-        design_style: full.design_style || 'modern',
-        wood_type: full.wood_type || 'ash_georgian_g1',
-        product_id: full.product_id ? String(full.product_id) : '',
-        is_active: full.is_active !== false,
-        models: (full.models || []).map((m) => ({
-          id: m.id,
-          name: m.name,
-          sort_order: m.sort_order,
-          is_active: m.is_active !== false,
-          wood_requirements: (m.wood_requirements || []).map((w) => ({
-            id: w.id,
-            label: w.label || '',
-            quantity: String(w.quantity ?? 1),
-            unit: w.unit || 'متر',
-            material_id: w.material_id ? String(w.material_id) : '',
-          })),
-        })),
-        service_template: {
-          name: full.service_template?.name || 'سرویس ۸ نفره',
-          default_seat_count: full.service_template?.default_seat_count || 8,
-          components: (full.service_template?.components?.length
-            ? full.service_template.components
-            : DEFAULT_COMPONENTS
-          ).map((c) => ({
-            id: c.id,
-            component_type: c.component_type,
-            default_quantity: c.default_quantity ?? 1,
-            material_rules: (c.material_rules || []).map((r) => ({
-              id: r.id,
-              rule_key: r.rule_key,
-              material_id: r.material_id ? String(r.material_id) : '',
-              quantity: String(r.quantity ?? 1),
-              unit: r.unit || 'متر',
-              is_default: r.is_default !== false,
-            })),
-          })),
-        },
-      })
-      setTab('basic')
-      setModalOpen(true)
-    } catch (err) {
-      setError(err.message || 'خطا در بارگذاری کلاف')
-    }
+  const setQty = (kind, arm, value) => {
+    const next = Math.max(0, Math.min(99, Number(value) || 0))
+    const key = slotKey(kind, arm)
+    setWorksetForm((form) => ({
+      ...form,
+      qtys: { ...form.qtys, [key]: next ? String(next) : '' },
+    }))
   }
 
-  const saveFrame = async (e) => {
+  const saveWorkset = async (e) => {
     e.preventDefault()
-    if (!canManage) return
+    if (!selectedPieces.length) {
+      setError('از کاتالوگ حداقل یک قطعه انتخاب کنید.')
+      return
+    }
     setSaving(true)
     setError('')
     try {
       const payload = {
-        name: form.name.trim(),
-        design_style: form.design_style,
-        wood_type: form.wood_type,
-        product_id: form.product_id ? Number(form.product_id) : null,
-        is_active: form.is_active,
-        models: form.models.map((m) => ({
-          id: m.id,
-          name: m.name.trim(),
-          is_active: m.is_active !== false,
-          wood_requirements: (m.wood_requirements || [])
-            .filter((w) => w.label?.trim() || w.material_id)
-            .map((w) => ({
-              id: w.id,
-              label: w.label?.trim() || '',
-              quantity: Number(w.quantity) || 1,
-              unit: w.unit || 'متر',
-              material_id: w.material_id ? Number(w.material_id) : null,
-            })),
-        })),
-        service_template: {
-          name: form.service_template.name,
-          default_seat_count: Number(form.service_template.default_seat_count) || 8,
-          components: form.service_template.components.map((c) => ({
-            id: c.id,
-            component_type: c.component_type,
-            default_quantity: Number(c.default_quantity) || 1,
-            material_rules: (c.material_rules || [])
-              .filter((r) => r.material_id)
-              .map((r) => ({
-                id: r.id,
-                rule_key: r.rule_key,
-                material_id: Number(r.material_id),
-                quantity: Number(r.quantity) || 1,
-                unit: r.unit || 'متر',
-                is_default: r.is_default !== false,
-              })),
-          })),
-        },
+        name: worksetForm.name.trim(),
+        design_style: worksetForm.design_style,
+        seat_count: worksetForm.seat_count ? Number(worksetForm.seat_count) : null,
+        is_active: worksetForm.is_active,
+        pieces: selectedPieces,
       }
-      if (editing?.id) await framesApi.update(editing.id, payload)
-      else await framesApi.create(payload)
-      setModalOpen(false)
-      loadFrames(true)
+      if (editingWorkset?.id) await furnitureWorksetsApi.update(editingWorkset.id, payload)
+      else await furnitureWorksetsApi.create(payload)
+      resetComposer()
+      await loadWorksets(true)
     } catch (err) {
-      setError(err.message || 'خطا در ذخیره کلاف')
+      setError(err.message)
     } finally {
       setSaving(false)
     }
   }
 
-  const removeFrame = async (frame) => {
+  const removeWorkset = async (workset) => {
     if (!canManage) return
-    const ok = await confirm(`کلاف «${frame.name}» حذف شود؟`)
+    const ok = await confirm(`دست «${workset.name}» حذف شود؟`)
     if (!ok) return
     try {
-      await framesApi.remove(frame.id)
-      loadFrames(true)
+      await furnitureWorksetsApi.remove(workset.id)
+      if (editingWorkset?.id === workset.id) resetComposer()
+      loadWorksets(true)
     } catch (err) {
-      setError(err.message || 'خطا در حذف')
+      setError(err.message)
     }
   }
 
-  const addModel = () => {
-    setForm((f) => ({
-      ...f,
-      models: [...f.models, { name: '', is_active: true, wood_requirements: [{ ...EMPTY_WOOD }] }],
-    }))
-  }
-
-  const updateModel = (idx, key, val) => {
-    setForm((f) => ({
-      ...f,
-      models: f.models.map((m, i) => (i === idx ? { ...m, [key]: val } : m)),
-    }))
-  }
-
-  const removeModel = (idx) => {
-    setForm((f) => ({ ...f, models: f.models.filter((_, i) => i !== idx) }))
-  }
-
-  const addWoodRow = (modelIdx) => {
-    setForm((f) => ({
-      ...f,
-      models: f.models.map((m, i) =>
-        i === modelIdx ? { ...m, wood_requirements: [...(m.wood_requirements || []), { ...EMPTY_WOOD }] } : m,
-      ),
-    }))
-  }
-
-  const updateWoodRow = (modelIdx, rowIdx, key, val) => {
-    setForm((f) => ({
-      ...f,
-      models: f.models.map((m, i) =>
-        i === modelIdx
-          ? {
-              ...m,
-              wood_requirements: m.wood_requirements.map((w, j) => (j === rowIdx ? { ...w, [key]: val } : w)),
-            }
-          : m,
-      ),
-    }))
-  }
-
-  const removeWoodRow = (modelIdx, rowIdx) => {
-    setForm((f) => ({
-      ...f,
-      models: f.models.map((m, i) =>
-        i === modelIdx
-          ? { ...m, wood_requirements: m.wood_requirements.filter((_, j) => j !== rowIdx) }
-          : m,
-      ),
-    }))
-  }
-
-  const updateComponent = (idx, key, val) => {
-    setForm((f) => ({
-      ...f,
-      service_template: {
-        ...f.service_template,
-        components: f.service_template.components.map((c, i) => (i === idx ? { ...c, [key]: val } : c)),
-      },
-    }))
-  }
-
-  const addRule = (compIdx) => {
-    const comp = form.service_template.components[compIdx]
-    const rule = hasBackOption(comp.component_type)
-      ? { ...EMPTY_RULE }
-      : { ...EMPTY_RULE, rule_key: 'extra' }
-    setForm((f) => ({
-      ...f,
-      service_template: {
-        ...f.service_template,
-        components: f.service_template.components.map((c, i) =>
-          i === compIdx ? { ...c, material_rules: [...(c.material_rules || []), rule] } : c,
-        ),
-      },
-    }))
-  }
-
-  const updateRule = (compIdx, ruleIdx, key, val) => {
-    setForm((f) => ({
-      ...f,
-      service_template: {
-        ...f.service_template,
-        components: f.service_template.components.map((c, i) =>
-          i === compIdx
-            ? {
-                ...c,
-                material_rules: c.material_rules.map((r, j) => (j === ruleIdx ? { ...r, [key]: val } : r)),
-              }
-            : c,
-        ),
-      },
-    }))
-  }
-
-  const removeRule = (compIdx, ruleIdx) => {
-    setForm((f) => ({
-      ...f,
-      service_template: {
-        ...f.service_template,
-        components: f.service_template.components.map((c, i) =>
-          i === compIdx
-            ? { ...c, material_rules: c.material_rules.filter((_, j) => j !== ruleIdx) }
-            : c,
-        ),
-      },
-    }))
-  }
-
-  const hasBackOption = (type) => type === 'three_seater' || type === 'armchair'
+  const formTitle = editingWorkset ? `ویرایش دست «${editingWorkset.name}»` : 'ثبت دست'
 
   return (
     <div className={fromLegacy('page frames-page')}>
       <div className={fromLegacy('page-head')}>
         <div>
-          <h1>کلاف‌ها</h1>
-          <p className={fromLegacy('muted')}>تعریف کلاف، مدل، میزان چوب و سرویس مبلمان</p>
+          <h1 className={fromLegacy('page-title')}>تولید کلاف</h1>
+          <p className={fromLegacy('muted')}>دست را ثبت کنید و قطعات را از کاتالوگ داخل فرم انتخاب کنید.</p>
         </div>
-        {canManage && <Button onClick={openCreate}>+ کلاف جدید</Button>}
+        {canManage && (
+          <Button type="button" onClick={openCreate}>ثبت دست</Button>
+        )}
       </div>
 
-      {error && <div className={fromLegacy('alert error')}>{error}</div>}
+      {error && <div className={fromLegacy('alert-error')}>{error}</div>}
 
-      <FilterBar search={search} onSearchChange={setSearch} searchPlaceholder="جستجوی نام کلاف یا مدل…" />
-
-      <Card>
-        {loading && frames.length === 0 ? (
-          <p className={fromLegacy('muted')}>در حال بارگذاری…</p>
-        ) : frames.length === 0 ? (
-          <EmptyState title="کلافی ثبت نشده" description="اولین کلاف را اضافه کنید." />
-        ) : (
-          <div className={fromLegacy('frame-list')}>
-            {frames.map((frame) => (
-              <div key={frame.id} className={fromLegacy('frame-row')}>
-                <div className={fromLegacy('frame-row-main')}>
-                  <strong>{frame.name}</strong>
-                  <div className={fromLegacy('frame-row-meta muted small')}>
-                    <span>{frame.design_style_display}</span>
-                    <span>•</span>
-                    <span>{frame.wood_type_display}</span>
-                    <span>•</span>
-                    <span>{(frame.models || []).length} مدل</span>
-                  </div>
-                </div>
-                <div className={fromLegacy('row-actions')}>
-                  {!frame.is_active && <Badge color="var(--muted)">غیرفعال</Badge>}
-                  <button type="button" className={fromLegacy('link')} onClick={() => openEdit(frame)}>ویرایش</button>
-                  {canManage && (
-                    <button type="button" className={fromLegacy('link danger')} onClick={() => removeFrame(frame)}>حذف</button>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-        <LoadMoreButton visible={hasMore} loading={loading} onClick={() => loadFrames(false)} />
-      </Card>
-
-      <Modal
-        title={editing ? 'ویرایش کلاف' : 'کلاف جدید'}
-        open={modalOpen}
-        onClose={() => !saving && setModalOpen(false)}
-        wide
-      >
-        <div className={fromLegacy('frame-tabs')}>
-          {TABS.map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              className={fromLegacy(`frame-tab${tab === t.key ? ' active' : ''}`)}
-              onClick={() => setTab(t.key)}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-
-        <form onSubmit={saveFrame} className={fromLegacy('form frame-form')}>
-          {tab === 'basic' && (
+      {canManage && formOpen && (
+        <Card title={formTitle} className="workset-register-card">
+          <form onSubmit={saveWorkset} className={fromLegacy('form')}>
             <div className={fromLegacy('form-grid-2')}>
-              <Field label="نام کلاف (برای چه مدلی)">
-                <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+              <Field label="نام دست">
+                <input
+                  value={worksetForm.name}
+                  onChange={(e) => setWorksetForm({ ...worksetForm, name: e.target.value })}
+                  required
+                  placeholder="مثلاً لونا"
+                />
+              </Field>
+              <Field label="تعداد نفر (دستی)">
+                <input
+                  className={fromLegacy('ltr')}
+                  type="number"
+                  min="1"
+                  value={worksetForm.seat_count}
+                  onChange={(e) => setWorksetForm({ ...worksetForm, seat_count: e.target.value })}
+                  placeholder="مثلاً ۸"
+                />
               </Field>
               <Field label="سبک طراحی">
                 <Select
-                  value={form.design_style}
-                  onChange={(v) => setForm({ ...form, design_style: v })}
-                  options={(options.design_styles || []).map((o) => ({ value: o.value, label: o.label }))}
-                />
-              </Field>
-              <Field label="جنس چوب اصلی">
-                <Select
-                  value={form.wood_type}
-                  onChange={(v) => setForm({ ...form, wood_type: v })}
-                  options={(options.wood_types || []).map((o) => ({ value: o.value, label: o.label }))}
-                />
-              </Field>
-              <Field label="اتصال به محصول (اختیاری)">
-                <Select
-                  value={form.product_id}
-                  onChange={(v) => setForm({ ...form, product_id: v })}
-                  options={productOptions}
-                  placeholder="انتخاب محصول"
+                  value={worksetForm.design_style}
+                  onChange={(v) => setWorksetForm({ ...worksetForm, design_style: v })}
+                  options={[{ value: '', label: '—' }, ...(options.design_styles || [])]}
                 />
               </Field>
               <label className={fromLegacy('checkbox-row')}>
-                <input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} />
+                <input type="checkbox" checked={worksetForm.is_active} onChange={(e) => setWorksetForm({ ...worksetForm, is_active: e.target.checked })} />
                 فعال
               </label>
             </div>
-          )}
 
-          {tab === 'models' && (
-            <div className={fromLegacy('frame-models-section')}>
+            <div className="piece-form-section">
               <div className={fromLegacy('section-head')}>
-                <h4>مدل‌های کلاف</h4>
-                {canManage && <Button type="button" variant="ghost" onClick={addModel}>+ مدل</Button>}
-              </div>
-              {form.models.length === 0 && <p className={fromLegacy('muted small')}>مدلی تعریف نشده.</p>}
-              {form.models.map((model, modelIdx) => (
-                <div key={modelIdx} className={fromLegacy('frame-model-block')}>
-                  <div className={fromLegacy('form-grid-2')}>
-                    <Field label="نام مدل">
-                      <input value={model.name} onChange={(e) => updateModel(modelIdx, 'name', e.target.value)} required />
-                    </Field>
-                    <div className={fromLegacy('row-actions')}>
-                      <Button type="button" variant="ghost" onClick={() => addWoodRow(modelIdx)}>+ ردیف چوب</Button>
-                      <button type="button" className={fromLegacy('link danger')} onClick={() => removeModel(modelIdx)}>حذف مدل</button>
-                    </div>
-                  </div>
-                  {(model.wood_requirements || []).map((wood, rowIdx) => (
-                    <div key={rowIdx} className={fromLegacy('variant-row product-material-row')}>
-                      <div className={fromLegacy('form-grid-2 variant-fields')}>
-                        <Field label="برچسب">
-                          <input value={wood.label} onChange={(e) => updateWoodRow(modelIdx, rowIdx, 'label', e.target.value)} placeholder="مثلاً قاب اصلی" />
-                        </Field>
-                        <Field label="مقدار">
-                          <input className={fromLegacy('ltr')} type="number" min="0.001" step="0.001" value={wood.quantity} onChange={(e) => updateWoodRow(modelIdx, rowIdx, 'quantity', e.target.value)} />
-                        </Field>
-                        <Field label="واحد">
-                          <Select
-                            value={wood.unit}
-                            onChange={(v) => updateWoodRow(modelIdx, rowIdx, 'unit', v)}
-                            options={[{ value: 'متر', label: 'متر' }, { value: 'عدد', label: 'عدد' }]}
-                          />
-                        </Field>
-                        <Field label="متریال (اختیاری)">
-                          <Select
-                            value={wood.material_id}
-                            onChange={(v) => updateWoodRow(modelIdx, rowIdx, 'material_id', v)}
-                            options={[{ value: '', label: '—' }, ...materialOptions]}
-                            placeholder="انتخاب متریال"
-                          />
-                        </Field>
-                      </div>
-                      <button type="button" className={fromLegacy('link danger variant-remove')} onClick={() => removeWoodRow(modelIdx, rowIdx)}>حذف</button>
-                    </div>
-                  ))}
+                <div>
+                  <h4>کاتالوگ قطعات</h4>
+                  <p className={fromLegacy('muted small')}>نوع را انتخاب کنید، حالت دسته را از دراپ‌داون بگذارید و تعداد بدهید.</p>
                 </div>
-              ))}
-            </div>
-          )}
-
-          {tab === 'service' && (
-            <div className={fromLegacy('frame-service-section')}>
-              <div className={fromLegacy('form-grid-2')}>
-                <Field label="نام سرویس">
-                  <input
-                    value={form.service_template.name}
-                    onChange={(e) => setForm({ ...form, service_template: { ...form.service_template, name: e.target.value } })}
-                  />
-                </Field>
-                <Field label="تعداد نفر پیش‌فرض">
-                  <input
-                    className={fromLegacy('ltr')}
-                    type="number"
-                    min="1"
-                    value={form.service_template.default_seat_count}
-                    onChange={(e) => setForm({ ...form, service_template: { ...form.service_template, default_seat_count: e.target.value } })}
-                  />
-                </Field>
+                {selectedCount > 0 && <Badge>{toPersianDigits(selectedCount)} قطعه</Badge>}
               </div>
-              {form.service_template.components.map((comp, compIdx) => (
-                <div key={comp.component_type || compIdx} className={fromLegacy('frame-component-block')}>
-                  <div className={fromLegacy('section-head')}>
-                    <h4>{componentLabel(comp.component_type, options)}</h4>
-                    <Button type="button" variant="ghost" onClick={() => addRule(compIdx)}>
-                      + {hasBackOption(comp.component_type) ? 'قانون متریال' : 'متریال اضافه'}
-                    </Button>
-                  </div>
-                  <Field label="تعداد پیش‌فرض">
-                    <input
-                      className={fromLegacy('ltr')}
-                      type="number"
-                      min="0"
-                      value={comp.default_quantity}
-                      onChange={(e) => updateComponent(compIdx, 'default_quantity', e.target.value)}
-                    />
-                  </Field>
-                  {(comp.material_rules || []).map((rule, ruleIdx) => (
-                    <div key={ruleIdx} className={fromLegacy('variant-row product-material-row')}>
-                      <div className={fromLegacy('form-grid-2 variant-fields')}>
-                        {hasBackOption(comp.component_type) && (
-                          <Field label="نوع">
+
+              {selectedPieces.length > 0 && (
+                <div className="piece-selected-tray">
+                  {selectedPieces.map((piece) => {
+                    const slot = slots.find((row) => row.piece_kind === piece.piece_kind && row.arm_style === piece.arm_style)
+                    return (
+                      <span key={slotKey(piece.piece_kind, piece.arm_style)} className="piece-chip">
+                        {toPersianDigits(piece.quantity)}× {slot?.label || piece.piece_kind}
+                        <button type="button" onClick={() => setQty(piece.piece_kind, piece.arm_style, 0)} aria-label="حذف">
+                          <Icon name="x" size={12} />
+                        </button>
+                      </span>
+                    )
+                  })}
+                </div>
+              )}
+
+              <Field label="جستجوی قطعه">
+                <input
+                  className={fromLegacy('search-input')}
+                  value={catalogSearch}
+                  onChange={(e) => setCatalogSearch(e.target.value)}
+                  placeholder="مبل تک، کاناپه، شزلون…"
+                />
+              </Field>
+
+              {visibleGroups.length === 0 ? (
+                <EmptyState text="قطعه‌ای یافت نشد." />
+              ) : (
+                <div className="piece-catalog-grid in-form">
+                  {visibleGroups.map((group) => {
+                    const arm = activeArm[group.piece_kind] || group.slots[0]?.arm_style
+                    const arms = armOptionsFor(group)
+                    const qty = Number(worksetForm.qtys[slotKey(group.piece_kind, arm)] || 0)
+                    const kindTotal = selectedPieces
+                      .filter((piece) => piece.piece_kind === group.piece_kind)
+                      .reduce((sum, piece) => sum + piece.quantity, 0)
+                    return (
+                      <article key={group.piece_kind} className={`piece-card${kindTotal > 0 ? ' selected' : ''}`}>
+                        <div className="piece-card-main static">
+                          <span className="piece-glyph">
+                            <PieceGlyph kind={group.piece_kind} arm={arm} />
+                          </span>
+                          <strong>{group.group}</strong>
+                        </div>
+                        {arms.length > 1 && (
+                          <Field label="حالت دسته">
                             <Select
-                              value={rule.rule_key}
-                              onChange={(v) => updateRule(compIdx, ruleIdx, 'rule_key', v)}
-                              options={(options.rule_keys || [])
-                                .filter((o) => o.value === 'back_fabric' || o.value === 'back_wood')
-                                .map((o) => ({ value: o.value, label: o.label }))}
+                              value={arm}
+                              onChange={(value) => setActiveArm((prev) => ({ ...prev, [group.piece_kind]: value }))}
+                              options={arms}
+                              label="حالت دسته"
                             />
                           </Field>
                         )}
-                        {!hasBackOption(comp.component_type) && (
-                          <Field label="نوع">
-                            <input disabled value="متریال اضافه" />
-                          </Field>
-                        )}
-                        <Field label="متریال">
-                          <Select
-                            value={rule.material_id}
-                            onChange={(v) => updateRule(compIdx, ruleIdx, 'material_id', v)}
-                            options={[{ value: '', label: 'انتخاب…' }, ...materialOptions]}
+                        <Field label="تعداد">
+                          <QtyStepper
+                            value={qty ? String(qty) : ''}
+                            onChange={(value) => setQty(group.piece_kind, arm, value)}
                           />
                         </Field>
-                        <Field label="مقدار">
-                          <input className={fromLegacy('ltr')} type="number" min="0.001" step="0.001" value={rule.quantity} onChange={(e) => updateRule(compIdx, ruleIdx, 'quantity', e.target.value)} />
-                        </Field>
-                        <Field label="واحد">
-                          <Select
-                            value={rule.unit}
-                            onChange={(v) => updateRule(compIdx, ruleIdx, 'unit', v)}
-                            options={[{ value: 'متر', label: 'متر' }, { value: 'عدد', label: 'عدد' }]}
-                          />
-                        </Field>
-                      </div>
-                      <button type="button" className={fromLegacy('link danger variant-remove')} onClick={() => removeRule(compIdx, ruleIdx)}>حذف</button>
-                    </div>
-                  ))}
+                      </article>
+                    )
+                  })}
                 </div>
-              ))}
+              )}
             </div>
-          )}
 
-          <div className={fromLegacy('form-actions')}>
-            <Button type="button" variant="ghost" onClick={() => setModalOpen(false)} disabled={saving}>انصراف</Button>
-            {canManage && <Button type="submit" disabled={saving}>{saving ? 'در حال ذخیره…' : 'ذخیره کلاف'}</Button>}
+            <div className={fromLegacy('form-actions')}>
+              <Button type="button" variant="ghost" onClick={resetComposer} disabled={saving}>انصراف</Button>
+              <Button type="submit" disabled={saving || !selectedPieces.length}>
+                {saving ? 'در حال ذخیره…' : editingWorkset ? 'ذخیره تغییرات' : 'ثبت دست'}
+              </Button>
+            </div>
+          </form>
+        </Card>
+      )}
+
+      <Card title="دست‌های ثبت‌شده">
+        <FilterBar>
+          <Field label="جستجوی دست">
+            <input
+              className={fromLegacy('search-input')}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="نام دست…"
+            />
+          </Field>
+        </FilterBar>
+        {loading && worksets.length === 0 ? (
+          <p className={fromLegacy('muted')}>در حال بارگذاری…</p>
+        ) : worksets.length === 0 ? (
+          <EmptyState text="دستی ثبت نشده. با «ثبت دست» از کاتالوگ قطعه انتخاب کنید." />
+        ) : (
+          <div className="workset-catalog-grid">
+            {worksets.map((workset) => (
+              <article
+                key={workset.id}
+                className={`workset-card${editingWorkset?.id === workset.id ? ' selected' : ''}${workset.is_active ? '' : ' inactive'}`}
+              >
+                <button type="button" className="workset-card-main" onClick={() => canManage && openEdit(workset)}>
+                  <div className="workset-card-head">
+                    <h3>{workset.name}</h3>
+                    {!workset.is_active && <Badge>غیرفعال</Badge>}
+                  </div>
+                  <div className={fromLegacy('muted small')}>
+                    {toPersianDigits(workset.piece_count || 0)} قطعه
+                    {workset.seat_count ? ` • ${toPersianDigits(workset.seat_count)} نفر` : ''}
+                    {workset.design_style ? ` • ${options.design_styles?.find((row) => row.value === workset.design_style)?.label || workset.design_style}` : ''}
+                  </div>
+                  <div className="piece-selected-tray compact">
+                    {(workset.pieces || []).map((piece) => (
+                      <span key={`${piece.piece_kind}:${piece.arm_style}`} className="piece-chip quiet">
+                        {toPersianDigits(piece.quantity)}× {piece.piece_label}
+                      </span>
+                    ))}
+                  </div>
+                </button>
+                {canManage && (
+                  <div className="workset-card-actions">
+                    <button type="button" className={fromLegacy('link')} onClick={() => openEdit(workset)}>ویرایش</button>
+                    <button type="button" className={fromLegacy('link danger')} onClick={() => removeWorkset(workset)}>حذف</button>
+                  </div>
+                )}
+              </article>
+            ))}
           </div>
-        </form>
-      </Modal>
+        )}
+        <LoadMoreButton hasMore={worksets.length < total} loading={loading} onClick={() => loadWorksets(false)} />
+      </Card>
     </div>
   )
 }

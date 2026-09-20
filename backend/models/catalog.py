@@ -35,6 +35,71 @@ class Product(SoftDeleteModel):
         on_delete=models.SET_NULL,
         related_name="linked_products",
     )
+    furniture_workset = models.ForeignKey(
+        "backend.FurnitureWorkset",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="products",
+    )
+    suite_config = models.JSONField(default=list, blank=True)
+    paint_recipe = models.ForeignKey(
+        "backend.WorkshopRecipe",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="products_paint",
+    )
+    fabric_recipe = models.ForeignKey(
+        "backend.WorkshopRecipe",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="products_fabric",
+    )
+    foam_recipe = models.ForeignKey(
+        "backend.WorkshopRecipe",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="products_foam",
+    )
+    cushion_recipe = models.ForeignKey(
+        "backend.WorkshopRecipe",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="products_cushion",
+    )
+    webbing_recipe = models.ForeignKey(
+        "backend.WorkshopRecipe",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="products_webbing",
+    )
+    BUILD_MODEL_FRAME_LINE = "frame_line"
+    BUILD_MODEL_CHOICES = [
+        (BUILD_MODEL_FRAME_LINE, "خط کلاف"),
+    ]
+    PIPELINE_END_UPHOLSTERY = "upholstery"
+    PIPELINE_END_ASSEMBLY = "assembly"
+    PIPELINE_END_CHOICES = [
+        (PIPELINE_END_UPHOLSTERY, "رویه‌کوبی"),
+        (PIPELINE_END_ASSEMBLY, "مونتاژ"),
+    ]
+    build_model = models.CharField(
+        max_length=20,
+        choices=BUILD_MODEL_CHOICES,
+        default=BUILD_MODEL_FRAME_LINE,
+        db_index=True,
+    )
+    needs_paint = models.BooleanField(default=True)
+    pipeline_end = models.CharField(
+        max_length=20,
+        choices=PIPELINE_END_CHOICES,
+        default=PIPELINE_END_UPHOLSTERY,
+    )
     category = models.ForeignKey(
         ProductCategory, null=True, blank=True, on_delete=models.SET_NULL, related_name="products"
     )
@@ -109,7 +174,31 @@ class Material(ReferenceCodeModel, SoftDeleteModel):
         (APPROVAL_APPROVED, "تایید شده"),
         (APPROVAL_REJECTED, "رد شده"),
     ]
+    USAGE_WOOD = "wood"
+    USAGE_PAINT = "paint"
+    USAGE_FABRIC = "fabric"
+    USAGE_FOAM = "foam"
+    USAGE_CUSHION = "cushion"
+    USAGE_WEBBING = "webbing"
+    USAGE_OTHER = "other"
+    USAGE_KIND_CHOICES = [
+        (USAGE_WOOD, "چوب"),
+        (USAGE_PAINT, "رنگ"),
+        (USAGE_FABRIC, "پارچه"),
+        (USAGE_FOAM, "اسفنج"),
+        (USAGE_CUSHION, "کوسن"),
+        (USAGE_WEBBING, "تسمه"),
+        (USAGE_OTHER, "سایر"),
+    ]
+
     name = models.CharField(max_length=150)
+    usage_kind = models.CharField(
+        "نوع مصرف کارخانه",
+        max_length=20,
+        choices=USAGE_KIND_CHOICES,
+        default=USAGE_OTHER,
+        db_index=True,
+    )
     color_name = models.CharField(max_length=50, blank=True)
     color_hex = models.CharField(max_length=7, default="#cccccc")
     sku = models.CharField(max_length=50, blank=True, db_index=True)

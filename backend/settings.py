@@ -102,9 +102,8 @@ TEMPLATES = [
 WSGI_APPLICATION = 'backend.wsgi.application'
 
 
-# Database
+# Database — فقط MySQL (لوکال، تست و تولید).
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
-# پیش‌فرض: MySQL — برای SQLite مقدار DB_ENGINE=sqlite بگذارید.
 
 DATABASES = build_databases(BASE_DIR)
 

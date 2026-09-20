@@ -14,6 +14,7 @@ function navItemFromModule(mod) {
   if (mod.cycle_watch) item.cycleWatch = true
   if (menu.length === 1) item.permission = menu[0]
   else if (menu.length > 1) item.anyPermission = menu
+  if (mod.nav_group) item.group = mod.nav_group
   return item
 }
 

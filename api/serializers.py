@@ -79,6 +79,9 @@ def line_item_to_dict(item, user=None):
         "frame_id": item.frame_id,
         "frame_model_id": item.frame_model_id,
         "frame_config": item.frame_config or {},
+        "workset_config": item.workset_config or {},
+        "furniture_workset_id": item.furniture_workset_id,
+        "furniture_workset_name": item.furniture_workset.name if item.furniture_workset_id else "",
         "product_name": item.product_name,
         "product_model": item.product_model or "",
         "fabric": item.fabric or "",
@@ -108,14 +111,15 @@ def sale_to_dict(sale, include_installments=False, include_lines=False, user=Non
     mask_prices = user and should_mask_prices_for_user(user)
     mask_amounts = user and should_mask_amounts_for_user(user)
     hide_money = mask_prices or mask_amounts
+    customer = sale.customer if sale.customer_id else None
     data = {
         "id": sale.id,
         "customer_id": None if mask_customer else sale.customer_id,
-        "customer_name": "—" if mask_customer else sale.customer.full_name,
-        "customer_phone": "" if mask_customer else (sale.customer.phone if sale.customer_id else ""),
-        "customer_address": "" if mask_customer else (sale.customer.address or ""),
-        "customer_wallet_balance": 0 if mask_customer else (int(sale.customer.wallet_balance) if sale.customer_id else 0),
-        "customer_cashback_balance": 0 if mask_customer else (int(sale.customer.cashback_balance) if sale.customer_id else 0),
+        "customer_name": "—" if mask_customer or not customer else customer.full_name,
+        "customer_phone": "" if mask_customer or not customer else (customer.phone or ""),
+        "customer_address": "" if mask_customer or not customer else (customer.address or ""),
+        "customer_wallet_balance": 0 if mask_customer or not customer else int(customer.wallet_balance),
+        "customer_cashback_balance": 0 if mask_customer or not customer else int(customer.cashback_balance),
         "customer_masked": mask_customer,
         "amount": None if hide_money else int(sale.amount),
         "discount_type": sale.discount_type,
@@ -155,11 +159,14 @@ def sale_to_dict(sale, include_installments=False, include_lines=False, user=Non
             else BRANCH_LABELS.get(sale.stock_source_branch_id, "")
         ),
         "delivery_date": sale.delivery_date.isoformat() if sale.delivery_date else None,
+        "seat_count": sale.seat_count,
         "is_deleted": getattr(sale, "is_deleted", False),
     }
     from logic.order_cycle import sale_fulfillment_payload
+    from logic.receive_kinds import sale_receive_payload
 
     data.update(sale_fulfillment_payload(sale))
+    data.update(sale_receive_payload(sale))
     if include_installments:
         data["installments"] = [
             installment_to_dict(i, user=user) for i in sale.installments.filter(is_deleted=False)
@@ -182,6 +189,9 @@ def office_line_item_to_dict(item, user=None):
         "frame_id": item.frame_id,
         "frame_model_id": item.frame_model_id,
         "frame_config": item.frame_config or {},
+        "workset_config": item.workset_config or {},
+        "furniture_workset_id": item.furniture_workset_id,
+        "furniture_workset_name": item.furniture_workset.name if item.furniture_workset_id else "",
         "product_name": item.product_name,
         "product_model": item.product_model or "",
         "fabric": item.fabric or "",
@@ -212,9 +222,9 @@ def office_order_to_dict(order, include_installments=False, include_lines=False,
         "id": order.id,
         "source_sale_id": order.source_sale_id,
         "customer_id": order.customer_id,
-        "customer_name": order.customer.full_name,
+        "customer_name": order.customer.full_name if order.customer_id else "—",
         "customer_phone": order.customer.phone if order.customer_id else "",
-        "customer_address": order.customer.address or "",
+        "customer_address": (order.customer.address or "") if order.customer_id else "",
         "amount": None if hide_money else int(order.amount),
         "discount_type": order.discount_type,
         "discount_value": None if hide_money else int(order.discount_value),
@@ -239,6 +249,7 @@ def office_order_to_dict(order, include_installments=False, include_lines=False,
         "recorded_by": order.recorded_by.username if order.recorded_by else None,
         "sold_at": order.sold_at.isoformat(),
         "delivery_date": order.delivery_date.isoformat() if order.delivery_date else None,
+        "seat_count": getattr(order, "seat_count", None),
         "workflow_stage": workflow["workflow_stage"],
         "workflow_stage_display": workflow["workflow_stage_display"],
         "workflow_progress": workflow_progress_percent(workflow["workflow_stage"]),
@@ -253,8 +264,10 @@ def office_order_to_dict(order, include_installments=False, include_lines=False,
     }
     from logic.early_ship import freight_ready_payload
     from logic.order_cycle import sale_fulfillment_payload
+    from logic.receive_kinds import sale_receive_payload
 
     data.update(sale_fulfillment_payload(order))
+    data.update(sale_receive_payload(order))
     data.update(freight_ready_payload(order))
     if include_installments:
         data["installments"] = [
@@ -296,6 +309,9 @@ def factory_line_item_to_dict(item):
         "frame_id": item.frame_id,
         "frame_model_id": item.frame_model_id,
         "frame_config": item.frame_config or {},
+        "workset_config": item.workset_config or {},
+        "furniture_workset_id": item.furniture_workset_id,
+        "furniture_workset_name": item.furniture_workset.name if item.furniture_workset_id else "",
         "product_name": item.product_name,
         "product_model": item.product_model or "",
         "fabric": item.fabric or "",
@@ -335,6 +351,7 @@ def factory_order_to_dict(order, include_lines=False, user=None):
         "branch_label": BRANCH_LABELS.get(order.branch_id, "—"),
         "order_kind": order.order_kind,
         "delivery_date": order.delivery_date.isoformat() if order.delivery_date else None,
+        "seat_count": getattr(order, "seat_count", None),
         "workflow_stage": order.workflow_stage_id,
         "workflow_stage_display": WORKFLOW_STAGE_LABELS.get(order.workflow_stage_id, order.workflow_stage_id),
         "production_done_at": order.production_done_at.isoformat() if order.production_done_at else None,
@@ -344,8 +361,10 @@ def factory_order_to_dict(order, include_lines=False, user=None):
     }
     from logic.early_ship import freight_ready_payload
     from logic.order_cycle import sale_fulfillment_payload
+    from logic.receive_kinds import sale_receive_payload
 
     data.update(sale_fulfillment_payload(order))
+    data.update(sale_receive_payload(order))
     data.update(freight_ready_payload(order))
     if show_customer and order.customer_id:
         customer = order.customer
@@ -363,6 +382,9 @@ def factory_order_to_dict(order, include_lines=False, user=None):
         from logic.materials import factory_order_materials_summary
 
         data.update(factory_order_materials_summary(order))
+    spawned = getattr(order, "spawned_workshop_jobs", None)
+    if spawned:
+        data["spawned_workshop_jobs"] = spawned
     return data
 
 
@@ -381,7 +403,9 @@ def installment_to_dict(inst, user=None):
     return {
         "id": inst.id,
         "sale_id": inst.sale_id,
-        "customer_name": inst.sale.customer.full_name if inst.sale_id else "",
+        "customer_name": (
+            inst.sale.customer.full_name if inst.sale_id and inst.sale.customer_id else ""
+        ),
         "amount": None if hide_money else int(inst.amount),
         "due_date": inst.due_date.isoformat(),
         "payment_method": inst.payment_method,
@@ -492,7 +516,7 @@ def accounting_to_dict(entry, user=None, *, ledger=None):
         "invoice_number": (
             sale.invoice_number if sale else (factory_order.invoice_number if factory_order else "")
         ),
-        "customer_name": sale.customer.full_name if sale else "",
+        "customer_name": sale.customer.full_name if sale and sale.customer_id else "",
         "is_approved": entry.is_approved,
         "is_system": is_system,
         "can_edit": perms["can_edit"],

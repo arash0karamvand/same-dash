@@ -137,9 +137,12 @@ def product_list(request):
     if request.method == "GET":
         search = (request.GET.get("search") or "").strip()
         category_id = request.GET.get("category_id")
+        workset_id = request.GET.get("workset_id")
         active_only = request.GET.get("include_inactive") != "1" or not _can_manage(request.user)
         if request.GET.get("include_inactive") == "1" and _can_manage(request.user):
-            qs = Product.objects.filter(is_deleted=False).select_related("category").prefetch_related(
+            qs = Product.objects.filter(is_deleted=False).select_related(
+                "category", "frame", "paint_recipe", "fabric_recipe", "foam_recipe", "cushion_recipe"
+            ).prefetch_related(
                 "variants", "product_materials__material"
             )
             if search:
@@ -147,8 +150,16 @@ def product_list(request):
                 qs = qs.filter(q).distinct()
             if category_id:
                 qs = qs.filter(category_id=category_id)
+            if workset_id:
+                qs = qs.filter(frame__workset_id=workset_id, frame__is_deleted=False)
         else:
-            qs = filter_products(Product.objects.all(), search=search, category_id=category_id, active_only=active_only)
+            qs = filter_products(
+                Product.objects.all(),
+                search=search,
+                category_id=category_id,
+                workset_id=workset_id or None,
+                active_only=active_only,
+            )
         from logic.pagination import paginate
 
         is_active = (request.GET.get("is_active") or "").strip()
@@ -180,7 +191,9 @@ def product_list(request):
 @api_view("GET", "PUT", "DELETE")
 def product_detail(request, pk):
     try:
-        product = Product.objects.select_related("category").prefetch_related(
+        product = Product.objects.select_related(
+            "category", "frame", "paint_recipe", "fabric_recipe", "foam_recipe", "cushion_recipe"
+        ).prefetch_related(
             "variants", "product_materials__material"
         ).get(pk=pk, is_deleted=False)
     except Product.DoesNotExist:

@@ -6,6 +6,7 @@
 
 - Python 3.14+ و Django (از قبل نصب‌شده)
 - Node.js 20+ برای build فرانت‌اند
+- MySQL 8+ یا MariaDB 10.6+ (تنها دیتابیس پشتیبانی‌شده)
 - یک وب‌سرور (Nginx) و WSGI server (Gunicorn/Waitress)
 
 ## گام‌ها
@@ -44,20 +45,9 @@ CREATE DATABASE same_dashboard
 ```
 
 > **نسخه:** Django 6 به **MySQL 8+** یا **MariaDB 10.6+** نیاز دارد.  
-> اگر XAMPP با MariaDB 10.4 دارید، MariaDB/MySQL را ارتقا دهید یا موقت `DB_ENGINE=sqlite` بگذارید.
+> اگر XAMPP با MariaDB 10.4 دارید، MariaDB/MySQL را ارتقا دهید. SQLite پشتیبانی نمی‌شود.
 
-فایل `.env` را از `.env.example` کپی کرده و `DB_USER` / `DB_PASSWORD` را تنظیم کنید.
-
-**انتقال از SQLite (اختیاری):**
-
-```bash
-# با DB_ENGINE=sqlite
-py manage.py dumpdata --indent 2 --exclude contenttypes --exclude auth.permission -o backup/exports/migrate_to_mysql.json
-
-# سپس .env را به MySQL تغییر دهید و:
-py manage.py migrate
-py manage.py loaddata backup/exports/migrate_to_mysql.json
-```
+فایل `.env` را از `.env.example` کپی کرده و `DB_NAME` / `DB_USER` / `DB_PASSWORD` را تنظیم کنید.
 
 ```bash
 py manage.py migrate

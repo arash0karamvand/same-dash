@@ -12,8 +12,16 @@ from backend.models import (
     FrameServiceComponent,
     FrameServiceTemplate,
     FrameWoodRequirement,
+    FurnitureWorkset,
     Material,
     Product,
+)
+from logic.furniture_worksets import (
+    ARM_STYLE_LABELS,
+    PIECE_KIND_LABELS,
+    default_frame_name,
+    validate_piece_arm,
+    workset_to_dict,
 )
 from logic.materials import approved_materials_filter, material_to_dict
 
@@ -124,9 +132,16 @@ def service_template_to_dict(template):
 
 
 def frame_to_dict(frame, *, include_nested=True):
+    workset = getattr(frame, "workset", None)
     data = {
         "id": frame.id,
         "name": frame.name,
+        "workset_id": frame.workset_id,
+        "workset": workset_to_dict(workset) if workset else None,
+        "piece_kind": frame.piece_kind or "",
+        "piece_kind_display": PIECE_KIND_LABELS.get(frame.piece_kind, frame.piece_kind or ""),
+        "arm_style": frame.arm_style or "",
+        "arm_style_display": ARM_STYLE_LABELS.get(frame.arm_style, frame.arm_style or ""),
         "design_style": frame.design_style,
         "design_style_display": DESIGN_STYLE_LABELS.get(frame.design_style, frame.design_style),
         "wood_type": frame.wood_type,
@@ -154,7 +169,7 @@ def frame_to_dict(frame, *, include_nested=True):
 
 
 def default_frame_config(frame):
-    """پیکربندی پیش‌فرض سرویس برای فروش."""
+    """پیکربندی قدیمی سرویس — برای کلاف‌های بدون قالب خالی برمی‌گردد."""
     template = getattr(frame, "service_template", None)
     if template is None:
         try:
@@ -192,16 +207,20 @@ def default_frame_config(frame):
     return {"seat_count": seat_count, "components": components}
 
 
-def filter_frames(queryset, *, search="", active_only=True):
+def filter_frames(queryset, *, search="", active_only=True, workset_id=None):
     if active_only:
         queryset = queryset.filter(is_active=True)
+    if workset_id:
+        queryset = queryset.filter(workset_id=workset_id)
     if search:
         q = Q(name__icontains=search)
         q |= Q(models__name__icontains=search)
+        q |= Q(workset__name__icontains=search)
         queryset = queryset.filter(q).distinct()
-    return queryset.select_related("product", "service_template").prefetch_related(
+    return queryset.select_related("product", "service_template", "workset").prefetch_related(
         "models__wood_requirements__material",
         "service_template__components__material_rules__material",
+        "linked_products",
     )
 
 
@@ -318,7 +337,6 @@ def _sync_frame_models(frame, items):
 
 
 def _sync_product_link(frame, product_id):
-    Product.objects.filter(frame_id=frame.id).exclude(pk=product_id).update(frame_id=None)
     if product_id:
         product = Product.objects.filter(pk=product_id, is_deleted=False).first()
         if not product:
@@ -329,19 +347,52 @@ def _sync_product_link(frame, product_id):
         frame.save(update_fields=["product", "updated_at"])
 
 
+def _resolve_workset(workset_id):
+    if not workset_id:
+        return None
+    workset = FurnitureWorkset.objects.filter(pk=workset_id, is_deleted=False).first()
+    if not workset:
+        raise ValueError("دست انتخاب‌شده یافت نشد.")
+    return workset
+
+
+def _apply_piece_fields(frame, data, *, workset=None, required=False):
+    if "piece_kind" in data or "arm_style" in data or required:
+        piece_kind, arm_style = validate_piece_arm(
+            data.get("piece_kind", frame.piece_kind),
+            data.get("arm_style", frame.arm_style),
+        )
+        if required and not piece_kind:
+            raise ValueError("نوع قطعه کلاف الزامی است.")
+        frame.piece_kind = piece_kind
+        frame.arm_style = arm_style
+    if workset is not None or "workset_id" in data:
+        frame.workset = workset if workset is not None else _resolve_workset(data.get("workset_id"))
+    return frame
+
+
 @transaction.atomic
 def create_frame(data):
+    workset = _resolve_workset(data.get("workset_id"))
+    piece_kind, arm_style = validate_piece_arm(data.get("piece_kind"), data.get("arm_style"))
     name = (data.get("name") or "").strip()
     if not name:
+        name = default_frame_name(workset, piece_kind, arm_style)
+    if not name:
         raise ValueError("نام کلاف الزامی است.")
-    frame = Frame.objects.create(
+    frame = Frame(
         name=name,
-        design_style=data.get("design_style") or Frame.DESIGN_MODERN,
+        workset=workset,
+        piece_kind=piece_kind,
+        arm_style=arm_style,
+        design_style=data.get("design_style") or (workset.design_style if workset and workset.design_style else Frame.DESIGN_MODERN),
         wood_type=data.get("wood_type") or Frame.WOOD_ASH_GEORGIAN_G1,
         is_active=data.get("is_active", True) is not False,
     )
+    frame.save()
     _sync_frame_models(frame, data.get("models"))
-    _sync_service_template(frame, data.get("service_template") or {})
+    if data.get("service_template"):
+        _sync_service_template(frame, data.get("service_template"))
     if data.get("product_id"):
         _sync_product_link(frame, data.get("product_id"))
     return frame
@@ -349,8 +400,12 @@ def create_frame(data):
 
 @transaction.atomic
 def update_frame(frame, data):
+    workset = _resolve_workset(data.get("workset_id")) if "workset_id" in data else frame.workset
+    _apply_piece_fields(frame, data, workset=workset if "workset_id" in data else None)
     if "name" in data:
         name = (data.get("name") or "").strip()
+        if not name:
+            name = default_frame_name(frame.workset, frame.piece_kind, frame.arm_style)
         if not name:
             raise ValueError("نام کلاف الزامی است.")
         frame.name = name

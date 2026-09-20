@@ -112,8 +112,22 @@ class Sale(ReferenceCodeModel, SoftDeleteModel):
         (FULFILLMENT_ROUTE_PICKUP, "تحویل به مشتری"),
         (FULFILLMENT_ROUTE_MERCHANT, "بازرگان"),
     ]
+    RECEIVE_KIND_CUSTOMER = "customer"
+    RECEIVE_KIND_BRANCH_FLOOR = "branch_floor"
+    RECEIVE_KIND_WAREHOUSE = "warehouse"
+    RECEIVE_KIND_MERCHANT = "merchant"
+    RECEIVE_KIND_REPAIR = "repair"
+    RECEIVE_KIND_CHOICES = [
+        (RECEIVE_KIND_CUSTOMER, "مشتری"),
+        (RECEIVE_KIND_BRANCH_FLOOR, "کف شعبه"),
+        (RECEIVE_KIND_WAREHOUSE, "انبار"),
+        (RECEIVE_KIND_MERCHANT, "بازرگان"),
+        (RECEIVE_KIND_REPAIR, "تعمیر"),
+    ]
 
-    customer = models.ForeignKey(Customer, on_delete=models.PROTECT, related_name="sales")
+    customer = models.ForeignKey(
+        Customer, null=True, blank=True, on_delete=models.PROTECT, related_name="sales"
+    )
     STOCK_SOURCE_WAREHOUSE = "warehouse"
     STOCK_SOURCE_BRANCH = "branch"
     STOCK_SOURCE_CHOICES = [
@@ -277,6 +291,21 @@ class Sale(ReferenceCodeModel, SoftDeleteModel):
         on_delete=models.SET_NULL,
         related_name="merchant_sales",
     )
+    receive_kind = models.CharField(
+        max_length=20,
+        choices=RECEIVE_KIND_CHOICES,
+        default=RECEIVE_KIND_CUSTOMER,
+        db_index=True,
+    )
+    contract_party = models.CharField(max_length=200, blank=True, default="")
+    seat_count = models.PositiveIntegerField("تعداد نفر", null=True, blank=True)
+    source_invoice = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="derived_factory_jobs",
+    )
     warehouse_completed_at = models.DateTimeField(null=True, blank=True)
     pickup_completed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -363,6 +392,14 @@ class SaleLineItem(models.Model):
         related_name="sale_lines",
     )
     frame_config = models.JSONField(default=dict, blank=True)
+    workset_config = models.JSONField(default=dict, blank=True)
+    furniture_workset = models.ForeignKey(
+        "backend.FurnitureWorkset",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="sale_lines",
+    )
     product = models.ForeignKey(
         "backend.Product", null=True, blank=True, on_delete=models.SET_NULL, related_name="sale_lines"
     )

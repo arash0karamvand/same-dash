@@ -16,16 +16,37 @@ import {
 
 const STAT_ACCENT_DEFAULT = 'var(--accent)'
 
-export function StatCard({ label, value, hint, accent = STAT_ACCENT_DEFAULT, className = '' }) {
+export function StatCard({
+  label,
+  value,
+  hint,
+  accent = STAT_ACCENT_DEFAULT,
+  className = '',
+  active = false,
+  onClick,
+}) {
+  const interactive = typeof onClick === 'function'
+  const Tag = interactive ? 'button' : 'div'
   return (
-    <div className={cn('liquid-glass liquid-glass--panel liquid-glass--jelly', tw.statCard, className)}>
+    <Tag
+      type={interactive ? 'button' : undefined}
+      className={cn(
+        'liquid-glass liquid-glass--panel liquid-glass--jelly',
+        tw.statCard,
+        interactive && tw.statCardInteractive,
+        active && tw.statCardActive,
+        className,
+      )}
+      onClick={onClick}
+      aria-pressed={interactive ? active : undefined}
+    >
       <div className={tw.statBar} style={{ background: accent }} />
       <div className={tw.statBody}>
         <span className={tw.statLabel}>{label}</span>
         <span className={cn(tw.statValue, tw.numDisplay)}>{value}</span>
         {hint && <span className={tw.statHint}>{hint}</span>}
       </div>
-    </div>
+    </Tag>
   )
 }
 

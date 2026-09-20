@@ -93,6 +93,7 @@ const EMPTY_FORM = {
   installments: [],
 
   line_items: [],
+  seat_count: '',
   stock_source_kind: 'warehouse',
   stock_source_warehouse_id: '',
   stock_source_branch: '',
@@ -839,7 +840,13 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
             product_id: i.product_id,
             variant_id: i.variant_id || null,
             quantity: Number(i.quantity || 1),
+            frame_id: i.frame_id || null,
+            frame_model_id: i.frame_model_id || null,
+            frame_config: i.frame_config || {},
+            workset_config: i.workset_config || {},
+            furniture_workset_id: i.furniture_workset_id || null,
           }))
+          if (form.seat_count) payload.seat_count = Number(form.seat_count)
           payload.amount = form.line_items.reduce(
             (s, i) => s + Number(i.unit_price || 0) * Number(i.quantity || 1),
             0,
@@ -1588,6 +1595,8 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
 
               <ProductLines
                 lines={form.line_items}
+                seatCount={form.seat_count}
+                onSeatCountChange={(seat_count) => setForm({ ...form, seat_count })}
                 stockSourceKey={
                   form.stock_source_kind === 'warehouse' && form.stock_source_warehouse_id
                     ? `warehouse:${form.stock_source_warehouse_id}`

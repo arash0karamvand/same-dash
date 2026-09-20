@@ -17,6 +17,11 @@ from auth.permissions import (
     EDIT_ACCOUNTING,
     EDIT_CUSTOMER,
     EDIT_SALE,
+    MANAGE_BETA_CARPENTRY,
+    MANAGE_BETA_FABRIC,
+    MANAGE_BETA_PAINT,
+    MANAGE_BETA_QC,
+    MANAGE_BETA_UPHOLSTERY,
     MANAGE_FACTORY_ORDERS,
     MANAGE_FREIGHT_ORDERS,
     MANAGE_FACTORY_PRODUCTS,
@@ -29,6 +34,11 @@ from auth.permissions import (
     SELF_CHECK_IN,
     TRANSFER_FACTORY_ACCOUNTING_TO_OFFICE,
     VIEW_ACCOUNTING,
+    VIEW_BETA_CARPENTRY,
+    VIEW_BETA_FABRIC,
+    VIEW_BETA_PAINT,
+    VIEW_BETA_QC,
+    VIEW_BETA_UPHOLSTERY,
     VIEW_ATTENDANCE,
     VIEW_AUDIT_LOGS,
     VIEW_CUSTOMERS,
@@ -115,6 +125,35 @@ DEFAULT_LOOKUPS = [
     ("workflow_stage", "ready_for_pickup", "آماده تحویل حضوری", 7, {"color": "#22c55e"}),
     ("workflow_stage", "merchant_assigned", "بازرگان — صف کارخانه", 8, {"color": "#a855f7"}),
     ("workflow_stage", "completed", "تکمیل شده", 9, {"color": "#10b981"}),
+    ("beta_workshop_kind", "internal", "داخل کارخانه", 0, {"color": "#6366f1"}),
+    ("beta_workshop_kind", "satellite", "کارگاه اقماری", 1, {"color": "#a855f7"}),
+    ("beta_carpentry_kind", "build", "ساخت کلاف", 0, {}),
+    ("beta_carpentry_kind", "repair", "تعمیرات", 1, {}),
+    ("beta_carpentry_status", "in_progress", "در حال ساخت / تعمیر", 0, {"color": "#f59e0b"}),
+    ("beta_carpentry_status", "ready", "آماده تحویل", 1, {"color": "#0ea5e9"}),
+    ("beta_carpentry_status", "delivered", "تحویل شده به انبار", 2, {"color": "#10b981"}),
+    ("beta_paint_kind", "normal", "تولید عادی", 0, {"color": "#10b981"}),
+    ("beta_paint_kind", "repair", "تعمیرات کارخانه", 1, {"color": "#f59e0b"}),
+    ("beta_paint_kind", "qc_return", "برگشتی QC", 2, {"color": "#ef4444"}),
+    ("beta_paint_stage", "raw", "ورود کلاف خام", 0, {}),
+    ("beta_paint_stage", "sanding", "سنباده و زیرسازی", 1, {}),
+    ("beta_paint_stage", "putty", "بتونه و آستر اول", 2, {}),
+    ("beta_paint_stage", "sealer", "سیلر و پوستاب", 3, {}),
+    ("beta_paint_stage", "topcoat", "رنگ رویه اصلی", 4, {}),
+    ("beta_paint_stage", "patina", "پتینه و هایلایت", 5, {}),
+    ("beta_paint_stage", "pu_final", "پلی‌اورتان نهایی", 6, {}),
+    ("beta_paint_stage", "qc", "کنترل کیفیت و تحویل", 7, {}),
+    ("beta_upholstery_stage", "webbing", "تسمه‌کشی و فنربندی", 0, {}),
+    ("beta_upholstery_stage", "foam", "نصب فوم سرد و اسفنج", 1, {}),
+    ("beta_upholstery_stage", "fabric", "کشیدن پارچه و لمسه‌دوزی", 2, {}),
+    ("beta_upholstery_stage", "finishing", "میخ‌کاری، سرمه‌دوزی و اتوکشی", 3, {}),
+    ("beta_upholstery_stage", "qc", "تکمیل و ارسال به کنترل کیفیت (QC)", 4, {}),
+    ("beta_qc_status", "pending", "در انتظار بازرسی", 0, {"color": "#f59e0b"}),
+    ("beta_qc_status", "rework", "نیازمند بازکاری", 1, {"color": "#ef4444"}),
+    ("beta_qc_status", "approved", "تایید شده", 2, {"color": "#10b981"}),
+    ("beta_qc_grade", "A", "Grade A", 0, {}),
+    ("beta_qc_grade", "B", "Grade B", 1, {}),
+    ("beta_qc_grade", "C", "Grade C", 2, {}),
 ]
 
 REFERENCE_ROWS = {
@@ -245,6 +284,11 @@ ORG_BUILTIN_ROLES = [
             VIEW_DASHBOARD, VIEW_FACTORY_ORDERS, MANAGE_FACTORY_ORDERS,
             VIEW_FACTORY_PRODUCTS, MANAGE_FACTORY_PRODUCTS,
             VIEW_MATERIALS, CREATE_MATERIALS,
+            VIEW_BETA_CARPENTRY, MANAGE_BETA_CARPENTRY,
+            VIEW_BETA_PAINT, MANAGE_BETA_PAINT,
+            VIEW_BETA_UPHOLSTERY, MANAGE_BETA_UPHOLSTERY,
+            VIEW_BETA_FABRIC, MANAGE_BETA_FABRIC,
+            VIEW_BETA_QC, MANAGE_BETA_QC,
         ]),
     },
     {
@@ -303,8 +347,9 @@ def seed_lookups():
     if not _table_exists(LookupOption):
         return
     try:
+        # فقط گزینه‌های نبوده ساخته می‌شوند تا ویرایش‌های مدیر در تنظیمات بازنویسی نشود.
         for category, code, label, sort_order, meta in DEFAULT_LOOKUPS:
-            opt, created = LookupOption.objects.update_or_create(
+            opt, created = LookupOption.objects.get_or_create(
                 category=category,
                 code=code,
                 defaults={

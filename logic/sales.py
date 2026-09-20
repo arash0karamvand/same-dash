@@ -319,6 +319,7 @@ def record_sale(
     delivery_date=None,
     accounting_mode=None,
     stock_source=None,
+    seat_count=None,
 ):
     if recorded_by is not None:
         from logic.sale_attendance import assert_user_can_record_sale
@@ -421,6 +422,8 @@ def record_sale(
         "delivery_date": delivery_date,
         "office_released_at": None,
         "factory_released_at": None,
+        "receive_kind": Sale.RECEIVE_KIND_CUSTOMER,
+        "seat_count": None if seat_count in (None, "") else int(seat_count),
     }
     from logic.stock_locations import LOCATION_WAREHOUSE, default_warehouse, parse_location
 
@@ -472,6 +475,8 @@ def record_sale(
                 frame=resolved.get("frame"),
                 frame_model=resolved.get("frame_model"),
                 frame_config=resolved.get("frame_config") or {},
+                workset_config=resolved.get("workset_config") or {},
+                furniture_workset=resolved.get("furniture_workset"),
                 product_name=name,
                 product_model=resolved["product_model"],
                 fabric=resolved["fabric"],
@@ -745,6 +750,8 @@ def _replace_sale_line_items(sale, line_items):
             frame=resolved.get("frame"),
             frame_model=resolved.get("frame_model"),
             frame_config=resolved.get("frame_config") or {},
+            workset_config=resolved.get("workset_config") or {},
+            furniture_workset=resolved.get("furniture_workset"),
             product_name=resolved["product_name"],
             product_model=resolved["product_model"],
             fabric=resolved["fabric"],
@@ -806,6 +813,12 @@ def update_sale(
         sale.payment_status = normalize_payment_status(payment_status)
     if delivery_date is not None:
         sale.delivery_date = delivery_date or None
+    if "seat_count" in meta_fields:
+        raw = meta_fields.pop("seat_count")
+        if raw in (None, ""):
+            sale.seat_count = None
+        else:
+            sale.seat_count = int(raw)
 
     if amount is not None:
         sale.amount = Decimal(str(amount))

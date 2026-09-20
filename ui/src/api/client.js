@@ -159,6 +159,7 @@ export const productsApi = {
     const p = new URLSearchParams()
     if (opts.search) p.set('search', opts.search)
     if (opts.category_id) p.set('category_id', opts.category_id)
+    if (opts.workset_id) p.set('workset_id', opts.workset_id)
     if (opts.offset != null) p.set('offset', opts.offset)
     if (opts.limit) p.set('limit', opts.limit)
     if (opts.include_inactive) p.set('include_inactive', '1')
@@ -184,6 +185,136 @@ export const productsApi = {
   transferStock: (data) => post('/api/products/stock-transfer/', data),
 }
 
+function listQuery(opts = {}, extra = {}) {
+  const p = new URLSearchParams()
+  if (opts.search) p.set('search', opts.search)
+  if (opts.offset != null) p.set('offset', opts.offset)
+  if (opts.limit) p.set('limit', opts.limit)
+  Object.entries(extra).forEach(([key, value]) => {
+    if (value != null && value !== '') p.set(key, value)
+  })
+  const q = p.toString()
+  return q ? `?${q}` : ''
+}
+
+export const betaCarpentryApi = {
+  stats: (opts = {}) => get(`/api/beta/carpentry/stats/${listQuery(opts, { workshop_id: opts.workshop_id, workshop_kind: opts.workshop_kind })}`),
+  sources: () => get('/api/beta/carpentry/sources/'),
+  workshops: () => get('/api/beta/carpentry/workshops/'),
+  createWorkshop: (data) => post('/api/beta/carpentry/workshops/', data),
+  updateWorkshop: (id, data) => put(`/api/beta/carpentry/workshops/${id}/`, data),
+  removeWorkshop: (id) => del(`/api/beta/carpentry/workshops/${id}/`),
+  orders: (opts = {}) => get(`/api/beta/carpentry/orders/${listQuery(opts, { kind: opts.kind, status: opts.status, workshop_id: opts.workshop_id })}`),
+  createOrder: (data) => post('/api/beta/carpentry/orders/', data),
+  updateOrder: (id, data) => put(`/api/beta/carpentry/orders/${id}/`, data),
+  removeOrder: (id) => del(`/api/beta/carpentry/orders/${id}/`),
+  tools: (opts = {}) => get(`/api/beta/carpentry/tools/${listQuery(opts, { workshop_id: opts.workshop_id })}`),
+  createTool: (data) => post('/api/beta/carpentry/tools/', data),
+  updateTool: (id, data) => put(`/api/beta/carpentry/tools/${id}/`, data),
+  removeTool: (id) => del(`/api/beta/carpentry/tools/${id}/`),
+  woodPurchases: (opts = {}) => get(`/api/beta/carpentry/wood-purchases/${listQuery(opts, { workshop_id: opts.workshop_id })}`),
+  createWoodPurchase: (data) => post('/api/beta/carpentry/wood-purchases/', data),
+  updateWoodPurchase: (id, data) => put(`/api/beta/carpentry/wood-purchases/${id}/`, data),
+  removeWoodPurchase: (id) => del(`/api/beta/carpentry/wood-purchases/${id}/`),
+  services: (opts = {}) => get(`/api/beta/carpentry/services/${listQuery(opts, { workshop_id: opts.workshop_id })}`),
+  createService: (data) => post('/api/beta/carpentry/services/', data),
+  updateService: (id, data) => put(`/api/beta/carpentry/services/${id}/`, data),
+  removeService: (id) => del(`/api/beta/carpentry/services/${id}/`),
+  freight: (opts = {}) => get(`/api/beta/carpentry/freight/${listQuery(opts, { workshop_id: opts.workshop_id })}`),
+  createFreight: (data) => post('/api/beta/carpentry/freight/', data),
+  updateFreight: (id, data) => put(`/api/beta/carpentry/freight/${id}/`, data),
+  removeFreight: (id) => del(`/api/beta/carpentry/freight/${id}/`),
+  attendance: (opts = {}) => get(`/api/beta/carpentry/attendance/${listQuery(opts, { workshop_id: opts.workshop_id })}`),
+  createAttendance: (data) => post('/api/beta/carpentry/attendance/', data),
+  updateAttendance: (id, data) => put(`/api/beta/carpentry/attendance/${id}/`, data),
+  removeAttendance: (id) => del(`/api/beta/carpentry/attendance/${id}/`),
+}
+
+export const betaPaintApi = {
+  stats: () => get('/api/beta/paint/stats/'),
+  list: (opts = {}) => get(`/api/beta/paint/orders/${listQuery(opts, { kind: opts.kind, stage: opts.stage })}`),
+  create: (data) => post('/api/beta/paint/orders/', data),
+  update: (id, data) => put(`/api/beta/paint/orders/${id}/`, data),
+  remove: (id) => del(`/api/beta/paint/orders/${id}/`),
+  advance: (id, note) => post(`/api/beta/paint/orders/${id}/advance/`, note ? { note } : {}),
+}
+
+export const betaUpholsteryApi = {
+  stats: (opts = {}) => get(`/api/beta/upholstery/stats/${listQuery(opts)}`),
+  list: (opts = {}) => get(`/api/beta/upholstery/jobs/${listQuery(opts, { stage: opts.stage })}`),
+  create: (data) => post('/api/beta/upholstery/jobs/', data),
+  update: (id, data) => put(`/api/beta/upholstery/jobs/${id}/`, data),
+  remove: (id) => del(`/api/beta/upholstery/jobs/${id}/`),
+  advance: (id) => post(`/api/beta/upholstery/jobs/${id}/advance/`, {}),
+}
+
+export const betaFoamApi = {
+  stats: () => get('/api/beta/foam/stats/'),
+  list: (opts = {}) => get(`/api/beta/foam/jobs/${listQuery(opts, { stage: opts.stage })}`),
+  create: (data) => post('/api/beta/foam/jobs/', data),
+  update: (id, data) => put(`/api/beta/foam/jobs/${id}/`, data),
+  remove: (id) => del(`/api/beta/foam/jobs/${id}/`),
+  advance: (id) => post(`/api/beta/foam/jobs/${id}/advance/`, {}),
+}
+
+export const betaCushionApi = {
+  stats: () => get('/api/beta/cushion/stats/'),
+  list: (opts = {}) => get(`/api/beta/cushion/jobs/${listQuery(opts, { stage: opts.stage })}`),
+  create: (data) => post('/api/beta/cushion/jobs/', data),
+  update: (id, data) => put(`/api/beta/cushion/jobs/${id}/`, data),
+  remove: (id) => del(`/api/beta/cushion/jobs/${id}/`),
+  advance: (id) => post(`/api/beta/cushion/jobs/${id}/advance/`, {}),
+}
+
+export const betaAssemblyApi = {
+  stats: () => get('/api/beta/assembly/stats/'),
+  list: (opts = {}) => get(`/api/beta/assembly/jobs/${listQuery(opts, { stage: opts.stage })}`),
+  create: (data) => post('/api/beta/assembly/jobs/', data),
+  update: (id, data) => put(`/api/beta/assembly/jobs/${id}/`, data),
+  remove: (id) => del(`/api/beta/assembly/jobs/${id}/`),
+  advance: (id) => post(`/api/beta/assembly/jobs/${id}/advance/`, {}),
+}
+
+export const betaClearanceApi = {
+  stats: () => get('/api/beta/clearance/stats/'),
+  list: (opts = {}) => get(`/api/beta/clearance/jobs/${listQuery(opts, { stage: opts.stage })}`),
+  create: (data) => post('/api/beta/clearance/jobs/', data),
+  update: (id, data) => put(`/api/beta/clearance/jobs/${id}/`, data),
+  remove: (id) => del(`/api/beta/clearance/jobs/${id}/`),
+  advance: (id) => post(`/api/beta/clearance/jobs/${id}/advance/`, {}),
+}
+
+export const workshopRecipesApi = {
+  list: (opts = {}) => get(`/api/workshop-recipes/${listQuery(opts, { kind: opts.kind, include_inactive: opts.include_inactive })}`),
+  get: (id) => get(`/api/workshop-recipes/${id}/`),
+  create: (data) => post('/api/workshop-recipes/', data),
+  update: (id, data) => put(`/api/workshop-recipes/${id}/`, data),
+  remove: (id) => del(`/api/workshop-recipes/${id}/`),
+}
+
+export const betaFabricApi = {
+  stats: () => get('/api/beta/fabric/stats/'),
+  rolls: (opts = {}) => get(`/api/beta/fabric/rolls/${listQuery(opts, { company: opts.company, fabric_type: opts.fabric_type, country: opts.country })}`),
+  createRoll: (data) => post('/api/beta/fabric/rolls/', data),
+  updateRoll: (id, data) => put(`/api/beta/fabric/rolls/${id}/`, data),
+  removeRoll: (id) => del(`/api/beta/fabric/rolls/${id}/`),
+  dispatches: (opts = {}) => get(`/api/beta/fabric/dispatches/${listQuery(opts)}`),
+  createDispatch: (data) => post('/api/beta/fabric/dispatches/', data),
+  needs: (opts = {}) => get(`/api/beta/fabric/needs/${listQuery(opts, { status: opts.status })}`),
+  createNeed: (data) => post('/api/beta/fabric/needs/', data),
+  updateNeed: (id, data) => put(`/api/beta/fabric/needs/${id}/`, data),
+  removeNeed: (id) => del(`/api/beta/fabric/needs/${id}/`),
+}
+
+export const betaQcApi = {
+  stats: (opts = {}) => get(`/api/beta/qc/stats/${listQuery(opts)}`),
+  list: (opts = {}) => get(`/api/beta/qc/inspections/${listQuery(opts, { status: opts.status, archive: opts.archive })}`),
+  create: (data) => post('/api/beta/qc/inspections/', data),
+  update: (id, data) => put(`/api/beta/qc/inspections/${id}/`, data),
+  remove: (id) => del(`/api/beta/qc/inspections/${id}/`),
+  evaluate: (id, data) => post(`/api/beta/qc/inspections/${id}/evaluate/`, data),
+}
+
 export const framesApi = {
   options: () => get('/api/frames/options/'),
   list: (opts = {}) => {
@@ -192,6 +323,7 @@ export const framesApi = {
     if (opts.offset != null) p.set('offset', opts.offset)
     if (opts.limit) p.set('limit', opts.limit)
     if (opts.include_inactive) p.set('include_inactive', '1')
+    if (opts.workset_id) p.set('workset_id', opts.workset_id)
     const q = p.toString()
     return get(`/api/frames/${q ? `?${q}` : ''}`)
   },
@@ -200,6 +332,25 @@ export const framesApi = {
   update: (id, data) => put(`/api/frames/${id}/`, data),
   remove: (id) => del(`/api/frames/${id}/`),
   previewRequirements: (id, data) => post(`/api/frames/${id}/requirements-preview/`, data),
+  createProduct: (id, data) => post(`/api/frames/${id}/create-product/`, data),
+}
+
+export const furnitureWorksetsApi = {
+  options: () => get('/api/furniture-worksets/options/'),
+  list: (opts = {}) => {
+    const p = new URLSearchParams()
+    if (opts.search) p.set('search', opts.search)
+    if (opts.offset != null) p.set('offset', opts.offset)
+    if (opts.limit) p.set('limit', opts.limit)
+    if (opts.include_inactive) p.set('include_inactive', '1')
+    const q = p.toString()
+    return get(`/api/furniture-worksets/${q ? `?${q}` : ''}`)
+  },
+  get: (id) => get(`/api/furniture-worksets/${id}/`),
+  create: (data) => post('/api/furniture-worksets/', data),
+  update: (id, data) => put(`/api/furniture-worksets/${id}/`, data),
+  remove: (id) => del(`/api/furniture-worksets/${id}/`),
+  products: (id) => get(`/api/furniture-worksets/${id}/products/`),
 }
 
 export const materialsApi = {
@@ -212,6 +363,7 @@ export const materialsApi = {
     if (opts.include_pending) p.set('include_pending', '1')
     if (opts.approved_only) p.set('approved_only', '1')
     if (opts.approval_status) p.set('approval_status', opts.approval_status)
+    if (opts.usage_kind) p.set('usage_kind', opts.usage_kind)
     const q = p.toString()
     return get(`/api/materials/${q ? `?${q}` : ''}`)
   },
@@ -368,6 +520,7 @@ export const officeApi = {
   approve: (id, data = {}) => post(`/api/office/orders/${id}/approve/`, data),
   reject: (id, reason = '') => post(`/api/office/orders/${id}/reject/`, { reason }),
   rollback: (id, reason = '') => post(`/api/office/orders/${id}/rollback/`, { reason }),
+  createFactoryWork: (data) => post('/api/office/factory-work/', data),
 }
 
 export const factoryApi = {

@@ -4,6 +4,7 @@ import { fromLegacy } from '../styles/tw.js'
 import { materialsApi } from '../api/client'
 
 import MoneyInput from '../components/MoneyInput'
+import Select from '../components/Select'
 
 import UnitSelect, { resolveUnitValue, splitUnitValue } from '../components/UnitSelect'
 
@@ -64,9 +65,21 @@ const APPROVAL_COLORS = {
 
 
 
+const USAGE_KIND_OPTIONS = [
+  { value: 'wood', label: 'چوب' },
+  { value: 'paint', label: 'رنگ' },
+  { value: 'fabric', label: 'پارچه' },
+  { value: 'foam', label: 'اسفنج' },
+  { value: 'webbing', label: 'تسمه' },
+  { value: 'cushion', label: 'کوسن' },
+  { value: 'other', label: 'سایر' },
+]
+
 const EMPTY_MATERIAL = {
 
   name: '',
+
+  usage_kind: 'other',
 
   color_name: '',
 
@@ -218,6 +231,8 @@ export default function Materials() {
 
       name: m.name,
 
+      usage_kind: m.usage_kind || 'other',
+
       color_name: m.color_name || '',
 
       color_hex: m.color_hex || '#cccccc',
@@ -263,6 +278,8 @@ export default function Materials() {
       const payload = {
 
         name: form.name.trim(),
+
+        usage_kind: form.usage_kind || 'other',
 
         color_name: form.color_name.trim(),
 
@@ -708,6 +725,12 @@ export default function Materials() {
           <Field label="نام متریال">
 
             <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+
+          </Field>
+
+          <Field label="نوع مصرف کارخانه">
+
+            <Select value={form.usage_kind || 'other'} onChange={(v) => setForm({ ...form, usage_kind: v })} options={USAGE_KIND_OPTIONS} />
 
           </Field>
 

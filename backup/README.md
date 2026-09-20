@@ -1,6 +1,6 @@
 # بکاپ دیتابیس
 
-اسکریپت‌های تهیه نسخه پشتیبان و خروجی‌گیری از اطلاعات.
+اسکریپت‌های تهیه نسخه پشتیبان و خروجی‌گیری از اطلاعات MySQL.
 
 ## اجرا
 
@@ -14,7 +14,7 @@ py backup/backup_db.py
 
 فایل‌ها در پوشه `backup/exports/` ساخته می‌شوند:
 
-- `db_backup_<timestamp>.sqlite3` — کپی خام فایل دیتابیس SQLite
+- `db_backup_<timestamp>.sql` — دامپ خام MySQL (اگر `mysqldump` نصب باشد)
 - `data_dump_<timestamp>.json` — خروجی JSON کامل داده‌ها (با `dumpdata`)
 
 ## بازگردانی (Restore)
@@ -25,6 +25,10 @@ py backup/backup_db.py
 py manage.py loaddata backup/exports/data_dump_<timestamp>.json
 ```
 
-یا برای بازگردانی فایل خام، کافی است فایل sqlite را جایگزین `db.sqlite3` در ریشه کنید.
+برای بازگردانی دامپ خام MySQL:
+
+```bash
+mysql --default-character-set=utf8mb4 -u USER -p DB_NAME < backup/exports/db_backup_<timestamp>.sql
+```
 
 > نکته: پوشه `exports/` نباید در version control قرار گیرد (در `.gitignore` پروژه اضافه شود).

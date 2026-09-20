@@ -28,6 +28,11 @@ def material_to_dict(m):
     return {
         "id": m.id,
         "name": m.name,
+        "usage_kind": getattr(m, "usage_kind", Material.USAGE_OTHER) or Material.USAGE_OTHER,
+        "usage_kind_display": dict(Material.USAGE_KIND_CHOICES).get(
+            getattr(m, "usage_kind", Material.USAGE_OTHER) or Material.USAGE_OTHER,
+            "سایر",
+        ),
         "color_name": m.color_name or "",
         "color_hex": m.color_hex,
         "sku": m.sku or "",
@@ -78,13 +83,35 @@ def compute_product_material_cost(product):
     return total
 
 
-def filter_materials(queryset, *, search="", active_only=True, approved_only=False, approval_status=None):
+def _parse_usage_kind(value, *, required=False):
+    kind = (value or "").strip()
+    if not kind:
+        if required:
+            raise ValueError("نوع مصرف متریال را انتخاب کنید.")
+        return Material.USAGE_OTHER
+    allowed = {code for code, _ in Material.USAGE_KIND_CHOICES}
+    if kind not in allowed:
+        raise ValueError("نوع مصرف متریال نامعتبر است.")
+    return kind
+
+
+def filter_materials(
+    queryset,
+    *,
+    search="",
+    active_only=True,
+    approved_only=False,
+    approval_status=None,
+    usage_kind=None,
+):
     if active_only:
         queryset = queryset.filter(is_active=True, is_deleted=False)
     if approved_only:
         queryset = queryset.filter(**approved_materials_filter())
     if approval_status:
         queryset = queryset.filter(approval_status=approval_status)
+    if usage_kind:
+        queryset = queryset.filter(usage_kind=usage_kind)
     if search:
         q = Q(name__icontains=search) | Q(sku__icontains=search) | Q(color_name__icontains=search)
         queryset = queryset.filter(q)
@@ -115,6 +142,7 @@ def create_material(data, *, user=None, auto_approve=False):
         approved_by = None
     material = Material.objects.create(
         name=name,
+        usage_kind=_parse_usage_kind(data.get("usage_kind")),
         color_name=(data.get("color_name") or "").strip(),
         color_hex=(data.get("color_hex") or "#cccccc").strip()[:7],
         sku=(data.get("sku") or "").strip(),
@@ -150,6 +178,8 @@ def update_material(material, data):
         if not name:
             raise ValueError("نام متریال الزامی است.")
         material.name = name
+    if "usage_kind" in data:
+        material.usage_kind = _parse_usage_kind(data.get("usage_kind"))
     if "color_name" in data:
         material.color_name = (data.get("color_name") or "").strip()
     if "color_hex" in data:
@@ -281,17 +311,110 @@ def sync_product_materials(product, raw_items):
     return product
 
 
-def compute_factory_order_material_requirements(factory_order):
-    """محاسبه متریال مورد نیاز سفارش — تجمیع از ردیف‌های محصول و کلاف."""
+FACTORY_QUEUE_STAGES = None
+
+
+def factory_queue_stages():
+    global FACTORY_QUEUE_STAGES
+    if FACTORY_QUEUE_STAGES is None:
+        from backend.models import Sale
+
+        FACTORY_QUEUE_STAGES = (
+            Sale.WORKFLOW_STAGE_ACCOUNTING_APPROVED,
+            Sale.WORKFLOW_STAGE_MERCHANT_ASSIGNED,
+            Sale.WORKFLOW_STAGE_IN_PRODUCTION,
+        )
+    return FACTORY_QUEUE_STAGES
+
+
+def _add_workset_snapshot_demand(totals, workset, line_qty):
+    if not isinstance(workset, dict) or line_qty <= 0:
+        return
+    for kind in ("paint", "fabric", "foam", "cushion", "webbing"):
+        for row in (workset.get(kind) or {}).get("materials") or []:
+            material_id = row.get("material_id")
+            if not material_id:
+                continue
+            qty = Decimal(str(row.get("quantity") or 0)) * line_qty
+            if qty > 0:
+                totals[int(material_id)] += qty
+
+
+def committed_material_demand(exclude_sale_id=None):
+    """جمع نیاز متریال سفارش‌های صف کارخانه که هنوز کسر نشده‌اند."""
+    from collections import defaultdict
+
+    from backend.models import ProductMaterial, SaleLineItem
+
+    lines = SaleLineItem.objects.filter(
+        sale__workflow_stage_id__in=factory_queue_stages(),
+        sale__materials_deducted_at__isnull=True,
+    )
+    if exclude_sale_id:
+        lines = lines.exclude(sale_id=exclude_sale_id)
+    rows = list(lines.values("product_id", "quantity", "workset_config"))
+    totals = defaultdict(lambda: Decimal(0))
+    if not rows:
+        return {}
+
+    product_ids = {row["product_id"] for row in rows if row["product_id"]}
+    bom_map = defaultdict(list)
+    if product_ids:
+        for pm in ProductMaterial.objects.filter(
+            product_id__in=product_ids,
+            material__is_deleted=False,
+            material__is_active=True,
+            material__approval_status_ref_id=Material.APPROVAL_APPROVED,
+        ).values("product_id", "material_id", "quantity"):
+            bom_map[pm["product_id"]].append(pm)
+
+    for row in rows:
+        line_qty = Decimal(row["quantity"] or 0)
+        if line_qty <= 0:
+            continue
+        for pm in bom_map.get(row["product_id"], []):
+            totals[pm["material_id"]] += line_qty * Decimal(pm["quantity"] or 0)
+        _add_workset_snapshot_demand(totals, row.get("workset_config") or {}, line_qty)
+    return dict(totals)
+
+
+def _apply_stock_and_queue(items, *, exclude_sale_id=None, queue_aware=True):
+    committed = committed_material_demand(exclude_sale_id=exclude_sale_id) if queue_aware else {}
+    for item in items:
+        material = item.get("material") or {}
+        stock = material.get("stock")
+        if stock is None:
+            stock = item.get("available_stock")
+        stock_val = Decimal(str(stock)) if stock is not None else None
+        req = Decimal(str(item.get("required_quantity") or 0))
+        others = Decimal(str(committed.get(item["material_id"], 0)))
+        item["committed_by_others"] = float(others)
+        item["available_stock"] = float(stock_val) if stock_val is not None else None
+        if stock_val is None:
+            item["available_after_queue"] = None
+            item["shortage"] = None
+            item["sufficient"] = True
+            continue
+        available_after = stock_val - others if queue_aware else stock_val
+        item["available_after_queue"] = float(available_after)
+        item["shortage"] = float(max(Decimal(0), req - available_after))
+        item["sufficient"] = available_after >= req
+    return items
+
+
+def compute_factory_order_material_requirements(factory_order, *, queue_aware=True):
+    """محاسبه متریال مورد نیاز سفارش — تجمیع از ردیف‌های محصول، کلاف و دست‌کار."""
     from collections import defaultdict
 
     from backend.models import ProductMaterial
     from logic.frame_materials import compute_frame_line_requirements, merge_material_requirements
+    from logic.workshop_recipes import compute_workset_line_requirements
 
     required = defaultdict(lambda: Decimal(0))
     product_results = []
     frame_results = []
-    line_items = factory_order.line_items.select_related("product", "frame", "frame_model").all()
+    workset_results = []
+    line_items = list(factory_order.line_items.all())
     for line in line_items:
         if line.product_id:
             product_qty = Decimal(line.quantity or 0)
@@ -307,6 +430,7 @@ def compute_factory_order_material_requirements(factory_order):
 
         if line.frame_id:
             frame_results.extend(compute_frame_line_requirements(line))
+        workset_results.extend(compute_workset_line_requirements(line))
 
     for material_id, req_qty in required.items():
         material = Material.objects.filter(pk=material_id, is_deleted=False).first()
@@ -333,16 +457,25 @@ def compute_factory_order_material_requirements(factory_order):
                 "source": "product",
             }
         )
-    return merge_material_requirements(product_results, frame_results)
+    merged = merge_material_requirements(product_results, frame_results)
+    merged = merge_material_requirements(merged, workset_results)
+    return _apply_stock_and_queue(
+        merged,
+        exclude_sale_id=getattr(factory_order, "pk", None),
+        queue_aware=queue_aware,
+    )
 
 
 def factory_order_materials_summary(factory_order):
+    from logic.workshop_recipes import workset_summary_from_lines
+
     requirements = compute_factory_order_material_requirements(factory_order)
     tracked = [item for item in requirements if item["available_stock"] is not None]
     material_cost_total = sum(int(item.get("line_cost") or 0) for item in requirements)
     return {
         "material_requirements": requirements,
         "material_cost_total": material_cost_total,
+        "workset_summary": workset_summary_from_lines(list(factory_order.line_items.all())),
         "materials_deducted": bool(getattr(factory_order, "materials_deducted_at", None)),
         "materials_deducted_at": (
             factory_order.materials_deducted_at.isoformat()
@@ -376,7 +509,7 @@ def deduct_materials_for_factory_order(factory_order):
     if getattr(factory_order, "materials_deducted_at", None):
         return factory_order
 
-    requirements = compute_factory_order_material_requirements(factory_order)
+    requirements = compute_factory_order_material_requirements(factory_order, queue_aware=False)
     tracked = [item for item in requirements if item["available_stock"] is not None]
     material_ids = sorted({item["material_id"] for item in tracked})
     locked = {}
@@ -427,7 +560,7 @@ def restore_materials_for_factory_order(factory_order):
     if not getattr(factory_order, "materials_deducted_at", None):
         return factory_order
 
-    requirements = compute_factory_order_material_requirements(factory_order)
+    requirements = compute_factory_order_material_requirements(factory_order, queue_aware=False)
     tracked = [item for item in requirements if item["available_stock"] is not None]
     material_ids = sorted({item["material_id"] for item in tracked})
     locked = {}

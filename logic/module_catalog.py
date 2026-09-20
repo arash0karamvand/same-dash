@@ -384,14 +384,6 @@ PORTAL_MODULE_SPECS = [
                 [P.VIEW_WAREHOUSE_ORDERS, P.MANAGE_WAREHOUSE_ORDERS, P.APPROVE_SALE_ACCOUNTING],
             ),
             _mod(
-                "office_frames",
-                "کلاف‌ها",
-                "🪵",
-                "frames",
-                [P.VIEW_FRAMES, P.MANAGE_FRAMES, P.APPROVE_SALE_ACCOUNTING],
-                [P.VIEW_FRAMES, P.MANAGE_FRAMES, P.APPROVE_SALE_ACCOUNTING],
-            ),
-            _mod(
                 "office_filter",
                 "فیلتر",
                 "🔍",
@@ -428,6 +420,7 @@ PORTAL_MODULE_SPECS = [
                 "factory",
                 [P.VIEW_FACTORY_ORDERS],
                 [P.VIEW_FACTORY_ORDERS, P.MANAGE_FACTORY_ORDERS],
+                nav_group="خط سفارش",
             ),
             _mod(
                 "factory_built",
@@ -436,6 +429,7 @@ PORTAL_MODULE_SPECS = [
                 "factory-built",
                 [P.VIEW_FACTORY_ORDERS],
                 [P.VIEW_FACTORY_ORDERS],
+                nav_group="خط سفارش",
             ),
             _mod(
                 "factory_freight",
@@ -444,6 +438,97 @@ PORTAL_MODULE_SPECS = [
                 "freight",
                 [P.VIEW_FREIGHT_ORDERS, P.MANAGE_FREIGHT_ORDERS],
                 [P.VIEW_FREIGHT_ORDERS, P.MANAGE_FREIGHT_ORDERS],
+                nav_group="خط سفارش",
+            ),
+            _mod(
+                "factory_frames",
+                "تولید کلاف",
+                "🪵",
+                "factory-frames",
+                [P.VIEW_FRAMES, P.MANAGE_FRAMES],
+                [P.VIEW_FRAMES, P.MANAGE_FRAMES],
+                nav_group="کارگاه‌های تولید",
+            ),
+            _mod(
+                "factory_carpentry",
+                "نجاری",
+                "🔧",
+                "factory-carpentry",
+                [P.VIEW_BETA_CARPENTRY, P.MANAGE_BETA_CARPENTRY],
+                [P.VIEW_BETA_CARPENTRY, P.MANAGE_BETA_CARPENTRY],
+                nav_group="کارگاه‌های تولید",
+            ),
+            _mod(
+                "factory_paint",
+                "رنگ‌کاری",
+                "🧵",
+                "factory-paint",
+                [P.VIEW_BETA_PAINT, P.MANAGE_BETA_PAINT],
+                [P.VIEW_BETA_PAINT, P.MANAGE_BETA_PAINT],
+                nav_group="کارگاه‌های تولید",
+            ),
+            _mod(
+                "factory_fabric",
+                "پارچه",
+                "🧵",
+                "factory-fabric",
+                [P.VIEW_BETA_FABRIC, P.MANAGE_BETA_FABRIC],
+                [P.VIEW_BETA_FABRIC, P.MANAGE_BETA_FABRIC],
+                nav_group="کارگاه‌های تولید",
+            ),
+            _mod(
+                "factory_foam",
+                "اسفنج",
+                "📦",
+                "factory-foam",
+                [P.VIEW_BETA_FOAM, P.MANAGE_BETA_FOAM],
+                [P.VIEW_BETA_FOAM, P.MANAGE_BETA_FOAM],
+                nav_group="کارگاه‌های تولید",
+            ),
+            _mod(
+                "factory_cushion",
+                "کوسن",
+                "📦",
+                "factory-cushion",
+                [P.VIEW_BETA_CUSHION, P.MANAGE_BETA_CUSHION],
+                [P.VIEW_BETA_CUSHION, P.MANAGE_BETA_CUSHION],
+                nav_group="کارگاه‌های تولید",
+            ),
+            _mod(
+                "factory_upholstery",
+                "رویه‌کوبی",
+                "📦",
+                "factory-upholstery",
+                [P.VIEW_BETA_UPHOLSTERY, P.MANAGE_BETA_UPHOLSTERY],
+                [P.VIEW_BETA_UPHOLSTERY, P.MANAGE_BETA_UPHOLSTERY],
+                nav_group="کارگاه‌های تولید",
+            ),
+            _mod(
+                "factory_assembly",
+                "مونتاژ",
+                "🔧",
+                "factory-assembly",
+                [P.VIEW_BETA_ASSEMBLY, P.MANAGE_BETA_ASSEMBLY],
+                [P.VIEW_BETA_ASSEMBLY, P.MANAGE_BETA_ASSEMBLY],
+                nav_group="کارگاه‌های تولید",
+            ),
+            _mod(
+                "factory_qc",
+                "کنترل کیفیت",
+                "✅",
+                "factory-qc",
+                [P.VIEW_BETA_QC, P.MANAGE_BETA_QC],
+                [P.VIEW_BETA_QC, P.MANAGE_BETA_QC],
+                nav_group="کارگاه‌های تولید",
+            ),
+            _mod(
+                "factory_clearance",
+                "ترخیص",
+                "📦",
+                "factory-clearance",
+                [P.VIEW_BETA_CLEARANCE, P.MANAGE_BETA_CLEARANCE],
+                [P.VIEW_BETA_CLEARANCE, P.MANAGE_BETA_CLEARANCE],
+                nav_group="کارگاه‌های تولید",
             ),
             _mod(
                 "factory_products",
@@ -452,6 +537,7 @@ PORTAL_MODULE_SPECS = [
                 "products",
                 [P.VIEW_FACTORY_PRODUCTS],
                 [P.VIEW_FACTORY_PRODUCTS, P.MANAGE_FACTORY_PRODUCTS],
+                nav_group="کاتالوگ و مواد",
             ),
             _mod(
                 "factory_materials",
@@ -460,6 +546,52 @@ PORTAL_MODULE_SPECS = [
                 "materials",
                 [P.VIEW_MATERIALS],
                 [P.VIEW_MATERIALS, P.CREATE_MATERIALS, P.MANAGE_MATERIALS],
+                nav_group="کاتالوگ و مواد",
+            ),
+            _mod(
+                "factory_paint_recipes",
+                "رنگ‌ها",
+                "🎨",
+                "factory-paint-recipes",
+                [P.VIEW_FACTORY_PRODUCTS, P.VIEW_MATERIALS],
+                [P.VIEW_FACTORY_PRODUCTS, P.MANAGE_FACTORY_PRODUCTS, P.VIEW_MATERIALS, P.MANAGE_MATERIALS],
+                nav_group="کاتالوگ و مواد",
+            ),
+            _mod(
+                "factory_fabric_recipes",
+                "پارچه‌ها",
+                "🧵",
+                "factory-fabric-recipes",
+                [P.VIEW_FACTORY_PRODUCTS, P.VIEW_MATERIALS],
+                [P.VIEW_FACTORY_PRODUCTS, P.MANAGE_FACTORY_PRODUCTS, P.VIEW_MATERIALS, P.MANAGE_MATERIALS],
+                nav_group="کاتالوگ و مواد",
+            ),
+            _mod(
+                "factory_foam_recipes",
+                "اسفنج‌ها",
+                "📦",
+                "factory-foam-recipes",
+                [P.VIEW_FACTORY_PRODUCTS, P.VIEW_MATERIALS],
+                [P.VIEW_FACTORY_PRODUCTS, P.MANAGE_FACTORY_PRODUCTS, P.VIEW_MATERIALS, P.MANAGE_MATERIALS],
+                nav_group="کاتالوگ و مواد",
+            ),
+            _mod(
+                "factory_webbing_recipes",
+                "تسمه‌ها",
+                "🧵",
+                "factory-webbing-recipes",
+                [P.VIEW_FACTORY_PRODUCTS, P.VIEW_MATERIALS],
+                [P.VIEW_FACTORY_PRODUCTS, P.MANAGE_FACTORY_PRODUCTS, P.VIEW_MATERIALS, P.MANAGE_MATERIALS],
+                nav_group="کاتالوگ و مواد",
+            ),
+            _mod(
+                "factory_cushion_recipes",
+                "کوسن‌ها",
+                "📦",
+                "factory-cushion-recipes",
+                [P.VIEW_FACTORY_PRODUCTS, P.VIEW_MATERIALS],
+                [P.VIEW_FACTORY_PRODUCTS, P.MANAGE_FACTORY_PRODUCTS, P.VIEW_MATERIALS, P.MANAGE_MATERIALS],
+                nav_group="کاتالوگ و مواد",
             ),
             _mod(
                 "factory_accounting",
@@ -474,6 +606,7 @@ PORTAL_MODULE_SPECS = [
                     P.DELETE_FACTORY_ACCOUNTING,
                     P.APPROVE_FACTORY_ACCOUNTING,
                 ],
+                nav_group="مالی",
             ),
         ],
     },
@@ -489,7 +622,7 @@ def _module_for_matrix(mod, pool, *, include_empty=False):
     section_codes = sorted(set(_codes_for_pool(mod["section_permissions"], pool)))
     if not menu_codes and not section_codes and not include_empty:
         return None
-    return {
+    item = {
         "id": mod["id"],
         "label": mod["label"],
         "icon": mod["icon"],
@@ -506,6 +639,9 @@ def _module_for_matrix(mod, pool, *, include_empty=False):
             {"code": c, "label": P.PERMISSION_LABELS.get(c, c)} for c in section_codes
         ],
     }
+    if mod.get("nav_group"):
+        item["nav_group"] = mod["nav_group"]
+    return item
 
 
 def portal_modules_for_matrix(assignable_only=False, *, include_empty_modules=False):

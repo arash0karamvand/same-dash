@@ -44,7 +44,9 @@ export const tw = {
   cardActions: 'flex flex-wrap gap-2 max-md:w-full max-md:flex-col max-md:items-stretch',
   cardElevated: 'bg-layer-3 shadow-jelly-raised',
 
-  statCard: 'flex overflow-hidden rounded-pill',
+  statCard: 'flex overflow-hidden rounded-pill text-right',
+  statCardInteractive: 'cursor-pointer border border-transparent transition-[border-color,box-shadow,transform] hover:-translate-y-px hover:border-jelly-rim-strong',
+  statCardActive: 'border-jelly-rim-strong ring-1 ring-jelly-rim-strong shadow-jelly-drop',
   statBar: 'w-1 shrink-0 rounded-capsule',
   statBody: 'flex flex-col gap-1.5 px-[22px] py-[18px]',
   statLabel: 'text-sm font-medium text-muted',
@@ -173,7 +175,11 @@ export const tw = {
     'min-w-0 w-full flex-1 pt-3 pr-[var(--content-pad-end)] pb-14 pl-[var(--content-pad-start)] max-w-[min(100%,calc(var(--content-max)+var(--content-pad-start)+var(--content-pad-end)))] wide:max-w-none max-compact:max-w-none max-compact:px-4 max-compact:pb-8 max-md:px-3.5 max-md:pt-2 max-md:pb-[calc(92px+env(safe-area-inset-bottom,0px))]',
 
   portalSubnav:
-    'flex gap-1.5 overflow-x-auto pb-3 pl-[var(--content-pad-start)] pr-[var(--content-pad-end)] [scrollbar-width:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden max-md:!hidden',
+    'flex flex-wrap items-end gap-x-4 gap-y-2 overflow-x-auto pb-3 pl-[var(--content-pad-start)] pr-[var(--content-pad-end)] [scrollbar-width:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden max-md:!hidden',
+  portalSubnavGroup: 'flex min-w-0 flex-col gap-1.5',
+  portalSubnavGroupLabel:
+    'shrink-0 px-1 text-[11px] font-bold uppercase tracking-wide text-muted',
+  portalSubnavGroupItems: 'flex flex-wrap gap-1.5',
   portalSubnavItem:
     'flex shrink-0 cursor-pointer items-center gap-2 whitespace-nowrap rounded-capsule border border-jelly-rim bg-layer-1 px-[18px] py-2.5 font-inherit text-sm text-text-secondary shadow-[inset_0_1px_0_var(--jelly-gloss-top),inset_0_-8px_14px_-8px_var(--jelly-shade-bottom)] transition-[background,border-color,color,box-shadow] duration-200 hover:border-jelly-rim-strong hover:bg-layer-2 hover:text-text',
   portalSubnavItemActive: 'border-jelly-rim-strong bg-layer-4 font-semibold text-text shadow-jelly',
@@ -196,7 +202,13 @@ export const tw = {
   mobileMenuBody: 'min-h-0 flex-1 overflow-y-auto px-4 py-3 [-webkit-overflow-scrolling:touch]',
   mobileMenuPortalBlock: '[&+&]:mt-4',
   mobileMenuPortalHead: 'flex items-center gap-2 px-2 pb-2 pt-1 text-xs font-bold uppercase tracking-wide text-muted',
-  mobileMenuPortalItems: 'flex flex-col gap-1',
+  mobileMenuPortalItems: 'flex flex-col gap-2',
+  mobileMenuNavGroup: 'flex flex-col gap-1',
+  mobileMenuNavGroupLabel:
+    'px-2 pt-1 text-[11px] font-bold uppercase tracking-wide text-muted',
+  navGroup: 'flex flex-col gap-0.5 [&+&]:mt-3',
+  navGroupLabel:
+    'px-3 pb-1 pt-2 text-[11px] font-bold uppercase tracking-wide text-muted',
   mobileMenuNavItem:
     'flex min-h-12 w-full cursor-pointer items-center gap-3 rounded-capsule border border-transparent bg-transparent px-3.5 py-2.5 text-right font-inherit text-sm text-text-secondary transition-[background,color] duration-150 hover:border-jelly-rim hover:bg-layer-1 hover:text-text',
   mobileMenuNavItemActive: 'border-jelly-rim bg-layer-2 font-semibold text-text',

@@ -185,9 +185,16 @@ export default function OfficeOrders() {
                     return (
                       <Fragment key={o.id}>
                         <tr className={isOpen ? 'office-order-row-expanded' : ''}>
-                          <td className={fromLegacy("ltr")}>{o.invoice_number || o.id}</td>
+                          <td className={fromLegacy("ltr")}>
+                            {o.invoice_number || o.id}
+                            {o.receive_kind_display && (
+                              <div className={fromLegacy("muted small")}>
+                                نوع دریافت: {o.receive_kind_display}{o.contract_party ? ` — ${o.contract_party}` : ''}
+                              </div>
+                            )}
+                          </td>
                           <td>
-                            <strong>{o.customer_name}</strong>
+                            <strong>{o.customer_name || '—'}</strong>
                             {o.branch_label && o.branch_label !== '—' && (
                               <div className={fromLegacy("muted small")}>{o.branch_label}</div>
                             )}
@@ -248,8 +255,13 @@ export default function OfficeOrders() {
                   <div key={o.id} className={fromLegacy("m-card office-order-track-card")}>
                     <div className={fromLegacy("m-card-head")}>
                       <div>
-                        <strong>{o.customer_name}</strong>
+                        <strong>{o.customer_name || '—'}</strong>
                         <div className={fromLegacy("muted small ltr")}>{o.invoice_number || `#${o.id}`}</div>
+                        {o.receive_kind_display && (
+                          <div className={fromLegacy("muted small")}>
+                            نوع دریافت: {o.receive_kind_display}{o.contract_party ? ` — ${o.contract_party}` : ''}
+                          </div>
+                        )}
                       </div>
                       {!o.amounts_masked && (
                         <strong>{formatMoney(o.final_amount)}</strong>
@@ -310,6 +322,12 @@ export default function OfficeOrders() {
           <div className={fromLegacy("office-purchase-detail")}>
             <div className={fromLegacy("office-purchase-detail-meta muted small")}>
               <span>فاکتور: {detailOrder.invoice_number || detailOrder.id}</span>
+              {detailOrder.receive_kind_display && (
+                <>
+                  {' · '}
+                  <span>نوع دریافت: {detailOrder.receive_kind_display}{detailOrder.contract_party ? ` — ${detailOrder.contract_party}` : ''}</span>
+                </>
+              )}
               {' · '}
               <span>ثبت: {formatDate(detailOrder.sold_at)}</span>
               {detailOrder.delivery_date && (

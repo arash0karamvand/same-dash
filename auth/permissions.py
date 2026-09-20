@@ -88,6 +88,24 @@ APPROVE_MATERIALS = "approve_materials"
 MANAGE_MATERIALS = "manage_materials"
 VIEW_FRAMES = "view_frames"
 MANAGE_FRAMES = "manage_frames"
+VIEW_BETA_CARPENTRY = "view_beta_carpentry"
+MANAGE_BETA_CARPENTRY = "manage_beta_carpentry"
+VIEW_BETA_PAINT = "view_beta_paint"
+MANAGE_BETA_PAINT = "manage_beta_paint"
+VIEW_BETA_UPHOLSTERY = "view_beta_upholstery"
+MANAGE_BETA_UPHOLSTERY = "manage_beta_upholstery"
+VIEW_BETA_FABRIC = "view_beta_fabric"
+MANAGE_BETA_FABRIC = "manage_beta_fabric"
+VIEW_BETA_QC = "view_beta_qc"
+MANAGE_BETA_QC = "manage_beta_qc"
+VIEW_BETA_FOAM = "view_beta_foam"
+MANAGE_BETA_FOAM = "manage_beta_foam"
+VIEW_BETA_CUSHION = "view_beta_cushion"
+MANAGE_BETA_CUSHION = "manage_beta_cushion"
+VIEW_BETA_ASSEMBLY = "view_beta_assembly"
+MANAGE_BETA_ASSEMBLY = "manage_beta_assembly"
+VIEW_BETA_CLEARANCE = "view_beta_clearance"
+MANAGE_BETA_CLEARANCE = "manage_beta_clearance"
 
 PERMISSION_LABELS = {
     VIEW_CUSTOMERS: "مشاهده مشتریان",
@@ -164,6 +182,24 @@ PERMISSION_LABELS = {
     MANAGE_MATERIALS: "مدیریت کامل متریال",
     VIEW_FRAMES: "مشاهده کلاف‌ها",
     MANAGE_FRAMES: "مدیریت کلاف‌ها",
+    VIEW_BETA_CARPENTRY: "مشاهده نجاری (بتا)",
+    MANAGE_BETA_CARPENTRY: "مدیریت نجاری (بتا)",
+    VIEW_BETA_PAINT: "مشاهده واحد رنگ (بتا)",
+    MANAGE_BETA_PAINT: "مدیریت واحد رنگ (بتا)",
+    VIEW_BETA_UPHOLSTERY: "مشاهده رویه‌کوبی (بتا)",
+    MANAGE_BETA_UPHOLSTERY: "مدیریت رویه‌کوبی (بتا)",
+    VIEW_BETA_FABRIC: "مشاهده انبار پارچه (بتا)",
+    MANAGE_BETA_FABRIC: "مدیریت انبار پارچه (بتا)",
+    VIEW_BETA_QC: "مشاهده کنترل کیفیت (بتا)",
+    MANAGE_BETA_QC: "مدیریت کنترل کیفیت (بتا)",
+    VIEW_BETA_FOAM: "مشاهده واحد فوم (بتا)",
+    MANAGE_BETA_FOAM: "مدیریت واحد فوم (بتا)",
+    VIEW_BETA_CUSHION: "مشاهده واحد کوسن (بتا)",
+    MANAGE_BETA_CUSHION: "مدیریت واحد کوسن (بتا)",
+    VIEW_BETA_ASSEMBLY: "مشاهده مونتاژ (بتا)",
+    MANAGE_BETA_ASSEMBLY: "مدیریت مونتاژ (بتا)",
+    VIEW_BETA_CLEARANCE: "مشاهده ترخیص (بتا)",
+    MANAGE_BETA_CLEARANCE: "مدیریت ترخیص (بتا)",
 }
 
 ALL_PERMISSIONS = {
@@ -241,6 +277,24 @@ ALL_PERMISSIONS = {
     MANAGE_MATERIALS,
     VIEW_FRAMES,
     MANAGE_FRAMES,
+    VIEW_BETA_CARPENTRY,
+    MANAGE_BETA_CARPENTRY,
+    VIEW_BETA_PAINT,
+    MANAGE_BETA_PAINT,
+    VIEW_BETA_UPHOLSTERY,
+    MANAGE_BETA_UPHOLSTERY,
+    VIEW_BETA_FABRIC,
+    MANAGE_BETA_FABRIC,
+    VIEW_BETA_QC,
+    MANAGE_BETA_QC,
+    VIEW_BETA_FOAM,
+    MANAGE_BETA_FOAM,
+    VIEW_BETA_CUSHION,
+    MANAGE_BETA_CUSHION,
+    VIEW_BETA_ASSEMBLY,
+    MANAGE_BETA_ASSEMBLY,
+    VIEW_BETA_CLEARANCE,
+    MANAGE_BETA_CLEARANCE,
 }
 
 ROLE_PERMISSIONS = {
@@ -351,6 +405,30 @@ PERMISSION_GROUPS = [
             MANAGE_MATERIALS,
             VIEW_FRAMES,
             MANAGE_FRAMES,
+        ],
+    },
+    {
+        "id": "beta_workshops",
+        "label": "واحدهای کارگاهی (بتا)",
+        "permissions": [
+            VIEW_BETA_CARPENTRY,
+            MANAGE_BETA_CARPENTRY,
+            VIEW_BETA_PAINT,
+            MANAGE_BETA_PAINT,
+            VIEW_BETA_UPHOLSTERY,
+            MANAGE_BETA_UPHOLSTERY,
+            VIEW_BETA_FABRIC,
+            MANAGE_BETA_FABRIC,
+            VIEW_BETA_QC,
+            MANAGE_BETA_QC,
+            VIEW_BETA_FOAM,
+            MANAGE_BETA_FOAM,
+            VIEW_BETA_CUSHION,
+            MANAGE_BETA_CUSHION,
+            VIEW_BETA_ASSEMBLY,
+            MANAGE_BETA_ASSEMBLY,
+            VIEW_BETA_CLEARANCE,
+            MANAGE_BETA_CLEARANCE,
         ],
     },
     {

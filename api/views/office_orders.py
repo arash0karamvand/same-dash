@@ -1,10 +1,10 @@
 """API صف اداری — جدول جدا؛ فقط پس از تایید سرپرست شعبه."""
 
 from api.helpers import api_view, fail, parse_json, success
-from api.serializers import office_order_to_dict
+from api.serializers import factory_order_to_dict, office_order_to_dict
 from auth.org_roles import is_executive_user
 from auth.permissions import APPROVE_SALE_ACCOUNTING, VIEW_SALES, has_permission
-from backend.models import OfficeOrder, Sale
+from backend.models import FactoryOrder, OfficeOrder, Sale
 from logic.audit import log_action
 from logic.office_orders import (
     aggregate_office_orders,
@@ -16,6 +16,30 @@ from logic.office_orders import (
 from logic.pagination import paginate
 from logic.record_filter import apply_office_order_search_filters
 from logic.sale_workflow import approve_office_order, reject_office_order, rollback_office_workflow_step
+
+
+@api_view("POST")
+def office_factory_work_create(request):
+    if not has_permission(request.user, APPROVE_SALE_ACCOUNTING) and not is_executive_user(request.user):
+        return fail("Permission denied", status=403)
+    from logic.receive_kinds import create_office_factory_work
+
+    try:
+        sale = create_office_factory_work(request.user, parse_json(request) or {})
+    except ValueError as exc:
+        return fail(str(exc), status=400)
+    log_action(
+        request.user,
+        "create",
+        f"ثبت کار کارخانه از اداری — #{sale.id} — {sale.receive_kind}",
+        entity_type="Sale",
+        entity_id=sale.id,
+    )
+    factory = FactoryOrder.objects.filter(pk=sale.pk).first() or sale
+    return success(
+        factory_order_to_dict(factory, include_lines=True, user=request.user),
+        status=201,
+    )
 
 
 @api_view("GET")

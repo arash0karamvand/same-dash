@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import Icon from './icons/Icon'
 import { iconForNavItem, iconForPortal } from '../config/iconMap'
 import { canSeePortal, getVisiblePortalChildren } from '../utils/permissions'
+import { groupNavItems } from '../utils/navGroups'
 import { cn, tw } from '../styles/tw'
 
 export default function MobileMenuSheet({
@@ -71,23 +72,30 @@ export default function MobileMenuSheet({
                   <span>{p.label}</span>
                 </div>
                 <div className={tw.mobileMenuPortalItems}>
-                  {items.map((item) => {
-                    const isActive = currentPortal === p.id && currentPage === item.key
-                    return (
-                      <button
-                        key={item.key}
-                        type="button"
-                        className={cn(tw.mobileMenuNavItem, isActive && tw.mobileMenuNavItemActive)}
-                        aria-current={isActive ? 'page' : undefined}
-                        onClick={() => handleNavigate(p.id, item.key)}
-                      >
-                        <span className={cn(tw.mobileMenuNavIcon, isActive && 'text-accent opacity-100')}>
-                          <Icon name={iconForNavItem(item)} size={18} />
-                        </span>
-                        <span>{item.label}</span>
-                      </button>
-                    )
-                  })}
+                  {groupNavItems(items).map((group) => (
+                    <div key={group.label || 'general'} className={tw.mobileMenuNavGroup}>
+                      {group.label && (
+                        <p className={tw.mobileMenuNavGroupLabel}>{group.label}</p>
+                      )}
+                      {group.items.map((item) => {
+                        const isActive = currentPortal === p.id && currentPage === item.key
+                        return (
+                          <button
+                            key={item.key}
+                            type="button"
+                            className={cn(tw.mobileMenuNavItem, isActive && tw.mobileMenuNavItemActive)}
+                            aria-current={isActive ? 'page' : undefined}
+                            onClick={() => handleNavigate(p.id, item.key)}
+                          >
+                            <span className={cn(tw.mobileMenuNavIcon, isActive && 'text-accent opacity-100')}>
+                              <Icon name={iconForNavItem(item)} size={18} />
+                            </span>
+                            <span>{item.label}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ))}
                 </div>
               </section>
             )

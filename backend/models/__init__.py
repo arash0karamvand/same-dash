@@ -51,7 +51,29 @@ from .frames import (
     FrameServiceComponent,
     FrameServiceTemplate,
     FrameWoodRequirement,
+    FurnitureWorkset,
+    FurnitureWorksetPiece,
 )
+from .beta_workshops import (
+    BetaCarpentryAttendance,
+    BetaCarpentryExternalService,
+    BetaCarpentryFreight,
+    BetaCarpentryOrder,
+    BetaCarpentryTool,
+    BetaCarpentryWoodPurchase,
+    BetaCarpentryWorkshop,
+    BetaAssemblyJob,
+    BetaClearanceJob,
+    BetaCushionJob,
+    BetaFabricDispatch,
+    BetaFabricNeed,
+    BetaFabricRoll,
+    BetaFoamJob,
+    BetaPaintOrder,
+    BetaQcInspection,
+    BetaUpholsteryJob,
+)
+from .workshop_recipes import WorkshopRecipe, WorkshopRecipeMaterial
 from .config import (
     AccountingMode,
     ApprovalStatus,

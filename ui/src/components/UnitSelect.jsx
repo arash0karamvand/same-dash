@@ -4,6 +4,7 @@ import { fromLegacy } from '../styles/tw.js'
 export const MATERIAL_UNIT_PRESETS = [
   { value: 'متر', label: 'متر' },
   { value: 'لیتر', label: 'لیتر' },
+  { value: 'گالن', label: 'گالن' },
   { value: 'عدد', label: 'عدد' },
   { value: 'کیلوگرم', label: 'کیلوگرم' },
 ]

@@ -6,6 +6,50 @@ from backend.soft_delete import SoftDeleteModel
 from .base import QUANTITY_KWARGS
 
 
+class FurnitureWorkset(SoftDeleteModel):
+    """دست مبلمان — ترکیب قطعات با تعداد."""
+
+    name = models.CharField("نام دست", max_length=150)
+    design_style = models.CharField("سبک طراحی", max_length=32, blank=True, default="")
+    seat_count = models.PositiveIntegerField("تعداد نفر", null=True, blank=True)
+    is_active = models.BooleanField("فعال", default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+class FurnitureWorksetPiece(models.Model):
+    """یک نوع قطعه با تعداد داخل دست."""
+
+    workset = models.ForeignKey(
+        FurnitureWorkset,
+        on_delete=models.CASCADE,
+        related_name="pieces",
+    )
+    piece_kind = models.CharField("نوع قطعه", max_length=32)
+    arm_style = models.CharField("حالت دسته", max_length=16)
+    quantity = models.PositiveIntegerField("تعداد", default=1)
+    sort_order = models.PositiveIntegerField("ترتیب", default=0)
+
+    class Meta:
+        ordering = ["sort_order", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workset", "piece_kind", "arm_style"],
+                name="uq_workset_piece_arm",
+            ),
+            models.CheckConstraint(condition=models.Q(quantity__gt=0), name="ck_workset_piece_qty"),
+        ]
+
+    def __str__(self):
+        return f"{self.workset_id}:{self.piece_kind}:{self.arm_style}×{self.quantity}"
+
+
 class Frame(SoftDeleteModel):
     DESIGN_MODERN = "modern"
     DESIGN_CLASSIC = "classic"
@@ -35,6 +79,53 @@ class Frame(SoftDeleteModel):
         (WOOD_ASH_RUSSIAN_MIX, "ترکیب راش و روس"),
     ]
 
+    PIECE_ARMCHAIR = "armchair"
+    PIECE_SOFA_2 = "sofa_2"
+    PIECE_SOFA_3 = "sofa_3"
+    PIECE_SOFA_4 = "sofa_4"
+    PIECE_SOFA_5 = "sofa_5"
+    PIECE_CHAISE = "chaise"
+    PIECE_POUF = "pouf"
+    PIECE_BENCH = "bench"
+    PIECE_LOVESEAT = "loveseat"
+    PIECE_SIDE_TABLE = "side_table"
+    PIECE_COFFEE_TABLE = "coffee_table"
+    PIECE_KIND_CHOICES = [
+        (PIECE_ARMCHAIR, "مبل تک"),
+        (PIECE_SOFA_2, "کاناپه ۲ نفره"),
+        (PIECE_SOFA_3, "کاناپه ۳ نفره"),
+        (PIECE_SOFA_4, "کاناپه ۴ نفره"),
+        (PIECE_SOFA_5, "کاناپه ۵ نفره"),
+        (PIECE_CHAISE, "شزلون"),
+        (PIECE_POUF, "پاف"),
+        (PIECE_BENCH, "بنچ"),
+        (PIECE_LOVESEAT, "لاو ست"),
+        (PIECE_SIDE_TABLE, "کنار مبلی"),
+        (PIECE_COFFEE_TABLE, "جلو مبلی"),
+    ]
+
+    ARM_NONE = "none"
+    ARM_ONE = "one"
+    ARM_TWO = "two"
+    ARM_ONE_LEFT = "one_left"
+    ARM_ONE_RIGHT = "one_right"
+    ARM_STYLE_CHOICES = [
+        (ARM_NONE, "بدون دسته"),
+        (ARM_ONE, "تک‌دسته"),
+        (ARM_TWO, "دو دسته"),
+        (ARM_ONE_LEFT, "تک‌دسته چپ"),
+        (ARM_ONE_RIGHT, "تک‌دسته راست"),
+    ]
+
+    workset = models.ForeignKey(
+        FurnitureWorkset,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="frames",
+    )
+    piece_kind = models.CharField("نوع قطعه", max_length=32, blank=True, default="")
+    arm_style = models.CharField("حالت دسته", max_length=16, blank=True, default="")
     name = models.CharField("نام کلاف", max_length=150)
     design_style = models.CharField(
         "سبک طراحی", max_length=32, choices=DESIGN_STYLE_CHOICES, default=DESIGN_MODERN

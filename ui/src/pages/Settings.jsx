@@ -15,6 +15,14 @@ const LOOKUP_CATEGORIES = [
   { id: 'order_status', label: 'وضعیت سفارش' },
   { id: 'discount_type', label: 'نوع تخفیف' },
   { id: 'staff_kind', label: 'نوع پرسنل' },
+  { id: 'beta_workshop_kind', label: 'نوع واحد نجاری (بتا)' },
+  { id: 'beta_carpentry_kind', label: 'نوع دستور نجاری (بتا)' },
+  { id: 'beta_carpentry_status', label: 'وضعیت دستور نجاری (بتا)' },
+  { id: 'beta_paint_kind', label: 'نوع سفارش رنگ (بتا)' },
+  { id: 'beta_paint_stage', label: 'مراحل خط رنگ (بتا)' },
+  { id: 'beta_upholstery_stage', label: 'مراحل رویه‌کوبی (بتا)' },
+  { id: 'beta_qc_status', label: 'وضعیت کنترل کیفیت (بتا)' },
+  { id: 'beta_qc_grade', label: 'گریدهای کنترل کیفیت (بتا)' },
 ]
 
 const EMPTY_BRANCH = { code: '', label: '', color: 'var(--accent)', sort_order: 0, work_start: '', work_end: '' }
