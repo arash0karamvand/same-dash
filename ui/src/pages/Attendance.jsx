@@ -12,6 +12,26 @@ import { formatDate } from '../utils/format'
 import { todayIso } from '../utils/jalali'
 import { fromLegacy } from '../styles/tw.js'
 
+function attendanceStatusLabel(r) {
+  const base = r.status_display || r.status
+  if (r.status === 'leave') {
+    const pay = r.leave_pay_type === 'unpaid' ? 'بدون حقوق' : r.leave_pay_type === 'paid' ? 'با حقوق' : ''
+    const hours = r.leave_hours ? `${r.leave_hours} ساعت` : ''
+    const extra = [pay, hours].filter(Boolean).join(' — ')
+    return extra ? `${base} (${extra})` : base
+  }
+  if (r.status === 'mission' && r.mission_dest_label) {
+    return `${base} — ${r.mission_dest_label}`
+  }
+  return base
+}
+
+function statusBadgeColor(status) {
+  if (status === 'present') return 'var(--success)'
+  if (status === 'leave' || status === 'mission') return 'var(--warning)'
+  return 'var(--danger)'
+}
+
 const EMPTY = { seller_id: '', date: todayIso(), status: 'present', notes: '', work_branch: '' }
 
 export default function Attendance() {
@@ -151,6 +171,7 @@ export default function Attendance() {
                 { value: 'present', label: 'حاضر' },
                 { value: 'absent', label: 'غایب' },
                 { value: 'leave', label: 'مرخصی' },
+                { value: 'mission', label: 'ماموریت' },
               ]}
               placeholder="همه"
             />
@@ -184,7 +205,7 @@ export default function Attendance() {
                       <td>{r.seller_name}</td>
                       <td>{r.work_branch_label}</td>
                       <td>{formatDate(r.date)}</td>
-                      <td><Badge color={r.status === 'present' ? 'var(--success)' : 'var(--danger)'}>{r.status_display}</Badge></td>
+                      <td><Badge color={statusBadgeColor(r.status)}>{attendanceStatusLabel(r)}</Badge></td>
                       <td><Badge color={r.approval_status === 'approved' ? 'var(--success)' : 'var(--warning)'}>{r.approval_status_display}</Badge></td>
                       <td className={fromLegacy("row-actions")}>
                         <button type="button" className={fromLegacy("link danger")} onClick={() => remove(r.id)}>حذف</button>
@@ -203,7 +224,7 @@ export default function Attendance() {
                   </div>
                   <div className={fromLegacy("m-card-grid")}>
                     <div><span className={fromLegacy("muted")}>شعبه کاری</span>{r.work_branch_label}</div>
-                    <div><span className={fromLegacy("muted")}>وضعیت</span><Badge color={r.status === 'present' ? 'var(--success)' : 'var(--danger)'}>{r.status_display}</Badge></div>
+                    <div><span className={fromLegacy("muted")}>وضعیت</span><Badge color={statusBadgeColor(r.status)}>{attendanceStatusLabel(r)}</Badge></div>
                     <div><span className={fromLegacy("muted")}>تایید</span><Badge color={r.approval_status === 'approved' ? 'var(--success)' : 'var(--warning)'}>{r.approval_status_display}</Badge></div>
                   </div>
                   <div className={fromLegacy("m-card-actions")}>
@@ -247,6 +268,7 @@ export default function Attendance() {
                 { value: 'present', label: 'حاضر' },
                 { value: 'absent', label: 'غایب' },
                 { value: 'leave', label: 'مرخصی' },
+                { value: 'mission', label: 'ماموریت' },
               ]}
             />
           </Field>

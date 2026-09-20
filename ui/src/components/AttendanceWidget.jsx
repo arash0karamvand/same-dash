@@ -82,6 +82,12 @@ export default function AttendanceWidget({ onStatusChange }) {
   let message = ''
   if (status?.on_leave) {
     message = 'شما امروز مرخصی هستید.'
+  } else if (status?.on_mission) {
+    const dest = status.mission_dest_label ? ` — ${status.mission_dest_label}` : ''
+    message = `شما امروز در ماموریت هستید${dest}.`
+  } else if (status?.on_hourly_leave) {
+    const hours = status.hourly_leave_hours ? ` (${status.hourly_leave_hours} ساعت)` : ''
+    message = `امروز مرخصی ساعتی دارید${hours}.`
   } else if (record?.check_out_at) {
     message = 'کار امروز شما به پایان رسید.'
   } else if (record?.check_in_at && record.approval_status === 'pending') {

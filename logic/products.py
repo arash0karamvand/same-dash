@@ -82,6 +82,7 @@ def product_to_dict(p, include_variants=True, *, audience="sales"):
         "description": p.description,
         "unit": p.unit,
         "attributes": p.attributes or {},
+        "frame_id": p.frame_id,
         "is_active": p.is_active,
         "category_id": p.category_id,
         "category": category_to_dict(p.category) if p.category_id else None,
@@ -376,6 +377,9 @@ def filter_products(queryset, *, search="", category_id=None, active_only=True):
 
 def resolve_line_item_from_catalog(item):
     """نگاشت ردیف فروش از کاتالوگ — قیمت فقط از تعریف محصول."""
+    from backend.models import Frame, FrameModel
+    from logic.frames import default_frame_config
+
     product_id = item.get("product_id")
     variant_id = item.get("variant_id")
     if not product_id and not variant_id:
@@ -389,6 +393,9 @@ def resolve_line_item_from_catalog(item):
     product_model = ""
     fabric = ""
     price = Decimal(0)
+    frame = None
+    frame_model = None
+    frame_config = item.get("frame_config") if isinstance(item.get("frame_config"), dict) else {}
 
     if variant_id:
         variant = ProductVariant.objects.select_related("product").filter(pk=variant_id, is_active=True).first()
@@ -413,6 +420,23 @@ def resolve_line_item_from_catalog(item):
     if price <= 0:
         raise ValueError(f"محصول «{name}» قیمت ندارد — ابتدا در بخش محصولات قیمت را تنظیم کنید.")
 
+    frame_id = item.get("frame_id") or product.frame_id
+    if frame_id:
+        frame = Frame.objects.filter(pk=frame_id, is_deleted=False, is_active=True).first()
+        if not frame:
+            raise ValueError("کلاف انتخاب‌شده یافت نشد.")
+        frame_model_id = item.get("frame_model_id")
+        if frame_model_id:
+            frame_model = FrameModel.objects.filter(
+                pk=frame_model_id, frame=frame, is_active=True
+            ).first()
+            if not frame_model:
+                raise ValueError("مدل کلاف انتخاب‌شده یافت نشد.")
+        elif frame.models.filter(is_active=True).exists():
+            raise ValueError("مدل کلاف را انتخاب کنید.")
+        if not frame_config:
+            frame_config = default_frame_config(frame)
+
     return {
         "product": product,
         "variant": variant,
@@ -423,6 +447,9 @@ def resolve_line_item_from_catalog(item):
         "color_hex": color_hex,
         "unit_price": price,
         "quantity": int(item.get("quantity") or 1),
+        "frame": frame,
+        "frame_model": frame_model,
+        "frame_config": frame_config or {},
     }
 
 

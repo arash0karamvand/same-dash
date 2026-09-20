@@ -196,7 +196,20 @@ class StaffAttendance(ReferenceCodeModel, SoftDeleteModel):
         "status": "status_ref",
         "approval_status": "approval_status_ref",
     }
-    STATUS_CHOICES = [("present", "حاضر"), ("absent", "غایب"), ("leave", "مرخصی")]
+    STATUS_CHOICES = [("present", "حاضر"), ("absent", "غایب"), ("leave", "مرخصی"), ("mission", "ماموریت")]
+    LEAVE_PAY_PAID = "paid"
+    LEAVE_PAY_UNPAID = "unpaid"
+    LEAVE_PAY_CHOICES = [(LEAVE_PAY_PAID, "با حقوق"), (LEAVE_PAY_UNPAID, "بدون حقوق")]
+    MISSION_DEST_BRANCH = "branch"
+    MISSION_DEST_WAREHOUSE = "warehouse"
+    MISSION_DEST_FACTORY = "factory"
+    MISSION_DEST_OUTSIDE = "outside"
+    MISSION_DEST_CHOICES = [
+        (MISSION_DEST_BRANCH, "شعبه"),
+        (MISSION_DEST_WAREHOUSE, "انبار"),
+        (MISSION_DEST_FACTORY, "کارخانه"),
+        (MISSION_DEST_OUTSIDE, "خارج از شرکت"),
+    ]
     APPROVAL_CHOICES = [
         ("pending", "در انتظار تایید"),
         ("approved", "تایید شده"),
@@ -223,6 +236,11 @@ class StaffAttendance(ReferenceCodeModel, SoftDeleteModel):
         on_delete=models.PROTECT,
     )
     notes = models.CharField(max_length=255, blank=True)
+    leave_pay_type = models.CharField(max_length=16, blank=True, choices=LEAVE_PAY_CHOICES)
+    leave_hours = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+    mission_dest_kind = models.CharField(max_length=20, blank=True, choices=MISSION_DEST_CHOICES)
+    mission_dest_code = models.CharField(max_length=80, blank=True)
+    mission_dest_label = models.CharField(max_length=160, blank=True)
     recorded_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         null=True,

@@ -30,7 +30,12 @@ from logic.menu_config import (
     update_menu_section,
 )
 from logic.page_guides import get_page_guides_map, upsert_page_guide
-from logic.attendance_settings import get_attendance_settings, set_attendance_enforced
+from logic.attendance_settings import (
+    get_attendance_settings,
+    set_attendance_enforced,
+    set_attendance_work_hours,
+)
+from logic.ranking_settings import get_ranking_settings, set_ranking_weights
 from logic.ticket_grades import get_ticket_grades, set_ticket_grades
 from logic.inventory_settings import (
     can_toggle_manual_stock_lock,
@@ -63,6 +68,7 @@ def app_config(request):
         "attendance_settings": get_attendance_settings(),
         "inventory_settings": get_inventory_settings(),
         "ticket_grades": get_ticket_grades(),
+        "ranking_settings": get_ranking_settings(),
     })
 
 
@@ -242,6 +248,22 @@ def page_guide_detail(request, code):
 
 
 @api_view("GET", "PUT")
+def ranking_settings(request):
+    if request.method == "GET":
+        if not request.user.is_authenticated:
+            return fail("Unauthorized", status=401)
+        return success(get_ranking_settings())
+    denied = _require_admin(request.user)
+    if denied:
+        return denied
+    data = parse_json(request)
+    try:
+        return success(set_ranking_weights(data))
+    except ValueError as exc:
+        return fail(str(exc), status=400)
+
+
+@api_view("GET", "PUT")
 def attendance_settings(request):
     if request.method == "GET":
         if not request.user.is_authenticated:
@@ -251,10 +273,17 @@ def attendance_settings(request):
     if denied:
         return denied
     data = parse_json(request)
-    enabled = data.get("enforced")
-    if enabled is None:
-        enabled = data.get("enabled")
-    return success(set_attendance_enforced(bool(enabled)))
+    try:
+        if "enforced" in data or "enabled" in data:
+            enabled = data.get("enforced")
+            if enabled is None:
+                enabled = data.get("enabled")
+            set_attendance_enforced(bool(enabled))
+        if "work_start" in data or "work_end" in data:
+            set_attendance_work_hours(data.get("work_start"), data.get("work_end"))
+    except ValueError as exc:
+        return fail(str(exc), status=400)
+    return success(get_attendance_settings())
 
 
 @api_view("GET", "PUT")

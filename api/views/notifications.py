@@ -19,6 +19,7 @@ from logic.notifications import (
     receipt_queryset,
     receipt_to_dict,
     send_org_message,
+    send_staff_dispatch,
     sent_queryset,
     unread_count,
 )
@@ -114,10 +115,13 @@ def notification_read_all(request):
 def notification_recipients(request):
     if not request.user.is_authenticated:
         return fail("Unauthorized", status=401)
+    from logic.module_catalog import can_send_leave_mission
+
     return success(
         {
             "results": list_message_recipients(request.user),
             "departments": list_recipient_departments(),
+            "can_send_leave_mission": can_send_leave_mission(request.user),
         }
     )
 
@@ -143,17 +147,37 @@ def notification_messages(request):
     if not request.user.is_authenticated:
         return fail("Unauthorized", status=401)
     data = parse_json(request)
+    kind = (data.get("kind") or "ticket").strip()
     try:
-        note = send_org_message(
-            sender=request.user,
-            to_user_id=data.get("to_user_id"),
-            to_department=data.get("to_department"),
-            sale_id=data.get("sale_id"),
-            kind=data.get("kind") or "ticket",
-            title=data.get("title") or "",
-            body=data.get("body") or "",
-            grade=data.get("grade"),
-        )
+        if kind in ("leave", "mission"):
+            note = send_staff_dispatch(
+                sender=request.user,
+                to_user_id=data.get("to_user_id"),
+                kind=kind,
+                title=data.get("title") or "",
+                body=data.get("body") or "",
+                pay_type=data.get("pay_type") or "",
+                duration_unit=data.get("duration_unit") or "days",
+                hours=data.get("hours"),
+                start_date=data.get("start_date"),
+                end_date=data.get("end_date"),
+                dest_kind=data.get("dest_kind") or "",
+                dest_code=data.get("dest_code") or "",
+                dest_label=data.get("dest_label") or "",
+            )
+        else:
+            note = send_org_message(
+                sender=request.user,
+                to_user_id=data.get("to_user_id"),
+                to_department=data.get("to_department"),
+                sale_id=data.get("sale_id"),
+                kind=kind,
+                title=data.get("title") or "",
+                body=data.get("body") or "",
+                grade=data.get("grade"),
+            )
+    except PermissionError as exc:
+        return fail(str(exc), status=403)
     except ValueError as exc:
         return fail(str(exc), status=400)
     return success({"id": note.id, "title": note.title, "action_type": note.action_type, "payload": note.payload})

@@ -384,6 +384,14 @@ PORTAL_MODULE_SPECS = [
                 [P.VIEW_WAREHOUSE_ORDERS, P.MANAGE_WAREHOUSE_ORDERS, P.APPROVE_SALE_ACCOUNTING],
             ),
             _mod(
+                "office_frames",
+                "کلاف‌ها",
+                "🪵",
+                "frames",
+                [P.VIEW_FRAMES, P.MANAGE_FRAMES, P.APPROVE_SALE_ACCOUNTING],
+                [P.VIEW_FRAMES, P.MANAGE_FRAMES, P.APPROVE_SALE_ACCOUNTING],
+            ),
+            _mod(
                 "office_filter",
                 "فیلتر",
                 "🔍",
@@ -529,6 +537,48 @@ def portal_modules_for_matrix(assignable_only=False, *, include_empty_modules=Fa
             }
         )
     return portals
+
+
+def can_see_managers_portal(user):
+    """کاربرانی که پورتال مدیران را در منو می‌بینند."""
+    return _has_managers_portal_module(user)
+
+
+def can_send_leave_mission(user):
+    """ارسال مرخصی/ماموریت — پورتال مدیران، بدون نشت از صفحه فیلتر داشبورد."""
+    return _has_managers_portal_module(
+        user,
+        skip_module_ids={"managers_filter", "managers_dashboard", "managers_notifications"},
+    )
+
+
+def _has_managers_portal_module(user, *, skip_module_ids=None):
+    if not user or not getattr(user, "is_authenticated", False):
+        return False
+
+    from auth.org_roles import is_executive_user
+    from auth.permissions import has_permission, is_system_admin
+
+    if is_executive_user(user):
+        return True
+
+    skip = skip_module_ids or set()
+    managers = next((portal for portal in PORTAL_MODULE_SPECS if portal["id"] == "managers"), None)
+    if not managers:
+        return False
+    for mod in managers["modules"]:
+        if mod.get("id") in skip:
+            continue
+        menu = [code for code in (mod.get("menu_permissions") or []) if code]
+        if not menu:
+            continue
+        if mod.get("executive_only"):
+            continue
+        if mod.get("system_admin") and not is_system_admin(user):
+            continue
+        if any(has_permission(user, code) for code in menu):
+            return True
+    return False
 
 
 def module_tree_for_config():

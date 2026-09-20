@@ -1,6 +1,6 @@
 """اعلان‌های درون‌برنامه‌ای — ایجاد، فیلتر بر اساس دسترسی، خواندن و اقدام."""
 
-from datetime import date as date_cls
+from datetime import date as date_cls, timedelta
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -21,6 +21,22 @@ ORG_ACTION_TYPES = (
     Notification.ACTION_ORG_TICKET,
     Notification.ACTION_ORG_RESPONSIBILITY,
 )
+
+DISPATCH_ACTION_TYPES = (
+    Notification.ACTION_ORG_LEAVE,
+    Notification.ACTION_ORG_MISSION,
+)
+
+SENT_ACTION_TYPES = ORG_ACTION_TYPES + DISPATCH_ACTION_TYPES
+
+MAX_DISPATCH_DAYS = 90
+LEAVE_PAY_LABELS = {"paid": "با حقوق", "unpaid": "بدون حقوق"}
+MISSION_DEST_LABELS = {
+    "branch": "شعبه",
+    "warehouse": "انبار",
+    "factory": "کارخانه",
+    "outside": "خارج از شرکت",
+}
 
 SECTION_PAGE_KEYS = {
     Notification.SECTION_ATTENDANCE: {"attendance"},
@@ -107,7 +123,7 @@ def sent_queryset(user):
     return (
         Notification.objects.filter(
             created_by=user,
-            action_type__in=ORG_ACTION_TYPES,
+            action_type__in=SENT_ACTION_TYPES,
         )
         .select_related("created_by")
         .order_by("-created_at", "-id")
@@ -118,7 +134,7 @@ def all_threads_queryset(user):
     if not is_system_admin(user):
         return Notification.objects.none()
     return (
-        Notification.objects.filter(action_type__in=ORG_ACTION_TYPES)
+        Notification.objects.filter(action_type__in=SENT_ACTION_TYPES)
         .select_related("created_by")
         .order_by("-created_at", "-id")
     )
@@ -569,6 +585,232 @@ def send_org_message(
         action_type=action,
         payload=payload,
         recipients=recipients,
+        created_by=sender,
+    )
+
+
+def _parse_dispatch_date(value, *, field_label):
+    from django.utils.dateparse import parse_date as django_parse_date
+
+    if isinstance(value, date_cls):
+        return value
+    parsed = django_parse_date((value or "").strip() if isinstance(value, str) else "")
+    if not parsed:
+        raise ValueError(f"{field_label} را وارد کنید.")
+    return parsed
+
+
+def _dispatch_days(start, end):
+    if end < start:
+        raise ValueError("تاریخ پایان نباید قبل از شروع باشد.")
+    days = []
+    cursor = start
+    while cursor <= end:
+        days.append(cursor)
+        cursor += timedelta(days=1)
+        if len(days) > MAX_DISPATCH_DAYS:
+            raise ValueError(f"بازه نمی‌تواند بیشتر از {MAX_DISPATCH_DAYS} روز باشد.")
+    return days
+
+
+def _format_hours_label(hours):
+    text = f"{hours:g}" if isinstance(hours, float) else str(hours)
+    if text.endswith(".0"):
+        text = text[:-2]
+    return text
+
+
+def _resolve_mission_destination(dest_kind, dest_code, dest_label):
+    from backend.models import Branch, StaffAttendance, Warehouse
+
+    kind = (dest_kind or "").strip()
+    code = (dest_code or "").strip()
+    label = (dest_label or "").strip()
+    if kind not in dict(StaffAttendance.MISSION_DEST_CHOICES):
+        raise ValueError("مقصد ماموریت نامعتبر است.")
+    if kind == StaffAttendance.MISSION_DEST_BRANCH:
+        branch = Branch.objects.filter(code=code, is_active=True).first()
+        if branch is None:
+            raise ValueError("شعبه مقصد یافت نشد.")
+        return kind, branch.code, branch.label, branch.code
+    if kind == StaffAttendance.MISSION_DEST_WAREHOUSE:
+        try:
+            warehouse_id = int(code)
+        except (TypeError, ValueError):
+            raise ValueError("انبار مقصد را انتخاب کنید.") from None
+        warehouse = Warehouse.objects.filter(pk=warehouse_id, is_active=True).first()
+        if warehouse is None:
+            raise ValueError("انبار مقصد یافت نشد.")
+        return kind, str(warehouse.id), warehouse.label, None
+    if kind == StaffAttendance.MISSION_DEST_FACTORY:
+        return kind, "", "کارخانه", None
+    if not label:
+        raise ValueError("محل ماموریت خارج از شرکت را وارد کنید.")
+    return kind, "", label, None
+
+
+def _leave_title(*, pay_type, duration_unit, hours, days):
+    pay_label = LEAVE_PAY_LABELS.get(pay_type, pay_type)
+    if duration_unit == "hours":
+        return f"مرخصی {pay_label} — {_format_hours_label(hours)} ساعت"
+    count = len(days)
+    return f"مرخصی {pay_label} — {count} روز"
+
+
+def _mission_title(dest_kind, dest_label):
+    if dest_kind == "outside":
+        return f"ماموریت خارج از شرکت — {dest_label}"
+    kind_label = MISSION_DEST_LABELS.get(dest_kind, dest_kind)
+    if dest_kind == "factory":
+        return "ماموریت به کارخانه"
+    return f"ماموریت به {kind_label} {dest_label}".strip()
+
+
+@transaction.atomic
+def send_staff_dispatch(
+    *,
+    sender,
+    to_user_id=None,
+    kind="leave",
+    title="",
+    body="",
+    pay_type="",
+    duration_unit="days",
+    hours=None,
+    start_date=None,
+    end_date=None,
+    dest_kind="",
+    dest_code="",
+    dest_label="",
+):
+    """ارسال مرخصی یا ماموریت به یک فرد — فقط پورتال مدیران."""
+    from logic.attendance import upsert_manager_attendance
+    from logic.attendance_settings import work_day_hours
+    from logic.module_catalog import can_send_leave_mission
+    from logic.sellers import ensure_seller_for_user, get_seller_for_user
+    from backend.models import StaffAttendance
+
+    if not can_send_leave_mission(sender):
+        raise PermissionError("فقط کاربران بخش مدیران می‌توانند مرخصی یا ماموریت ارسال کنند.")
+
+    kind = (kind or "").strip()
+    if kind not in ("leave", "mission"):
+        raise ValueError("نوع پیام نامعتبر است.")
+    try:
+        target_id = int(to_user_id)
+    except (TypeError, ValueError):
+        raise ValueError("گیرنده را انتخاب کنید.") from None
+    if target_id == sender.id:
+        raise ValueError("ارسال به خود مجاز نیست.")
+
+    User = get_user_model()
+    target = (
+        User.objects.filter(pk=target_id, is_active=True)
+        .exclude(groups__name=roles.PENDING)
+        .first()
+    )
+    if not target:
+        raise ValueError("گیرنده یافت نشد.")
+
+    seller = get_seller_for_user(target) or ensure_seller_for_user(target)
+    if seller is None:
+        raise ValueError("برای این کاربر پرونده پرسنل یافت نشد.")
+
+    start = _parse_dispatch_date(start_date, field_label="تاریخ شروع")
+    duration_unit = (duration_unit or "days").strip() or "days"
+    leave_hours = None
+    resolved_kind = dest_kind
+    resolved_code = dest_code
+    resolved_label = dest_label
+    work_branch = seller.branch_id
+    pay = ""
+
+    if kind == "leave":
+        pay = (pay_type or "").strip()
+        if pay not in (StaffAttendance.LEAVE_PAY_PAID, StaffAttendance.LEAVE_PAY_UNPAID):
+            raise ValueError("نوع مرخصی را انتخاب کنید.")
+        if duration_unit not in ("days", "hours"):
+            raise ValueError("مدت مرخصی نامعتبر است.")
+        if duration_unit == "hours":
+            try:
+                leave_hours = Decimal(str(hours))
+            except (TypeError, ValueError, ArithmeticError):
+                raise ValueError("مدت مرخصی ساعتی را وارد کنید.") from None
+            if leave_hours <= 0:
+                raise ValueError("مدت مرخصی ساعتی باید بیشتر از صفر باشد.")
+            day_len = work_day_hours()
+            if day_len is None:
+                raise ValueError("ابتدا ساعت کاری سراسری را در تنظیمات سایت تعیین کنید.")
+            if leave_hours > Decimal(str(day_len)):
+                raise ValueError(f"مرخصی ساعتی نمی‌تواند بیشتر از { _format_hours_label(day_len) } ساعت کاری باشد.")
+            days = [start]
+        else:
+            end = _parse_dispatch_date(end_date or start_date, field_label="تاریخ پایان")
+            days = _dispatch_days(start, end)
+        auto_title = _leave_title(pay_type=pay, duration_unit=duration_unit, hours=float(leave_hours) if leave_hours is not None else None, days=days)
+        action = Notification.ACTION_ORG_LEAVE
+    else:
+        resolved_kind, resolved_code, resolved_label, work_branch_override = _resolve_mission_destination(
+            dest_kind, dest_code, dest_label
+        )
+        if work_branch_override:
+            work_branch = work_branch_override
+        end = _parse_dispatch_date(end_date or start_date, field_label="تاریخ پایان")
+        days = _dispatch_days(start, end)
+        auto_title = _mission_title(resolved_kind, resolved_label)
+        action = Notification.ACTION_ORG_MISSION
+
+    title = (title or "").strip() or auto_title
+    notes = (body or "").strip() or title
+    attendance_ids = []
+    for day in days:
+        record, _created = upsert_manager_attendance(
+            seller,
+            day,
+            "leave" if kind == "leave" else "mission",
+            sender,
+            branch=work_branch,
+            notes=notes[:255],
+            leave_pay_type=pay if kind == "leave" else "",
+            leave_hours=leave_hours if kind == "leave" else None,
+            mission_dest_kind=resolved_kind if kind == "mission" else "",
+            mission_dest_code=resolved_code if kind == "mission" else "",
+            mission_dest_label=resolved_label if kind == "mission" else "",
+        )
+        attendance_ids.append(record.id)
+
+    payload = {
+        "kind": kind,
+        "status": "applied",
+        "to_user_id": target.id,
+        "to_name": _user_display(target),
+        "from_user_id": sender.id,
+        "from_name": _user_display(sender),
+        "start_date": days[0].isoformat(),
+        "end_date": days[-1].isoformat(),
+        "attendance_ids": attendance_ids,
+        "seller_id": seller.id,
+    }
+    if kind == "leave":
+        payload.update({
+            "pay_type": pay,
+            "duration_unit": duration_unit,
+            "hours": float(leave_hours) if leave_hours is not None else None,
+        })
+    else:
+        payload.update({
+            "dest_kind": resolved_kind,
+            "dest_code": resolved_code,
+            "dest_label": resolved_label,
+        })
+
+    return create_notification(
+        section=Notification.SECTION_ORG,
+        title=title[:160],
+        body=(body or "").strip(),
+        action_type=action,
+        payload=payload,
+        recipients=[target],
         created_by=sender,
     )
 

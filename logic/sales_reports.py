@@ -20,6 +20,7 @@ from auth.permissions import (
 )
 from backend.models import Sale
 from logic.employee_ranking import build_employee_ranking
+from logic.ranking_settings import get_ranking_settings
 from logic.jalali import date_to_jalali
 from logic.sale_workflow import STAGE_PENDING_BRANCH
 from logic.sales_day import (
@@ -337,6 +338,7 @@ def build_employee_ranking_report(params):
     params = _params_dict(params)
     period, year, month, day = parse_period_params(params)
     branch = (params.get("branch") or "").strip() or None
+    weights = get_ranking_settings()
     qs = Sale.objects.select_related("recorded_by")
     results = build_employee_ranking(
         qs,
@@ -345,6 +347,7 @@ def build_employee_ranking_report(params):
         jm=month if period in ("day", "month") else None,
         jd=day if period == "day" else None,
         branch=branch,
+        weights=weights,
     )
     total = sum(item["total_final"] for item in results)
     return {
@@ -354,5 +357,9 @@ def build_employee_ranking_report(params):
         "jalali_day": day if period == "day" else None,
         "branch": branch,
         "total_final": total,
+        "total_discount": sum(item.get("total_discount") or 0 for item in results),
+        "total_pre_delivery": sum(item.get("pre_delivery_paid") or 0 for item in results),
+        "weights": weights,
         "results": results,
     }
+

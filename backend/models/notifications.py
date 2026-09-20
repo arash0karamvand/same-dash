@@ -21,6 +21,8 @@ class Notification(models.Model):
     ACTION_BRANCH_SWITCH = "approve_branch_switch"
     ACTION_ORG_TICKET = "org_ticket"
     ACTION_ORG_RESPONSIBILITY = "org_responsibility"
+    ACTION_ORG_LEAVE = "org_leave"
+    ACTION_ORG_MISSION = "org_mission"
 
     section = models.CharField(max_length=40, choices=SECTION_CHOICES, db_index=True)
     title = models.CharField(max_length=160)

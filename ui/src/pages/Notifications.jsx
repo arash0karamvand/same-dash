@@ -22,19 +22,69 @@ const EMPTY_COMPOSE = {
   sale_id: null,
   invoice_number: '',
   customer_name: '',
+  leave_pay_type: 'paid',
+  leave_duration: 'days',
+  start_date: todayIso(),
+  end_date: todayIso(),
+  hours: '',
+  mission_dest_kind: 'branch',
+  mission_dest_code: '',
+  mission_dest_label: '',
+}
+
+const MISSION_DEST_OPTIONS = [
+  { value: 'branch', label: 'شعبه' },
+  { value: 'warehouse', label: 'انبار' },
+  { value: 'factory', label: 'کارخانه' },
+  { value: 'outside', label: 'خارج از شرکت' },
+]
+
+function kindBadgeLabel(kind) {
+  if (kind === 'responsibility') return 'مسئولیت'
+  if (kind === 'ticket') return 'تیکت'
+  if (kind === 'leave') return 'مرخصی'
+  if (kind === 'mission') return 'ماموریت'
+  return ''
+}
+
+function dispatchSummary(payload) {
+  if (!payload) return ''
+  if (payload.kind === 'leave') {
+    const pay = payload.pay_type === 'unpaid' ? 'بدون حقوق' : 'با حقوق'
+    if (payload.duration_unit === 'hours') {
+      return `${pay} — ${payload.hours} ساعت`
+    }
+    if (payload.start_date && payload.end_date && payload.start_date !== payload.end_date) {
+      return `${pay} — از ${formatDate(payload.start_date)} تا ${formatDate(payload.end_date)}`
+    }
+    return `${pay} — ${formatDate(payload.start_date || payload.end_date)}`
+  }
+  if (payload.kind === 'mission') {
+    const dest = payload.dest_label || ''
+    const when = payload.start_date && payload.end_date && payload.start_date !== payload.end_date
+      ? ` از ${formatDate(payload.start_date)} تا ${formatDate(payload.end_date)}`
+      : payload.start_date ? ` — ${formatDate(payload.start_date)}` : ''
+    if (payload.dest_kind === 'outside') return `خارج از شرکت${dest ? ` — ${dest}` : ''}${when}`
+    if (payload.dest_kind === 'factory') return `کارخانه${when}`
+    if (payload.dest_kind === 'warehouse') return `انبار ${dest}${when}`
+    if (payload.dest_kind === 'branch') return `شعبه ${dest}${when}`
+    return `${dest}${when}`.trim()
+  }
+  return ''
 }
 
 export default function Notifications() {
   useRegisterPageGuide('notifications', PAGE_GUIDE_DEFAULTS.notifications || 'اعلان‌های بخش‌هایی که به آن‌ها دسترسی دارید.')
   const { user } = useAuth()
   const admin = isSystemAdmin(user)
-  const { ticketGrades } = useConfig()
+  const { ticketGrades, branchOptions, stockLocations, attendanceSettings } = useConfig()
   const grades = ticketGrades.grades || []
   const defaultGrade = ticketGrades.default_grade || 3
   const [items, setItems] = useState([])
   const [sections, setSections] = useState([])
   const [recipients, setRecipients] = useState([])
   const [departments, setDepartments] = useState([])
+  const [canSendLeaveMission, setCanSendLeaveMission] = useState(false)
   const [section, setSection] = useState('')
   const [box, setBox] = useState('inbox')
   const [loading, setLoading] = useState(true)
@@ -93,6 +143,7 @@ export default function Notifications() {
       setSections(data.sections || [])
       setRecipients(people.results || [])
       setDepartments(people.departments || [])
+      setCanSendLeaveMission(Boolean(people.can_send_leave_mission))
       setError('')
     } catch (e) {
       setError(e.message)
@@ -104,11 +155,6 @@ export default function Notifications() {
   useEffect(() => { load() }, [load])
 
   const recipientOptions = useMemo(() => {
-    const deptOpts = departments.map((item) => ({
-      value: `dept:${item.id}`,
-      label: item.label,
-      hint: 'دپارتمان',
-    }))
     const peopleOpts = recipients.map((person) => ({
       value: `user:${person.id}`,
       label: person.full_name,
@@ -116,8 +162,28 @@ export default function Notifications() {
         ? `${person.department_label} / ${person.role_label}`
         : person.department_label || ''),
     }))
+    if (compose.kind === 'leave' || compose.kind === 'mission') {
+      return peopleOpts
+    }
+    const deptOpts = departments.map((item) => ({
+      value: `dept:${item.id}`,
+      label: item.label,
+      hint: 'دپارتمان',
+    }))
     return [...deptOpts, ...peopleOpts]
-  }, [departments, recipients])
+  }, [departments, recipients, compose.kind])
+
+  const warehouseOptions = useMemo(
+    () => (stockLocations || [])
+      .filter((item) => item.kind === 'warehouse')
+      .map((item) => ({
+        value: String(item.warehouse_id),
+        label: item.label,
+      })),
+    [stockLocations],
+  )
+
+  const workDayHours = attendanceSettings?.work_day_hours
 
   const markRead = async (item) => {
     if (!item.id || item.box !== 'inbox') return
@@ -259,14 +325,34 @@ export default function Notifications() {
       } else if (target.startsWith('user:')) {
         payload.to_user_id = Number(target.slice(5))
       }
-      if (compose.kind === 'ticket') {
+      if (compose.kind === 'leave' || compose.kind === 'mission') {
+        payload.start_date = compose.start_date
+        payload.end_date = compose.kind === 'leave' && compose.leave_duration === 'hours'
+          ? compose.start_date
+          : compose.end_date
+        if (compose.kind === 'leave') {
+          payload.pay_type = compose.leave_pay_type
+          payload.duration_unit = compose.leave_duration
+          if (compose.leave_duration === 'hours') payload.hours = Number(compose.hours)
+        } else {
+          payload.dest_kind = compose.mission_dest_kind
+          payload.dest_code = compose.mission_dest_code
+          payload.dest_label = compose.mission_dest_label
+        }
+      } else if (compose.kind === 'ticket') {
         payload.sale_id = compose.sale_id
       } else if (compose.sale_id) {
         payload.sale_id = compose.sale_id
       }
       const sentKind = compose.kind
       await notificationsApi.send(payload)
-      setInfo(sentKind === 'responsibility' ? 'مسئولیت ارسال شد.' : 'تیکت ارسال شد.')
+      const infoByKind = {
+        responsibility: 'مسئولیت ارسال شد.',
+        ticket: 'تیکت ارسال شد.',
+        leave: 'مرخصی ثبت و ارسال شد.',
+        mission: 'ماموریت ثبت و ارسال شد.',
+      }
+      setInfo(infoByKind[sentKind] || 'ارسال شد.')
       setCompose({ ...EMPTY_COMPOSE, grade: defaultGrade })
       setError('')
       if (sentKind === 'ticket' && box !== 'sent') {
@@ -338,9 +424,10 @@ export default function Notifications() {
             {items.map((item) => {
               const ticketColor = item.payload?.color
               const kind = item.payload?.kind
-              const kindLabel = kind === 'responsibility' ? 'مسئولیت' : kind === 'ticket' ? 'تیکت' : ''
+              const kindLabel = kindBadgeLabel(kind)
+              const summary = dispatchSummary(item.payload)
               const status = item.status || item.payload?.status
-              const statusLabel = status === 'closed' || status === 'done' ? 'بسته' : kindLabel ? 'باز' : ''
+              const statusLabel = status === 'closed' || status === 'done' ? 'بسته' : kindLabel && (kind === 'ticket' || kind === 'responsibility') ? 'باز' : ''
               const thread = threads[item.notification_id]
               const busy = busyId === item.notification_id || busyId === item.id
               return (
@@ -375,6 +462,7 @@ export default function Notifications() {
                       {item.customer_name ? ` — ${item.customer_name}` : ''}
                     </p>
                   )}
+                  {summary && <p className={fromLegacy('muted small')}>{summary}</p>}
                   {item.body && <p className={fromLegacy('muted')}>{item.body}</p>}
                   <div className="notification-card-actions">
                     {item.box === 'inbox' && (
@@ -454,16 +542,18 @@ export default function Notifications() {
         )}
       </Card>
 
-      <Card title="ارسال تیکت یا مسئولیت">
+      <Card title={canSendLeaveMission ? 'ارسال اعلان' : 'ارسال تیکت یا مسئولیت'}>
         <p className={fromLegacy('muted small')} style={{ marginBottom: 12 }}>
-          تیکت باید به فاکتور وصل شود. گیرنده می‌تواند یک نفر یا یک دپارتمان باشد؛ اولین بازکننده تیکت دپارتمانی مالک گفتگو می‌شود.
+          {canSendLeaveMission
+            ? 'تیکت باید به فاکتور وصل شود. مرخصی و ماموریت فقط به یک نفر ارسال می‌شود و همان لحظه در حضور ثبت می‌گردد.'
+            : 'تیکت باید به فاکتور وصل شود. گیرنده می‌تواند یک نفر یا یک دپارتمان باشد؛ اولین بازکننده تیکت دپارتمانی مالک گفتگو می‌شود.'}
         </p>
         <form className={fromLegacy('form')} onSubmit={sendMessage}>
           <Field label="گیرنده">
             <Select
               value={compose.target}
               onChange={(value) => setCompose({ ...compose, target: value })}
-              placeholder="فرد یا دپارتمان"
+              placeholder={compose.kind === 'leave' || compose.kind === 'mission' ? 'فرد' : 'فرد یا دپارتمان'}
               required
               options={recipientOptions}
             />
@@ -488,8 +578,200 @@ export default function Notifications() {
                 />
                 مسئولیت
               </label>
+              {canSendLeaveMission && (
+                <>
+                  <label>
+                    <input
+                      type="radio"
+                      name="note-kind"
+                      checked={compose.kind === 'leave'}
+                      onChange={() => setCompose({
+                        ...compose,
+                        kind: 'leave',
+                        target: compose.target.startsWith('dept:') ? '' : compose.target,
+                        sale_id: null,
+                        invoice_number: '',
+                        customer_name: '',
+                      })}
+                    />
+                    مرخصی
+                  </label>
+                  <label>
+                    <input
+                      type="radio"
+                      name="note-kind"
+                      checked={compose.kind === 'mission'}
+                      onChange={() => setCompose({
+                        ...compose,
+                        kind: 'mission',
+                        target: compose.target.startsWith('dept:') ? '' : compose.target,
+                        sale_id: null,
+                        invoice_number: '',
+                        customer_name: '',
+                      })}
+                    />
+                    ماموریت
+                  </label>
+                </>
+              )}
             </div>
           </Field>
+          {compose.kind === 'leave' && (
+            <>
+              <Field label="نوع مرخصی">
+                <div className="org-kind-toggle">
+                  <label>
+                    <input
+                      type="radio"
+                      name="leave-pay"
+                      checked={compose.leave_pay_type === 'paid'}
+                      onChange={() => setCompose({ ...compose, leave_pay_type: 'paid' })}
+                    />
+                    با حقوق
+                  </label>
+                  <label>
+                    <input
+                      type="radio"
+                      name="leave-pay"
+                      checked={compose.leave_pay_type === 'unpaid'}
+                      onChange={() => setCompose({ ...compose, leave_pay_type: 'unpaid' })}
+                    />
+                    بدون حقوق
+                  </label>
+                </div>
+              </Field>
+              <Field label="مدت">
+                <div className="org-kind-toggle">
+                  <label>
+                    <input
+                      type="radio"
+                      name="leave-duration"
+                      checked={compose.leave_duration === 'days'}
+                      onChange={() => setCompose({ ...compose, leave_duration: 'days' })}
+                    />
+                    روزانه
+                  </label>
+                  <label>
+                    <input
+                      type="radio"
+                      name="leave-duration"
+                      checked={compose.leave_duration === 'hours'}
+                      onChange={() => setCompose({ ...compose, leave_duration: 'hours' })}
+                    />
+                    ساعتی
+                  </label>
+                </div>
+              </Field>
+              {compose.leave_duration === 'hours' ? (
+                <>
+                  <Field label="تاریخ">
+                    <PersianDateInput
+                      value={compose.start_date}
+                      onChange={(value) => setCompose({ ...compose, start_date: value })}
+                      required
+                    />
+                  </Field>
+                  <Field label={workDayHours ? `ساعت (حداکثر ${workDayHours})` : 'ساعت'}>
+                    <input
+                      className={fromLegacy('ltr')}
+                      type="number"
+                      min="0.5"
+                      step="0.5"
+                      max={workDayHours || undefined}
+                      value={compose.hours}
+                      onChange={(e) => setCompose({ ...compose, hours: e.target.value })}
+                      required
+                    />
+                  </Field>
+                  {!workDayHours && (
+                    <p className={fromLegacy('muted small')}>
+                      برای مرخصی ساعتی ابتدا ساعت کاری سراسری را در تنظیمات سایت تعیین کنید.
+                    </p>
+                  )}
+                </>
+              ) : (
+                <>
+                  <Field label="از تاریخ">
+                    <PersianDateInput
+                      value={compose.start_date}
+                      onChange={(value) => setCompose({ ...compose, start_date: value })}
+                      required
+                    />
+                  </Field>
+                  <Field label="تا تاریخ">
+                    <PersianDateInput
+                      value={compose.end_date}
+                      onChange={(value) => setCompose({ ...compose, end_date: value })}
+                      required
+                    />
+                  </Field>
+                </>
+              )}
+            </>
+          )}
+          {compose.kind === 'mission' && (
+            <>
+              <Field label="مقصد">
+                <Select
+                  value={compose.mission_dest_kind}
+                  onChange={(value) => setCompose({
+                    ...compose,
+                    mission_dest_kind: value,
+                    mission_dest_code: '',
+                    mission_dest_label: value === 'factory' ? 'کارخانه' : '',
+                  })}
+                  options={MISSION_DEST_OPTIONS}
+                />
+              </Field>
+              {compose.mission_dest_kind === 'branch' && (
+                <Field label="شعبه">
+                  <Select
+                    value={compose.mission_dest_code}
+                    onChange={(value) => setCompose({ ...compose, mission_dest_code: value })}
+                    options={branchOptions}
+                    placeholder="انتخاب شعبه"
+                    required
+                  />
+                </Field>
+              )}
+              {compose.mission_dest_kind === 'warehouse' && (
+                <Field label="انبار">
+                  <Select
+                    value={compose.mission_dest_code}
+                    onChange={(value) => setCompose({ ...compose, mission_dest_code: value })}
+                    options={warehouseOptions}
+                    placeholder="انتخاب انبار"
+                    required
+                  />
+                </Field>
+              )}
+              {compose.mission_dest_kind === 'outside' && (
+                <Field label="محل">
+                  <input
+                    value={compose.mission_dest_label}
+                    onChange={(e) => setCompose({ ...compose, mission_dest_label: e.target.value })}
+                    required
+                    maxLength={160}
+                    placeholder="مثلاً دفتر مشتری"
+                  />
+                </Field>
+              )}
+              <Field label="از تاریخ">
+                <PersianDateInput
+                  value={compose.start_date}
+                  onChange={(value) => setCompose({ ...compose, start_date: value })}
+                  required
+                />
+              </Field>
+              <Field label="تا تاریخ">
+                <PersianDateInput
+                  value={compose.end_date}
+                  onChange={(value) => setCompose({ ...compose, end_date: value })}
+                  required
+                />
+              </Field>
+            </>
+          )}
           {compose.kind === 'ticket' && (
             <Field label="فاکتور">
               {compose.sale_id ? (
@@ -545,11 +827,11 @@ export default function Notifications() {
               )}
             </Field>
           )}
-          <Field label="عنوان">
+          <Field label={compose.kind === 'leave' || compose.kind === 'mission' ? 'عنوان (اختیاری)' : 'عنوان'}>
             <input
               value={compose.title}
               onChange={(e) => setCompose({ ...compose, title: e.target.value })}
-              required
+              required={compose.kind !== 'leave' && compose.kind !== 'mission'}
               maxLength={160}
             />
           </Field>
@@ -560,6 +842,7 @@ export default function Notifications() {
               onChange={(e) => setCompose({ ...compose, body: e.target.value })}
             />
           </Field>
+          {(compose.kind === 'ticket' || compose.kind === 'responsibility') && (
           <Field label="رنگ">
             <div className="ticket-grade-swatches">
               {grades.map((item) => (
@@ -575,7 +858,16 @@ export default function Notifications() {
               ))}
             </div>
           </Field>
-          <Button type="submit" disabled={sending || (compose.kind === 'ticket' && !compose.sale_id)}>
+          )}
+          <Button
+            type="submit"
+            disabled={
+              sending
+              || (compose.kind === 'ticket' && !compose.sale_id)
+              || ((compose.kind === 'leave' || compose.kind === 'mission') && !compose.target.startsWith('user:'))
+              || (compose.kind === 'leave' && compose.leave_duration === 'hours' && !workDayHours)
+            }
+          >
             {sending ? 'در حال ارسال…' : 'ارسال'}
           </Button>
         </form>

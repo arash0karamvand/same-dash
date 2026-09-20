@@ -167,6 +167,7 @@ export default function WorkflowOrdersPage({
       <div key={li.id}>
         {li.product_name} × {li.quantity}
         {li.fabric ? ` — ${li.fabric}` : ''}
+        {li.frame_id ? ` — کلاف (${li.frame_config?.seat_count || '—'} نفره)` : ''}
       </div>
     ))
 
@@ -185,6 +186,9 @@ export default function WorkflowOrdersPage({
             <span className={fromLegacy("order-material-name")}>
               {item.material?.name}
               {item.material?.color_name ? ` (${item.material.color_name})` : ''}
+              {(item.source === 'frame' || (item.sources || []).includes('frame')) && (
+                <span className={fromLegacy("muted small")}> — کلاف</span>
+              )}
             </span>
             <span className={fromLegacy("order-material-qty")}>
               نیاز: <strong>{item.required_quantity}</strong> {item.unit}

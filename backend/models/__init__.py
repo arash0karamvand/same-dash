@@ -44,6 +44,14 @@ from .catalog import (
     ProductMaterial,
     ProductVariant,
 )
+from .frames import (
+    Frame,
+    FrameComponentMaterialRule,
+    FrameModel,
+    FrameServiceComponent,
+    FrameServiceTemplate,
+    FrameWoodRequirement,
+)
 from .config import (
     AccountingMode,
     ApprovalStatus,

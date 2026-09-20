@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { productsApi } from '../api/client'
+import FrameServiceConfigModal from './FrameServiceConfigModal'
 import Icon from './icons/Icon'
 import { Button, Field, Modal } from './ui'
 import { formatMoney } from '../utils/format'
@@ -9,6 +10,9 @@ import { fromLegacy } from '../styles/tw.js'
 const EMPTY_LINE = {
   product_id: '',
   variant_id: '',
+  frame_id: '',
+  frame_model_id: '',
+  frame_config: {},
   product_name: '',
   product_model: '',
   fabric: '',
@@ -59,6 +63,10 @@ export default function ProductLines({ lines, onChange, stockSourceKey = '' }) {
   const [loading, setLoading] = useState(false)
   const [selectedPicks, setSelectedPicks] = useState([])
   const [focusedProductId, setFocusedProductId] = useState(null)
+  const [frameConfigOpen, setFrameConfigOpen] = useState(false)
+  const [frameConfigQueue, setFrameConfigQueue] = useState([])
+  const [frameConfigDraftLines, setFrameConfigDraftLines] = useState([])
+  const [frameConfigTarget, setFrameConfigTarget] = useState(null)
 
   useEffect(() => {
     if (!pickerOpen) return
@@ -145,16 +153,7 @@ export default function ProductLines({ lines, onChange, stockSourceKey = '' }) {
 
   const pricedPicks = selectedPicks.filter((x) => catalogPrice(x.product) > 0)
 
-  const confirmPick = () => {
-    if (!pricedPicks.length) return
-
-    const newLines = pricedPicks.map((pick, i) => {
-      const qty = (activeLineIdx != null && i === 0 && lines[activeLineIdx]?.quantity)
-        ? lines[activeLineIdx].quantity
-        : 1
-      return lineFromPick(pick, qty)
-    })
-
+  const finalizeLines = (newLines) => {
     let nextLines
     if (activeLineIdx != null && activeLineIdx < lines.length) {
       nextLines = [
@@ -165,9 +164,64 @@ export default function ProductLines({ lines, onChange, stockSourceKey = '' }) {
     } else {
       nextLines = [...lines.filter((l) => l.product_id), ...newLines]
     }
-
     onChange(nextLines)
     setPickerOpen(false)
+    setFrameConfigOpen(false)
+    setFrameConfigQueue([])
+    setFrameConfigDraftLines([])
+    setFrameConfigTarget(null)
+  }
+
+  const startFrameConfigFlow = (draftLines, queue) => {
+    if (!queue.length) {
+      finalizeLines(draftLines)
+      return
+    }
+    const [next, ...rest] = queue
+    setFrameConfigDraftLines(draftLines)
+    setFrameConfigQueue(rest)
+    setFrameConfigTarget(next)
+    setFrameConfigOpen(true)
+  }
+
+  const confirmPick = () => {
+    if (!pricedPicks.length) return
+
+    const newLines = pricedPicks.map((pick, i) => {
+      const qty = (activeLineIdx != null && i === 0 && lines[activeLineIdx]?.quantity)
+        ? lines[activeLineIdx].quantity
+        : 1
+      return lineFromPick(pick, qty)
+    })
+
+    const frameQueue = newLines
+      .map((line, idx) => ({ line, idx, pick: pricedPicks[idx] }))
+      .filter(({ pick }) => pick?.product?.frame_id)
+
+    if (frameQueue.length) {
+      startFrameConfigFlow(newLines, frameQueue)
+      return
+    }
+    finalizeLines(newLines)
+  }
+
+  const applyFrameConfig = (config) => {
+    if (!frameConfigTarget) return
+    const updated = frameConfigDraftLines.map((line, idx) =>
+      idx === frameConfigTarget.idx
+        ? {
+            ...line,
+            frame_id: config.frame_id,
+            frame_model_id: config.frame_model_id || '',
+            frame_config: config.frame_config || {},
+          }
+        : line,
+    )
+    if (frameConfigQueue.length) {
+      startFrameConfigFlow(updated, frameConfigQueue)
+    } else {
+      finalizeLines(updated)
+    }
   }
 
   const focusedPick =
@@ -212,6 +266,9 @@ export default function ProductLines({ lines, onChange, stockSourceKey = '' }) {
                 <div className={fromLegacy("sale-line-meta-grid")}>
                   {line.product_model && <span><em className={fromLegacy("muted")}>مدل:</em> {line.product_model}</span>}
                   {line.fabric && <span><em className={fromLegacy("muted")}>پارچه:</em> {line.fabric}</span>}
+                  {line.frame_id && (
+                    <span><em className={fromLegacy("muted")}>کلاف:</em> {line.frame_config?.seat_count ? `${line.frame_config.seat_count} نفره` : 'پیکربندی شده'}</span>
+                  )}
                   {line.unit_price && (
                     <span><em className={fromLegacy("muted")}>قیمت واحد:</em> {formatMoney(line.unit_price)}</span>
                   )}
@@ -404,6 +461,20 @@ export default function ProductLines({ lines, onChange, stockSourceKey = '' }) {
           </div>
         </div>
       </Modal>
+
+      <FrameServiceConfigModal
+        open={frameConfigOpen}
+        frame={{ id: frameConfigTarget?.pick?.product?.frame_id }}
+        initialConfig={frameConfigTarget?.line?.frame_config}
+        initialModelId={frameConfigTarget?.line?.frame_model_id}
+        onClose={() => {
+          setFrameConfigOpen(false)
+          setFrameConfigQueue([])
+          setFrameConfigDraftLines([])
+          setFrameConfigTarget(null)
+        }}
+        onConfirm={applyFrameConfig}
+      />
     </div>
   )
 }

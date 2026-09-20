@@ -16,8 +16,9 @@ const EMPTY_CONFIG = {
   page_guides: {},
   branding: { logo_url: DEFAULT_LOGO_URL, logo_is_custom: false },
   stock_locations: [],
-  attendance_settings: { enforced: true },
+  attendance_settings: { enforced: true, work_start: '', work_end: '', work_day_hours: null },
   inventory_settings: { manual_stock_locked: false },
+  ranking_settings: { sales: 100, pre_delivery: 0, discount_percent: 0, discount_rial: 0 },
   ticket_grades: {
     grades: [
       { grade: 1, label: 'درجه ۱', color: '#dc2626' },
@@ -109,8 +110,9 @@ export function ConfigProvider({ children }) {
     logoUrl,
     applyBranding,
     stockLocations: config.stock_locations || [],
-    attendanceSettings: config.attendance_settings || { enforced: true },
+    attendanceSettings: config.attendance_settings || { enforced: true, work_start: '', work_end: '', work_day_hours: null },
     inventorySettings: config.inventory_settings || { manual_stock_locked: false },
+    rankingSettings: config.ranking_settings || EMPTY_CONFIG.ranking_settings,
     ticketGrades: config.ticket_grades || EMPTY_CONFIG.ticket_grades,
   }
 

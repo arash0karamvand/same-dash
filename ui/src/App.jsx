@@ -37,6 +37,7 @@ import Settings from './pages/Settings'
 import Cycle from './pages/Cycle'
 import CycleWatch from './pages/CycleWatch'
 import WarehouseOrders from './pages/WarehouseOrders'
+import Frames from './pages/Frames'
 import PickupOrders from './pages/PickupOrders'
 import Notifications from './pages/Notifications'
 import Icon from './components/icons/Icon'
@@ -68,6 +69,7 @@ const PAGES = {
   cycle: Cycle,
   'cycle-watch': CycleWatch,
   warehouse: WarehouseOrders,
+  frames: Frames,
   pickup: PickupOrders,
   notifications: Notifications,
   ranking: EmployeeRanking,

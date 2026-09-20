@@ -28,6 +28,13 @@ class ProductCategory(SoftDeleteModel):
 
 
 class Product(SoftDeleteModel):
+    frame = models.ForeignKey(
+        "backend.Frame",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="linked_products",
+    )
     category = models.ForeignKey(
         ProductCategory, null=True, blank=True, on_delete=models.SET_NULL, related_name="products"
     )

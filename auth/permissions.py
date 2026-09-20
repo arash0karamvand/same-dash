@@ -86,6 +86,8 @@ VIEW_MATERIALS = "view_materials"
 CREATE_MATERIALS = "create_materials"
 APPROVE_MATERIALS = "approve_materials"
 MANAGE_MATERIALS = "manage_materials"
+VIEW_FRAMES = "view_frames"
+MANAGE_FRAMES = "manage_frames"
 
 PERMISSION_LABELS = {
     VIEW_CUSTOMERS: "مشاهده مشتریان",
@@ -160,6 +162,8 @@ PERMISSION_LABELS = {
     CREATE_MATERIALS: "ثبت متریال (کارخانه)",
     APPROVE_MATERIALS: "تایید و حذف متریال (اداری)",
     MANAGE_MATERIALS: "مدیریت کامل متریال",
+    VIEW_FRAMES: "مشاهده کلاف‌ها",
+    MANAGE_FRAMES: "مدیریت کلاف‌ها",
 }
 
 ALL_PERMISSIONS = {
@@ -235,6 +239,8 @@ ALL_PERMISSIONS = {
     CREATE_MATERIALS,
     APPROVE_MATERIALS,
     MANAGE_MATERIALS,
+    VIEW_FRAMES,
+    MANAGE_FRAMES,
 }
 
 ROLE_PERMISSIONS = {
@@ -343,6 +349,8 @@ PERMISSION_GROUPS = [
             CREATE_MATERIALS,
             APPROVE_MATERIALS,
             MANAGE_MATERIALS,
+            VIEW_FRAMES,
+            MANAGE_FRAMES,
         ],
     },
     {
@@ -448,6 +456,10 @@ MENU_SECTIONS = [
             VIEW_FACTORY_ORDERS,
             VIEW_FREIGHT_ORDERS,
             APPROVE_MATERIALS,
+            VIEW_FRAMES,
+            MANAGE_FRAMES,
+            VIEW_WAREHOUSE_ORDERS,
+            MANAGE_WAREHOUSE_ORDERS,
         ],
     },
     {

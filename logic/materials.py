@@ -282,29 +282,32 @@ def sync_product_materials(product, raw_items):
 
 
 def compute_factory_order_material_requirements(factory_order):
-    """محاسبه متریال مورد نیاز سفارش — تجمیع از ردیف‌های محصول."""
+    """محاسبه متریال مورد نیاز سفارش — تجمیع از ردیف‌های محصول و کلاف."""
     from collections import defaultdict
 
     from backend.models import ProductMaterial
+    from logic.frame_materials import compute_frame_line_requirements, merge_material_requirements
 
     required = defaultdict(lambda: Decimal(0))
-    line_items = factory_order.line_items.select_related("product").all()
+    product_results = []
+    frame_results = []
+    line_items = factory_order.line_items.select_related("product", "frame", "frame_model").all()
     for line in line_items:
-        if not line.product_id:
-            continue
-        product_qty = Decimal(line.quantity or 0)
-        if product_qty <= 0:
-            continue
-        product_materials = ProductMaterial.objects.filter(
-            product_id=line.product_id,
-            material__is_deleted=False,
-            material__is_active=True,
-            material__approval_status_ref_id=Material.APPROVAL_APPROVED,
-        ).select_related("material")
-        for pm in product_materials:
-            required[pm.material_id] += product_qty * Decimal(pm.quantity or 0)
+        if line.product_id:
+            product_qty = Decimal(line.quantity or 0)
+            if product_qty > 0:
+                product_materials = ProductMaterial.objects.filter(
+                    product_id=line.product_id,
+                    material__is_deleted=False,
+                    material__is_active=True,
+                    material__approval_status_ref_id=Material.APPROVAL_APPROVED,
+                ).select_related("material")
+                for pm in product_materials:
+                    required[pm.material_id] += product_qty * Decimal(pm.quantity or 0)
 
-    results = []
+        if line.frame_id:
+            frame_results.extend(compute_frame_line_requirements(line))
+
     for material_id, req_qty in required.items():
         material = Material.objects.filter(pk=material_id, is_deleted=False).first()
         if not material:
@@ -316,7 +319,7 @@ def compute_factory_order_material_requirements(factory_order):
         if stock_val is not None:
             shortage = max(Decimal(0), req_qty - stock_val)
             sufficient = stock_val >= req_qty
-        results.append(
+        product_results.append(
             {
                 "material_id": material.id,
                 "material": material_to_dict(material),
@@ -327,10 +330,10 @@ def compute_factory_order_material_requirements(factory_order):
                 "shortage": float(shortage) if shortage is not None else None,
                 "sufficient": sufficient,
                 "unit": material.unit,
+                "source": "product",
             }
         )
-    results.sort(key=lambda item: item["material"]["name"])
-    return results
+    return merge_material_requirements(product_results, frame_results)
 
 
 def factory_order_materials_summary(factory_order):

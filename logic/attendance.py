@@ -12,6 +12,12 @@ from backend.models import Seller, StaffAttendance
 AUTO_CHECKOUT_HOURS = 16
 
 
+def _decimal_or_none(value):
+    if value is None:
+        return None
+    return float(value)
+
+
 def attendance_to_dict(record):
     seller = record.seller
     return {
@@ -28,6 +34,11 @@ def attendance_to_dict(record):
         "approval_status": record.approval_status,
         "approval_status_display": record.get_approval_status_display(),
         "notes": record.notes,
+        "leave_pay_type": record.leave_pay_type or "",
+        "leave_hours": _decimal_or_none(record.leave_hours),
+        "mission_dest_kind": record.mission_dest_kind or "",
+        "mission_dest_code": record.mission_dest_code or "",
+        "mission_dest_label": record.mission_dest_label or "",
         "recorded_by": record.recorded_by.username if record.recorded_by else None,
         "approved_by": record.approved_by.username if record.approved_by else None,
         "approved_at": record.approved_at.isoformat() if record.approved_at else None,
@@ -64,6 +75,7 @@ def today_records_for_seller(seller, day=None):
 
 
 def today_leave_record(seller, day=None):
+    """مرخصی تمام‌روز — مرخصی ساعتی ورود و فروش را نمی‌بندد."""
     if seller is None:
         return None
     return (
@@ -71,11 +83,49 @@ def today_leave_record(seller, day=None):
             seller=seller,
             date=day or timezone.localdate(),
             status_ref_id="leave",
+            leave_hours__isnull=True,
             is_deleted=False,
         )
         .order_by("-id")
         .first()
     )
+
+
+def today_hourly_leave_record(seller, day=None):
+    if seller is None:
+        return None
+    return (
+        StaffAttendance.objects.filter(
+            seller=seller,
+            date=day or timezone.localdate(),
+            status_ref_id="leave",
+            leave_hours__isnull=False,
+            is_deleted=False,
+        )
+        .order_by("-id")
+        .first()
+    )
+
+
+def today_mission_record(seller, day=None):
+    if seller is None:
+        return None
+    return (
+        StaffAttendance.objects.filter(
+            seller=seller,
+            date=day or timezone.localdate(),
+            status_ref_id="mission",
+            is_deleted=False,
+        )
+        .order_by("-id")
+        .first()
+    )
+
+
+def is_blocking_mission(record):
+    if record is None:
+        return False
+    return (record.mission_dest_kind or "") != StaffAttendance.MISSION_DEST_BRANCH
 
 
 def open_present_record_for_seller(seller, day=None):
@@ -108,6 +158,9 @@ def today_record_for_seller(seller):
     leave = today_leave_record(seller)
     if leave:
         return leave
+    mission = today_mission_record(seller)
+    if mission:
+        return mission
     day = timezone.localdate()
     record = (
         StaffAttendance.objects.filter(seller=seller, date=day, is_deleted=False)
@@ -142,11 +195,32 @@ def list_attendance_base_qs():
     return StaffAttendance.objects.select_related("seller", "recorded_by", "approved_by").all()
 
 
-def upsert_manager_attendance(seller, day, status, user, branch=None, notes=""):
-    if status not in ("present", "absent", "leave"):
+def upsert_manager_attendance(
+    seller,
+    day,
+    status,
+    user,
+    branch=None,
+    notes="",
+    *,
+    leave_pay_type="",
+    leave_hours=None,
+    mission_dest_kind="",
+    mission_dest_code="",
+    mission_dest_label="",
+):
+    if status not in ("present", "absent", "leave", "mission"):
         raise ValueError("Invalid status")
     work_branch = branch or seller.branch_id
-    if status in ("absent", "leave"):
+    extras = {
+        "leave_pay_type": (leave_pay_type or "") if status == "leave" else "",
+        "leave_hours": leave_hours if status == "leave" else None,
+        "mission_dest_kind": (mission_dest_kind or "") if status == "mission" else "",
+        "mission_dest_code": (mission_dest_code or "") if status == "mission" else "",
+        "mission_dest_label": (mission_dest_label or "") if status == "mission" else "",
+    }
+    hourly_leave = status == "leave" and leave_hours is not None
+    if status in ("absent", "leave", "mission") and not hourly_leave:
         open_record = open_present_record_for_seller(seller, day=day)
         if open_record:
             open_record.check_out_at = timezone.now()
@@ -165,6 +239,8 @@ def upsert_manager_attendance(seller, day, status, user, branch=None, notes=""):
             record.recorded_by = user
             record.approved_by = user
             record.approved_at = timezone.now()
+            for key, value in extras.items():
+                setattr(record, key, value)
             record.save()
             return record, False
         record = StaffAttendance.objects.create(
@@ -177,6 +253,40 @@ def upsert_manager_attendance(seller, day, status, user, branch=None, notes=""):
             recorded_by=user,
             approved_by=user,
             approved_at=timezone.now(),
+            **extras,
+        )
+        return record, True
+
+    if hourly_leave:
+        record = (
+            StaffAttendance.objects.filter(
+                seller=seller, date=day, status_ref_id="leave", is_deleted=False
+            )
+            .order_by("-id")
+            .first()
+        )
+        if record:
+            record.work_branch_id = work_branch
+            record.notes = (notes or "").strip()
+            record.approval_status = "approved"
+            record.recorded_by = user
+            record.approved_by = user
+            record.approved_at = timezone.now()
+            for key, value in extras.items():
+                setattr(record, key, value)
+            record.save()
+            return record, False
+        record = StaffAttendance.objects.create(
+            seller=seller,
+            date=day,
+            status=status,
+            work_branch_id=work_branch,
+            approval_status="approved",
+            notes=(notes or "").strip(),
+            recorded_by=user,
+            approved_by=user,
+            approved_at=timezone.now(),
+            **extras,
         )
         return record, True
 
@@ -236,6 +346,11 @@ def check_in(seller, user, day=None, status="present", work_branch="", notes="")
     status = status or "present"
     if today_leave_record(seller, day=day):
         raise ValueError("شما امروز مرخصی هستید.")
+    mission = today_mission_record(seller, day=day)
+    if is_blocking_mission(mission):
+        dest = (mission.mission_dest_label or "").strip()
+        suffix = f" — {dest}" if dest else ""
+        raise ValueError(f"شما امروز در ماموریت هستید{suffix}.")
 
     open_record = open_present_record_for_seller(seller, day=day)
     if open_record:
@@ -289,7 +404,10 @@ def today_status_for_seller(seller):
     record = today_record_for_seller(seller)
     open_record = open_present_record_for_seller(seller)
     leave = today_leave_record(seller)
-    can_check_in = leave is None and (
+    hourly = today_hourly_leave_record(seller)
+    mission = today_mission_record(seller)
+    blocking_mission = is_blocking_mission(mission)
+    can_check_in = leave is None and not blocking_mission and (
         open_record is None or open_record.approval_status == "rejected"
     )
     can_check_out = bool(
@@ -304,13 +422,23 @@ def today_status_for_seller(seller):
         for b in get_active_branches()
         if b["code"] != current_branch
     ]
+    display = record
+    if leave:
+        display = leave
+    elif mission and not open_record:
+        display = mission
     return {
-        "record": attendance_to_dict(record) if record else None,
+        "record": attendance_to_dict(display) if display else None,
         "can_check_in": can_check_in,
         "can_check_out": can_check_out,
         "can_request_branch_switch": bool(can_check_out and switch_options),
         "switch_branch_options": switch_options,
         "on_leave": leave is not None,
+        "on_hourly_leave": hourly is not None,
+        "hourly_leave_hours": _decimal_or_none(hourly.leave_hours) if hourly else None,
+        "on_mission": mission is not None,
+        "mission_dest_kind": (mission.mission_dest_kind if mission else "") or "",
+        "mission_dest_label": (mission.mission_dest_label if mission else "") or "",
     }
 
 

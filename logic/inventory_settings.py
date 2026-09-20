@@ -56,27 +56,6 @@ def assert_manual_stock_unlocked():
 
 def can_toggle_manual_stock_lock(user):
     """کاربرانی که پورتال مدیران را می‌بینند."""
-    if not user or not getattr(user, "is_authenticated", False):
-        return False
+    from logic.module_catalog import can_see_managers_portal
 
-    from auth.org_roles import is_executive_user
-    from auth.permissions import has_permission, is_system_admin
-    from logic.module_catalog import PORTAL_MODULE_SPECS
-
-    if is_executive_user(user):
-        return True
-
-    managers = next((portal for portal in PORTAL_MODULE_SPECS if portal["id"] == "managers"), None)
-    if not managers:
-        return False
-    for mod in managers["modules"]:
-        menu = [code for code in (mod.get("menu_permissions") or []) if code]
-        if not menu:
-            continue
-        if mod.get("executive_only"):
-            continue
-        if mod.get("system_admin") and not is_system_admin(user):
-            continue
-        if any(has_permission(user, code) for code in menu):
-            return True
-    return False
+    return can_see_managers_portal(user)

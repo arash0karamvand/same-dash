@@ -5231,6 +5231,7 @@ body.is-resizing[data-resize-dir='row'] {
   display: flex;
   gap: 16px;
   align-items: center;
+  flex-wrap: wrap;
 }
 .org-kind-toggle label {
   display: flex;
@@ -6151,6 +6152,51 @@ body.is-resizing[data-resize-dir='row'] {
   margin-top: 8px;
 }
 
+.ranking-settings {
+  margin: 12px 0 16px;
+  border: 1px solid var(--border, var(--jelly-rim));
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.ranking-settings-toggle {
+  width: 100%;
+  padding: 10px 14px;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: right;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.ranking-settings-body {
+  padding: 0 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ranking-weights-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.ranking-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 0 16px 12px;
+  font-size: 13px;
+  color: var(--muted, var(--text-secondary));
+}
+
+.ranking-metrics strong {
+  color: var(--text, var(--text-primary));
+}
+
 @media (max-width: 640px) {
   .ranking-card-head {
     grid-template-columns: auto 1fr auto;
@@ -6547,4 +6593,55 @@ body.is-resizing[data-resize-dir='row'] {
 .accounting-transfer-form,
 .accounting-transfer-preview {
   margin-top: 1rem;
+}
+
+.frame-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.frame-tab {
+  border: 1px solid var(--border, var(--jelly-rim));
+  background: transparent;
+  border-radius: 999px;
+  padding: 6px 14px;
+  cursor: pointer;
+}
+
+.frame-tab.active {
+  background: var(--accent, #6366f1);
+  color: #fff;
+  border-color: transparent;
+}
+
+.frame-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.frame-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border, var(--jelly-rim));
+}
+
+.frame-row-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.frame-model-block,
+.frame-component-block,
+.frame-config-component {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--border, var(--jelly-rim));
 }

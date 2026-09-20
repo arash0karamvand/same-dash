@@ -352,6 +352,17 @@ class Sale(ReferenceCodeModel, SoftDeleteModel):
 
 class SaleLineItem(models.Model):
     sale = models.ForeignKey(Sale, on_delete=models.CASCADE, related_name="line_items")
+    frame = models.ForeignKey(
+        "backend.Frame", null=True, blank=True, on_delete=models.SET_NULL, related_name="sale_lines"
+    )
+    frame_model = models.ForeignKey(
+        "backend.FrameModel",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="sale_lines",
+    )
+    frame_config = models.JSONField(default=dict, blank=True)
     product = models.ForeignKey(
         "backend.Product", null=True, blank=True, on_delete=models.SET_NULL, related_name="sale_lines"
     )

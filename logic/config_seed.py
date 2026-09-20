@@ -126,7 +126,7 @@ REFERENCE_ROWS = {
     OrderStatus: [("confirmed", "تایید شده"), ("pending", "در انتظار"), ("cancelled", "لغو شده")],
     AccountingMode: [("automatic", "حسابداری خودکار"), ("manual", "حسابداری دستی")],
     InstallmentStatus: [("pending", "در انتظار"), ("paid", "پرداخت‌شده"), ("cancelled", "لغوشده")],
-    AttendanceStatus: [("present", "حاضر"), ("absent", "غایب"), ("leave", "مرخصی")],
+    AttendanceStatus: [("present", "حاضر"), ("absent", "غایب"), ("leave", "مرخصی"), ("mission", "ماموریت")],
     ApprovalStatus: [("pending", "در انتظار تایید"), ("approved", "تایید شده"), ("rejected", "رد شده")],
     MaterialStatus: [("pending", "در انتظار تایید اداری"), ("approved", "تایید شده"), ("rejected", "رد شده")],
     SmsStatus: [
@@ -540,6 +540,13 @@ def seed_config_defaults():
 
         if not LookupOption.objects.filter(category="system", code="manual_stock_locked").exists():
             set_manual_stock_locked(False)
+    except OperationalError:
+        pass
+    try:
+        from logic.ranking_settings import RANKING_WEIGHTS_CODE, set_ranking_weights
+
+        if not LookupOption.objects.filter(category="system", code=RANKING_WEIGHTS_CODE).exists():
+            set_ranking_weights()
     except OperationalError:
         pass
     try:

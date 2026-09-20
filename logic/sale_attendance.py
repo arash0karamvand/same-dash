@@ -5,7 +5,13 @@ from datetime import datetime
 from django.utils import timezone
 
 from auth.org_roles import is_branch_supervisor, is_executive_user, is_shop_staff_user
-from logic.attendance import apply_auto_checkout, open_present_record_for_seller, today_leave_record
+from logic.attendance import (
+    apply_auto_checkout,
+    is_blocking_mission,
+    open_present_record_for_seller,
+    today_leave_record,
+    today_mission_record,
+)
 from logic.attendance_settings import is_attendance_enforced
 from logic.sellers import get_seller_for_user
 
@@ -35,6 +41,7 @@ def evaluate_sale_attendance(user, *, requested_branch=""):
     manager = attendance_optional_for_user(user)
     seller = get_seller_for_user(user)
     leave = today_leave_record(seller) if seller else None
+    mission = today_mission_record(seller) if seller else None
     present = open_present_record_for_seller(seller) if seller else None
     if present:
         apply_auto_checkout(present)
@@ -45,29 +52,41 @@ def evaluate_sale_attendance(user, *, requested_branch=""):
     work_branch = ""
     if present and not present.check_out_at:
         work_branch = present.work_branch_id or (seller.branch_id if seller else "")
+    elif mission and not is_blocking_mission(mission):
+        work_branch = mission.work_branch_id or (seller.branch_id if seller else "")
 
     blocked = False
     reason = ""
     if enforced and leave is not None:
         blocked = True
         reason = "شما امروز مرخصی هستید و نمی‌توانید سفارش ثبت کنید."
+    elif enforced and is_blocking_mission(mission):
+        dest = (mission.mission_dest_label or "").strip()
+        suffix = f" — {dest}" if dest else ""
+        blocked = True
+        reason = f"شما امروز در ماموریت هستید{suffix} و نمی‌توانید سفارش ثبت کنید."
     elif enforced and not manager and is_shop_staff_user(user):
-        if present is None:
+        if present is None and not (mission and not is_blocking_mission(mission)):
             blocked = True
             reason = "برای ثبت سفارش ابتدا حضور خود را ثبت کنید."
-        elif present.approval_status != "approved":
+        elif present is not None and present.approval_status != "approved":
             blocked = True
             reason = "حضور شما هنوز توسط مدیر تأیید نشده است."
-        elif present.check_out_at:
+        elif present is not None and present.check_out_at:
             blocked = True
             reason = "ساعت کاری شما به پایان رسیده است."
-        elif present.work_branch and not _branch_hours_ok(present.work_branch):
+        elif present and present.work_branch and not _branch_hours_ok(present.work_branch):
+            blocked = True
+            reason = "ساعت کاری شعبه به پایان رسیده است."
+        elif mission and mission.work_branch and not _branch_hours_ok(mission.work_branch):
             blocked = True
             reason = "ساعت کاری شعبه به پایان رسیده است."
 
     if not enforced:
         must_pick_branch = True
     elif present and not present.check_out_at:
+        must_pick_branch = False
+    elif mission and not is_blocking_mission(mission):
         must_pick_branch = False
     else:
         must_pick_branch = manager
@@ -79,8 +98,9 @@ def evaluate_sale_attendance(user, *, requested_branch=""):
         "reason": reason,
         "must_pick_branch": must_pick_branch and not blocked,
         "work_branch": work_branch or "",
-        "present": bool(present and not present.check_out_at),
+        "present": bool(present and not present.check_out_at) or bool(mission and not is_blocking_mission(mission)),
         "on_leave": leave is not None,
+        "on_mission": mission is not None,
     }
 
 

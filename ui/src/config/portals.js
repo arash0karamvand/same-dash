@@ -58,6 +58,7 @@ export const PORTALS = [
       { key: 'factory-built', label: 'کارخانه — ساخته‌شده', icon: 'check', permission: 'view_factory_orders' },
       { key: 'freight', label: 'کارخانه — باربری', icon: 'truck', permission: 'view_freight_orders' },
       { key: 'warehouse', label: 'انبار', icon: 'package', anyPermission: ['view_warehouse_orders', 'manage_warehouse_orders', 'approve_sale_accounting'] },
+      { key: 'frames', label: 'کلاف‌ها', icon: 'package', anyPermission: ['view_frames', 'manage_frames', 'approve_sale_accounting'] },
       { key: 'filter', label: 'فیلتر', icon: 'search', anyPermission: ['view_accounting', 'approve_sale_accounting', 'view_sales', 'view_customers', 'view_installments'] },
     ],
   },

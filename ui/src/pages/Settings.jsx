@@ -45,6 +45,9 @@ export default function Settings() {
   const [selectedBranch, setSelectedBranch] = useState(null)
   const [lookupCategory, setLookupCategory] = useState('payment_method')
   const [attendanceEnforced, setAttendanceEnforced] = useState(true)
+  const [workStart, setWorkStart] = useState('')
+  const [workEnd, setWorkEnd] = useState('')
+  const [savingHours, setSavingHours] = useState(false)
   const [ticketGrades, setTicketGrades] = useState(EMPTY_TICKET_GRADES)
 
   const load = useCallback(async () => {
@@ -61,6 +64,8 @@ export default function Settings() {
       setLookups(l.results || [])
       setMenuSections(m.results || [])
       setAttendanceEnforced(a?.enforced !== false)
+      setWorkStart(a?.work_start || '')
+      setWorkEnd(a?.work_end || '')
       setTicketGrades({
         grades: t?.grades?.length ? t.grades : EMPTY_TICKET_GRADES.grades,
         default_grade: t?.default_grade || EMPTY_TICKET_GRADES.default_grade,
@@ -202,6 +207,49 @@ export default function Settings() {
             <p className={fromLegacy("muted small")}>
               اگر خاموش باشد، ساعت کاری مهم نیست و هنگام ثبت فاکتور باید شعبه انتخاب شود. مدیران بدون حضور هم می‌توانند فروش بزنند.
             </p>
+            <Field label="شروع ساعت کاری سراسری">
+              <input
+                className={fromLegacy("ltr")}
+                type="time"
+                value={workStart}
+                onChange={(e) => setWorkStart(e.target.value)}
+              />
+            </Field>
+            <Field label="پایان ساعت کاری سراسری">
+              <input
+                className={fromLegacy("ltr")}
+                type="time"
+                value={workEnd}
+                onChange={(e) => setWorkEnd(e.target.value)}
+              />
+            </Field>
+            <p className={fromLegacy("muted small")}>
+              برای مرخصی ساعتی لازم است. سقف ساعت یک روز کاری از این بازه محاسبه می‌شود. ساعت هر شعبه جداگانه در تب شعب تنظیم می‌شود.
+            </p>
+            <Button
+              type="button"
+              disabled={savingHours}
+              onClick={async () => {
+                setSavingHours(true)
+                try {
+                  const data = await configApi.saveAttendanceSettings({
+                    work_start: workStart,
+                    work_end: workEnd,
+                  })
+                  setWorkStart(data?.work_start || '')
+                  setWorkEnd(data?.work_end || '')
+                  setInfo('ساعت کاری سراسری ذخیره شد.')
+                  setError('')
+                  await refreshConfig()
+                } catch (err) {
+                  setError(err.message)
+                } finally {
+                  setSavingHours(false)
+                }
+              }}
+            >
+              {savingHours ? 'در حال ذخیره…' : 'ذخیره ساعت کاری'}
+            </Button>
           </div>
         )}
 

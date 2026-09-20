@@ -90,6 +90,8 @@ export const configApi = {
   resetLogo: () => del('/api/config/branding/logo/'),
   attendanceSettings: () => get('/api/config/attendance-settings/'),
   saveAttendanceSettings: (data) => put('/api/config/attendance-settings/', data),
+  rankingSettings: () => get('/api/config/ranking-settings/'),
+  saveRankingSettings: (data) => put('/api/config/ranking-settings/', data),
   inventorySettings: () => get('/api/config/inventory-settings/'),
   saveInventorySettings: (data) => put('/api/config/inventory-settings/', data),
   ticketGrades: () => get('/api/config/ticket-grades/'),
@@ -180,6 +182,24 @@ export const productsApi = {
   removeCategory: (id) => del(`/api/products/categories/${id}/`),
   topSelling: (limit = 20) => get(`/api/products/top-selling/?limit=${limit}`),
   transferStock: (data) => post('/api/products/stock-transfer/', data),
+}
+
+export const framesApi = {
+  options: () => get('/api/frames/options/'),
+  list: (opts = {}) => {
+    const p = new URLSearchParams()
+    if (opts.search) p.set('search', opts.search)
+    if (opts.offset != null) p.set('offset', opts.offset)
+    if (opts.limit) p.set('limit', opts.limit)
+    if (opts.include_inactive) p.set('include_inactive', '1')
+    const q = p.toString()
+    return get(`/api/frames/${q ? `?${q}` : ''}`)
+  },
+  get: (id) => get(`/api/frames/${id}/`),
+  create: (data) => post('/api/frames/', data),
+  update: (id, data) => put(`/api/frames/${id}/`, data),
+  remove: (id) => del(`/api/frames/${id}/`),
+  previewRequirements: (id, data) => post(`/api/frames/${id}/requirements-preview/`, data),
 }
 
 export const materialsApi = {
