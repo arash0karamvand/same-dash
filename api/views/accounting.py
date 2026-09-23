@@ -30,6 +30,7 @@ from logic.accounting_accounts import (
 )
 from logic.accounting_documents import (
     approve_accounting_document,
+    submit_accounting_document,
     create_accounting_document,
     delete_accounting_document,
     get_accounting_document,
@@ -638,6 +639,7 @@ def make_view(name, *, ledger=OFFICE_LEDGER, perms=None):
                     is_approved=is_approved,
                     user=request.user,
                     ledger=ledger,
+                    override_reason=(data.get("override_reason") or "").strip(),
                 )
             except LookupError as exc:
                 return fail(str(exc), status=404)
@@ -650,6 +652,23 @@ def make_view(name, *, ledger=OFFICE_LEDGER, perms=None):
                 f"ویرایش سند {code}",
                 entity_type=ledger.entity_type,
             )
+            return success(result)
+
+        return view
+
+    if name == "document_submit":
+
+        @api_view("PUT", permission=perms["edit"])
+        def view(request, document_code):
+            code = (document_code or "").strip()
+            if not code:
+                return fail("کد سند الزامی است.", status=400)
+            try:
+                result = submit_accounting_document(code, user=request.user, ledger=ledger)
+            except LookupError as exc:
+                return fail(str(exc), status=404)
+            except ValueError as exc:
+                return fail(str(exc), status=400)
             return success(result)
 
         return view
@@ -667,6 +686,7 @@ def make_view(name, *, ledger=OFFICE_LEDGER, perms=None):
                     code,
                     is_approved=data.get("is_approved"),
                     ledger=ledger,
+                    user=request.user,
                 )
             except LookupError as exc:
                 return fail(str(exc), status=404)
@@ -781,7 +801,7 @@ def make_view(name, *, ledger=OFFICE_LEDGER, perms=None):
                     "create",
                     (
                         f"آپلود اکسل حسابداری — "
-                        f"{report['stats'].get('entries_created', 0)} سند، "
+                        f"{report['stats'].get('journals_created', 0)} سند تراز، "
                         f"{report['stats'].get('details_created', 0)} تفصیلی جدید"
                     ),
                     entity_type=ledger.entity_type,
@@ -814,6 +834,7 @@ detailed_account_detail = make_view("detailed_account_detail")
 document_list = make_view("document_list")
 document_detail = make_view("document_detail")
 document_approve = make_view("document_approve")
+document_submit = make_view("document_submit")
 document_create = make_view("document_create")
 excel_import = make_view("excel_import")
 

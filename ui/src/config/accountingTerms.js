@@ -1,6 +1,7 @@
 /** اصطلاحات استاندارد حسابداری ایران — مطابق فایل اکسل */
 
 export const ACCOUNTING_MENU = {
+  'control-center': 'کنترل و گزارش‌گیری',
   'trial-balance': 'تراز کل',
   'subsidiary-trial': 'تراز معین',
   'detailed-trial': 'تراز تفصیلی',
@@ -8,6 +9,8 @@ export const ACCOUNTING_MENU = {
   documents: 'مدیریت اسناد',
   'chart-of-accounts': 'ایجاد حساب',
   'upload-excel': 'بارگذاری اکسل',
+  statements: 'صورت‌های مالی',
+  trade: 'خرید و فروش',
 }
 
 export const ACCOUNTING_TABS = Object.entries(ACCOUNTING_MENU).map(([id, label]) => ({ id, label }))

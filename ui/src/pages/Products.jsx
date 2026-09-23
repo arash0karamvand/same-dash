@@ -46,7 +46,7 @@ function locationStocksFrom(locations, existing = []) {
     }
   })
 }
-const EMPTY_PRODUCT_MATERIAL = { id: null, material_id: '', quantity: '1' }
+const EMPTY_PRODUCT_MATERIAL = { id: null, material_id: '', quantity: '1', normal_spoilage_rate: '0' }
 const EMPTY_SUITE_PIECE = {
   piece_kind: '',
   arm_style: '',
@@ -71,6 +71,7 @@ const EMPTY_PRODUCT = {
   unit: 'عدد',
   category_id: '',
   default_price: '',
+  target_margin_percent: '',
   is_active: true,
   attributes: {},
   variants: [{ ...EMPTY_VARIANT }],
@@ -329,6 +330,7 @@ export default function Products() {
       unit: p.unit || 'عدد',
       category_id: p.category_id ? String(p.category_id) : '',
       default_price: String(p.default_price ?? p.display_price ?? ''),
+      target_margin_percent: p.target_margin_percent != null ? String(p.target_margin_percent) : '',
       is_active: p.is_active,
       attributes: { ...(p.attributes || {}) },
       variants: (p.variants?.length ? p.variants : [{ ...EMPTY_VARIANT }]).map((v) => ({
@@ -343,6 +345,7 @@ export default function Products() {
         id: pm.id,
         material_id: String(pm.material_id),
         quantity: String(pm.quantity ?? 1),
+        normal_spoilage_rate: String(pm.normal_spoilage_rate ?? 0),
       })),
       workset_id: p.furniture_workset_id ? String(p.furniture_workset_id) : '',
       suite_pieces: piecesFromWorkset(
@@ -474,6 +477,7 @@ export default function Products() {
       }
       if (canManageSales) {
         payload.default_price = Number(productForm.default_price) || 0
+        payload.target_margin_percent = productForm.target_margin_percent === '' ? null : Number(productForm.target_margin_percent)
       }
       if (canEditMaterials) {
         payload.materials = productForm.materials
@@ -482,6 +486,7 @@ export default function Products() {
             id: m.id,
             material_id: Number(m.material_id),
             quantity: Number(m.quantity) || 1,
+            normal_spoilage_rate: Number(m.normal_spoilage_rate) || 0,
           }))
         payload.furniture_workset_id = productForm.workset_id ? Number(productForm.workset_id) : null
         payload.suite_config = (productForm.suite_pieces || []).map((piece) => ({
@@ -894,9 +899,14 @@ export default function Products() {
               <input value={productForm.unit} onChange={(e) => setProductForm({ ...productForm, unit: e.target.value })} placeholder="عدد" />
             </Field>
             {canManageSales && !productForm.suite_pieces.length && (
-              <Field label="قیمت فروش (ریال)">
-                <MoneyInput min="0" value={productForm.default_price} onChange={(e) => setProductForm({ ...productForm, default_price: e.target.value })} required />
-              </Field>
+              <>
+                <Field label="قیمت فروش (ریال)">
+                  <MoneyInput min="0" value={productForm.default_price} onChange={(e) => setProductForm({ ...productForm, default_price: e.target.value })} required />
+                </Field>
+                <Field label="حاشیه سود هدف (درصد)">
+                  <input className={fromLegacy('ltr')} type="number" min="0" max="100" step="0.01" value={productForm.target_margin_percent || ''} onChange={(e) => setProductForm({ ...productForm, target_margin_percent: e.target.value })} placeholder="اختیاری" />
+                </Field>
+              </>
             )}
           </div>
 
@@ -938,6 +948,18 @@ export default function Products() {
                         step="0.001"
                         value={m.quantity}
                         onChange={(e) => updateProductMaterial(idx, 'quantity', e.target.value)}
+                        disabled={!canEditMaterials}
+                      />
+                    </Field>
+                    <Field label="ضایعات عادی ٪">
+                      <input
+                        className={fromLegacy("ltr")}
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.01"
+                        value={m.normal_spoilage_rate ?? 0}
+                        onChange={(e) => updateProductMaterial(idx, 'normal_spoilage_rate', e.target.value)}
                         disabled={!canEditMaterials}
                       />
                     </Field>

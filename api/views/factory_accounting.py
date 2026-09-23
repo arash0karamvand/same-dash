@@ -48,6 +48,7 @@ detailed_account_detail = _bind("detailed_account_detail")
 document_list = _bind("document_list")
 document_detail = _bind("document_detail")
 document_approve = _bind("document_approve")
+document_submit = _bind("document_submit")
 document_create = _bind("document_create")
 excel_import = _bind("excel_import")
 

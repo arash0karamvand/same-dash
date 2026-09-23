@@ -161,3 +161,35 @@ def customer_top_buyers(request):
             "days": days,
         }
     )
+
+
+@api_view("POST", permission=CREATE_CUSTOMER)
+def customer_import(request):
+    """Import مشتریان از فایل اکسل"""
+    file = request.FILES.get("file")
+    if not file:
+        return fail("فایل الزامی است", status=400)
+    
+    if not file.name.endswith(".xlsx"):
+        return fail("فقط فایل‌های اکسل (.xlsx) پذیرفته می‌شوند", status=400)
+    
+    try:
+        from logic.customer_import import import_from_uploaded_file
+        
+        result = import_from_uploaded_file(file, request.user)
+        
+        return success({
+            "message": f"{result['created']} مشتری جدید و {result['updated']} مشتری به‌روز شد",
+            **result
+        })
+    except Exception as e:
+        return fail(f"خطا در import: {str(e)}", status=500)
+
+
+@api_view("GET", permission=VIEW_CUSTOMERS)
+def customer_export(request):
+    """خروجی اکسل از لیست مشتریان"""
+    from logic.customer_import import export_customers_to_excel
+    
+    qs = list_customers(request.GET)
+    return export_customers_to_excel(qs)

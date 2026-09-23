@@ -1,5 +1,7 @@
 """Single-table order, line, payment schedule, and workflow."""
 
+import uuid
+
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
@@ -64,6 +66,7 @@ class Sale(ReferenceCodeModel, SoftDeleteModel):
         ("confirmed", "تایید شده"),
         ("pending", "در انتظار"),
         ("cancelled", "لغو شده"),
+        ("final_approved", "تایید نهایی"),
     ]
     DISCOUNT_TYPE_CHOICES = [
         ("percent", "درصدی"),
@@ -78,6 +81,7 @@ class Sale(ReferenceCodeModel, SoftDeleteModel):
     ORDER_STATUS_CONFIRMED = "confirmed"
     ORDER_STATUS_PENDING = "pending"
     ORDER_STATUS_CANCELLED = "cancelled"
+    ORDER_STATUS_FINAL = "final_approved"
     ACCOUNTING_MODE_AUTOMATIC = "automatic"
     ACCOUNTING_MODE_MANUAL = "manual"
     WORKFLOW_STAGE_PENDING_BRANCH = "pending_branch"
@@ -180,10 +184,13 @@ class Sale(ReferenceCodeModel, SoftDeleteModel):
     discount_value = models.DecimalField(default=0, **MONEY_KWARGS)
     discount = models.DecimalField(default=0, **MONEY_KWARGS)
     final_amount = models.DecimalField(default=0, **MONEY_KWARGS)
+    vat_rate = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    vat_amount = models.DecimalField(default=0, **MONEY_KWARGS)
     paid_amount = models.DecimalField(default=0, **MONEY_KWARGS)
     sold_at = models.DateTimeField(default=timezone.now)
     invoice_number = models.CharField(max_length=40, null=True, blank=True)
     description = models.CharField(max_length=255, blank=True)
+    credit_override_reason = models.CharField(max_length=300, blank=True, default="")
     payment_status_ref = models.ForeignKey(
         PaymentStatus, db_column="payment_status", default="paid", on_delete=models.PROTECT
     )
@@ -309,6 +316,7 @@ class Sale(ReferenceCodeModel, SoftDeleteModel):
     warehouse_completed_at = models.DateTimeField(null=True, blank=True)
     pickup_completed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
 
     class Meta:
         ordering = ["-sold_at"]
@@ -316,6 +324,8 @@ class Sale(ReferenceCodeModel, SoftDeleteModel):
             models.CheckConstraint(condition=models.Q(amount__gte=0), name="ck_order_amount"),
             models.CheckConstraint(condition=models.Q(discount__gte=0), name="ck_order_discount"),
             models.CheckConstraint(condition=models.Q(final_amount__gte=0), name="ck_order_final"),
+            models.CheckConstraint(condition=models.Q(vat_rate__gte=0), name="ck_order_vat_rate"),
+            models.CheckConstraint(condition=models.Q(vat_amount__gte=0), name="ck_order_vat_amount"),
             models.CheckConstraint(condition=models.Q(paid_amount__gte=0), name="ck_order_paid"),
             models.CheckConstraint(
                 condition=models.Q(paid_amount__lte=models.F("final_amount")),

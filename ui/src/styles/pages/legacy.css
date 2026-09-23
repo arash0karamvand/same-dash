@@ -1139,6 +1139,7 @@ input[type='number']::-webkit-inner-spin-button {
   right: auto;
   min-width: 220px;
   overflow: auto;
+  z-index: 450;
 }
 
 .jcal-panel--pending {

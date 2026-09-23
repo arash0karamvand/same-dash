@@ -22,7 +22,7 @@ from logic.production_line import spawn_workshop_jobs_for_sale
 from logic.products import product_to_dict
 from logic.receive_kinds import create_office_factory_work
 from logic.sales import record_sale
-from logic.workshop_recipes import apply_product_workset, create_recipe
+from logic.workshop_recipes import apply_product_workset, create_recipe, fabric_named_ids
 
 
 class ReceiveKindsTests(TestCase):
@@ -87,10 +87,17 @@ class FrameLineCutoffTests(TestCase):
                 "kind": WorkshopRecipe.KIND_PAINT,
                 "name": "گردویی گالن",
                 "color_name": "گردویی",
+                "paint_category": WorkshopRecipe.PAINT_CATEGORY_PAINT,
+                "stock_unit": "گالن",
                 "materials": [],
             }
         )
-        self.fabric = create_recipe({"kind": WorkshopRecipe.KIND_FABRIC, "name": "مخمل", "materials": []})
+        self.fabric = create_recipe({
+            "kind": WorkshopRecipe.KIND_FABRIC,
+            "name": "مخمل",
+            "materials": [],
+            **fabric_named_ids(),
+        })
         self.foam = create_recipe({"kind": WorkshopRecipe.KIND_FOAM, "name": "اسفنج سرد", "materials": []})
         self.webbing = create_recipe({"kind": WorkshopRecipe.KIND_WEBBING, "name": "تسمه متری", "materials": []})
 
@@ -172,6 +179,8 @@ class FrameLineCutoffTests(TestCase):
             {
                 "kind": WorkshopRecipe.KIND_PAINT,
                 "name": "کرم گالن",
+                "paint_category": WorkshopRecipe.PAINT_CATEGORY_PAINT,
+                "stock_unit": "گالن",
                 "materials": [{"material_id": material.id, "quantity": 2, "unit": "گالن"}],
             }
         )

@@ -5,11 +5,11 @@ import Icon from './icons/Icon'
 import { iconForPortal } from '../config/iconMap'
 import { cn, tw } from '../styles/tw'
 
-export default function MobileBottomNav({ user, portals, currentPortal, menuOpen = false, onNavigate, onOpenMenu }) {
+export default function MobileBottomNav({ user, portals, currentPortal, menuOpen = false, onNavigate, onToggleMenu }) {
   const items = (portals || []).filter((p) => canSeePortal(user, p)).slice(0, 4)
 
   return (
-    <nav className={tw.mobileBottomNav} aria-label="پورتال‌ها">
+    <nav className={cn('mobile-bottom-nav', tw.mobileBottomNav)} aria-label="پورتال‌ها">
       {items.map((p) => (
         <button
           key={p.id}
@@ -29,7 +29,7 @@ export default function MobileBottomNav({ user, portals, currentPortal, menuOpen
         className={cn(tw.mobileNavItem, menuOpen && tw.mobileNavItemActive)}
         aria-expanded={menuOpen}
         aria-haspopup="dialog"
-        onClick={onOpenMenu}
+        onClick={onToggleMenu}
       >
         <span className={tw.mobileNavIcon} aria-hidden>
           <Icon name="menu" size={20} />

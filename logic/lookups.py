@@ -1,6 +1,7 @@
 """گزینه‌های سیستم — از MySQL."""
 
 from django.core.cache import cache
+from django.db.utils import OperationalError, ProgrammingError
 
 from backend.models import LookupOption
 
@@ -8,7 +9,7 @@ CACHE_KEY = "lookup_options_v1"
 CACHE_TTL = 60
 
 # دسته‌هایی که گزینه فرم نیستند و نباید در کش گزینه‌ها بیایند (مقدارشان حجیم است).
-NON_CHOICE_CATEGORIES = ("branding",)
+NON_CHOICE_CATEGORIES = ("branding", "posting_rule", "journal_entry_type", "suppressed_role", "system")
 
 
 def _invalidate_cache():
@@ -27,8 +28,12 @@ def get_all_lookups(force_refresh=False):
         .exclude(category__in=NON_CHOICE_CATEGORIES)
         .order_by("category", "sort_order", "label")
     )
-    for opt in options:
-        grouped.setdefault(opt.category, []).append(lookup_to_dict(opt))
+    try:
+        for opt in options:
+            grouped.setdefault(opt.category, []).append(lookup_to_dict(opt))
+    except (OperationalError, ProgrammingError):
+        # هنگام bootstrap/migrate جدول lookup هنوز ساخته نشده است.
+        return {}
 
     cache.set(CACHE_KEY, grouped, CACHE_TTL)
     return grouped

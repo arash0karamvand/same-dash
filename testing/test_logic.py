@@ -497,7 +497,7 @@ class SmsLogicTest(TestCase):
 
 class FactoryAccountingTransferTest(TestCase):
     def setUp(self):
-        from logic.accounting_accounts import seed_accounts
+        from testing.accounting_helpers import seed_accounts
         from logic.accounting_documents import create_accounting_document
         from logic.ledger import FACTORY_LEDGER, OFFICE_LEDGER
 
@@ -624,7 +624,7 @@ class FactoryAccountingTransferTest(TestCase):
 
 class AccountingDocumentCrudTest(TestCase):
     def setUp(self):
-        from logic.accounting_accounts import seed_accounts
+        from testing.accounting_helpers import seed_accounts
         from logic.accounting_documents import create_accounting_document
         from logic.ledger import FACTORY_LEDGER, OFFICE_LEDGER
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from logic.chart_of_accounts import POSTING_RULES
+from logic.dynamic_choices import posting_rules
 
 
 def build_journal_lines(
@@ -24,7 +24,7 @@ def build_journal_lines(
         ledger = OFFICE_LEDGER
 
     accounts = accounts or {}
-    rules = POSTING_RULES.get(rule_name)
+    rules = posting_rules(rule_name)
     if not rules:
         raise ValueError(f"قانون ثبت «{rule_name}» تعریف نشده است.")
 

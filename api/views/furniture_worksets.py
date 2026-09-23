@@ -4,13 +4,14 @@ from api.helpers import api_view, fail, parse_json, success
 from auth.permissions import MANAGE_FRAMES, VIEW_FRAMES, VIEW_PRODUCTS, VIEW_SALES, has_permission
 from logic.audit import log_action
 from backend.models import Frame, FurnitureWorkset
+from logic.dynamic_choices import choice_options
 from logic.furniture_worksets import (
-    ALLOWED_ARMS,
-    ARM_STYLE_LABELS,
-    PIECE_KIND_LABELS,
+    allowed_arms,
+    arm_style_labels,
     create_workset,
     delete_workset,
     filter_worksets,
+    piece_kind_labels,
     piece_slots,
     products_for_workset,
     update_workset,
@@ -35,13 +36,16 @@ def _can_manage(user):
 def workset_options(request):
     if not _can_view(request.user):
         return fail("Permission denied", status=403)
+    design_styles = choice_options("frame_design_style") or [
+        {"value": k, "label": v} for k, v in Frame.DESIGN_STYLE_CHOICES
+    ]
     return success(
         {
-            "piece_kinds": [{"value": k, "label": v} for k, v in PIECE_KIND_LABELS.items()],
-            "arm_styles": [{"value": k, "label": v} for k, v in ARM_STYLE_LABELS.items()],
-            "allowed_arms": {kind: list(styles) for kind, styles in ALLOWED_ARMS.items()},
+            "piece_kinds": [{"value": k, "label": v} for k, v in piece_kind_labels().items()],
+            "arm_styles": [{"value": k, "label": v} for k, v in arm_style_labels().items()],
+            "allowed_arms": {kind: list(styles) for kind, styles in allowed_arms().items()},
             "piece_slots": piece_slots(),
-            "design_styles": [{"value": k, "label": v} for k, v in Frame.DESIGN_STYLE_CHOICES],
+            "design_styles": design_styles,
         }
     )
 

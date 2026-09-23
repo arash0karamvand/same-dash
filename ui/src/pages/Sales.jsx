@@ -31,31 +31,9 @@ import { formatDate, formatMoney } from '../utils/format'
 import { hasAnyPermission, hasPermission, isBranchSupervisor, isExecutiveUser, isSystemAdmin, canApproveSaleBranch } from '../utils/permissions'
 
 import { currentJalali, formatJalali, jalaliToIso, PERSIAN_MONTHS, todayIso, toPersianDigits, addYearsToIso } from '../utils/jalali'
+import SaleJournals from '../components/SaleJournals'
 
 
-
-const PAYMENT_METHODS = [
-
-  { value: 'cash', label: 'نقدی' },
-
-  { value: 'card', label: 'کارت‌خوان' },
-
-  { value: 'check', label: 'چک' },
-
-]
-
-
-
-const ORDER_KINDS = [
-  { value: 'normal', label: 'فروش و پرداخت آنی' },
-  { value: 'pre_invoice', label: 'پیش‌فاکتور (بیعانه + تایید/لغو)' },
-  { value: 'deposit', label: 'بیعانیه (پرداخت روز قبل تحویل)' },
-]
-
-const ACCOUNTING_MODES = [
-  { value: 'automatic', label: 'خودکار — ثبت در حساب متناسب با روش پرداخت' },
-  { value: 'manual', label: 'دستی — فقط ارسال اطلاعات به اداری' },
-]
 
 const ORDER_STATUS_COLORS = {
   pending: 'var(--warning)',
@@ -75,12 +53,14 @@ const EMPTY_FORM = {
 
   discount_type: 'amount',
   discount_value: '',
+  vat_rate: '0',
 
   paid_amount: '',
 
   description: '',
 
   payment_method: 'cash',
+  credit_override_reason: '',
 
   order_kind: 'normal',
 
@@ -105,9 +85,11 @@ const EMPTY_EDIT = {
   description: '',
   invoice_number: '',
   payment_method: 'cash',
+  credit_override_reason: '',
   amount: '',
   discount_type: 'amount',
   discount_value: '',
+  vat_rate: '0',
   paid_amount: '',
 }
 
@@ -277,8 +259,9 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
   const { user } = useAuth()
   const confirm = useConfirm()
   const { choices, branchOptions, stockLocations } = useConfig()
-  const paymentMethods = choices('payment_method').length ? choices('payment_method') : PAYMENT_METHODS
-  const orderKinds = choices('order_kind').length ? choices('order_kind') : ORDER_KINDS
+  const paymentMethods = choices('payment_method')
+  const orderKinds = choices('order_kind')
+  const accountingModes = choices('accounting_mode')
   const orderStatusColors = Object.fromEntries(
     (choices('order_status').length ? choices('order_status') : []).map((o) => [o.value, o.meta?.color || 'var(--accent)'])
   )
@@ -385,6 +368,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
   const [payAmount, setPayAmount] = useState('')
 
   const [invoiceSale, setInvoiceSale] = useState(null)
+  const [journalsModal, setJournalsModal] = useState(null)
   const [invoiceLoadingId, setInvoiceLoadingId] = useState(null)
   const [excelLoadingId, setExcelLoadingId] = useState(null)
 
@@ -634,6 +618,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
       amount: String(sale.amount ?? ''),
       discount_type: sale.discount_type || 'amount',
       discount_value: String(sale.discount_value ?? sale.discount ?? 0),
+      vat_rate: String(sale.vat_rate ?? 0),
 
       paid_amount: String(sale.paid_amount ?? 0),
 
@@ -799,6 +784,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
           amount: Number(form.amount),
           discount_type: form.discount_type,
           discount_value: Number(form.discount_value) || 0,
+          vat_rate: Number(form.vat_rate) || 0,
           paid_amount: Number(form.paid_amount),
         })
       } else {
@@ -806,12 +792,14 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
           amount: Number(form.amount),
           discount_type: form.discount_type || 'amount',
           discount_value: Number(form.discount_value) || 0,
+          vat_rate: Number(form.vat_rate) || 0,
           payment_method: form.payment_method,
           order_kind: form.order_kind || 'normal',
           accounting_mode: form.accounting_mode || 'automatic',
           payment_status: resolvePaymentStatus(form, isShop),
           invoice_number: form.invoice_number,
           description: form.description,
+          credit_override_reason: form.credit_override_reason || '',
         }
 
         if (pickBranchOnSale) {
@@ -1269,6 +1257,8 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
                       {canEditSale(s) && (
                         <>
                       <button type="button" className={fromLegacy("link")} onClick={() => openEdit(s)}>ویرایش</button>
+                      
+                      <button type="button" className={fromLegacy("link")} onClick={() => setJournalsModal(s)}>سندها</button>
 
                       {s.balance_due > 0 && s.order_status !== 'cancelled' && !s.amounts_masked && (
                         <button type="button" className={fromLegacy("link link-success")} onClick={() => { setPayModal(s); setPayAmount(String(s.balance_due)) }}>پرداخت</button>
@@ -1505,6 +1495,17 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
                 excludeSaleId={editing?.id}
               />
 
+              <Field label="نرخ مالیات ارزش افزوده (%)">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={form.vat_rate}
+                  onChange={(e) => setForm({ ...form, vat_rate: e.target.value })}
+                />
+              </Field>
+
               <Field label="پرداخت‌شده"><MoneyInput min="0" value={form.paid_amount} onChange={(e) => setForm({ ...form, paid_amount: e.target.value })} /></Field>
 
               <Field label="روش پرداخت">
@@ -1514,6 +1515,11 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
                   options={paymentMethods}
                 />
               </Field>
+              {form.payment_method === 'check' && (
+                <Field label="دلیل عبور از سقف اعتبار">
+                  <input value={form.credit_override_reason || ''} onChange={(e) => setForm({ ...form, credit_override_reason: e.target.value })} placeholder="فقط اگر فروش از سقف اعتبار بیشتر است" />
+                </Field>
+              )}
 
               <Field label="شماره فاکتور"><input className={fromLegacy("ltr")} value={form.invoice_number} onChange={(e) => setForm({ ...form, invoice_number: e.target.value })} /></Field>
 
@@ -1629,6 +1635,17 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
                 customerId={selectedCustomer?.id}
               />
 
+              <Field label="نرخ مالیات ارزش افزوده (%)">
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  value={form.vat_rate}
+                  onChange={(e) => setForm({ ...form, vat_rate: e.target.value })}
+                />
+              </Field>
+
               {isDeposit(form) && (
                 <>
                   <Field label="تاریخ تحویل">
@@ -1664,13 +1681,18 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
                   options={paymentMethods}
                 />
               </Field>
+              {form.payment_method === 'check' && (
+                <Field label="دلیل عبور از سقف اعتبار">
+                  <input value={form.credit_override_reason || ''} onChange={(e) => setForm({ ...form, credit_override_reason: e.target.value })} placeholder="فقط اگر فروش از سقف اعتبار بیشتر است" />
+                </Field>
+              )}
 
               {!editing && (
                 <Field label="ثبت حسابداری">
                   <Select
                     value={form.accounting_mode}
                     onChange={(v) => setForm({ ...form, accounting_mode: v })}
-                    options={ACCOUNTING_MODES}
+                    options={accountingModes}
                   />
                 </Field>
               )}
@@ -1733,6 +1755,19 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
 
         )}
 
+      </Modal>
+
+      <Modal title="سندهای حسابداری" open={!!journalsModal} onClose={() => setJournalsModal(null)}>
+        {journalsModal && (
+          <div className="p-2">
+            <div className="mb-4 p-3 bg-gray-50 rounded-md">
+              <p className="text-sm"><strong>فاکتور:</strong> {journalsModal.invoice_number || `#${journalsModal.id}`}</p>
+              <p className="text-sm"><strong>مشتری:</strong> {journalsModal.customer_name}</p>
+              <p className="text-sm"><strong>مبلغ نهایی:</strong> {formatMoney(journalsModal.final_amount)}</p>
+            </div>
+            <SaleJournals saleId={journalsModal.id} />
+          </div>
+        )}
       </Modal>
 
       <InvoiceModal

@@ -6,21 +6,21 @@ from backend.models import Frame
 from logic.audit import log_action
 from logic.frame_materials import preview_frame_requirements
 from logic.frames import (
-    COMPONENT_TYPE_LABELS,
-    DESIGN_STYLE_LABELS,
-    RULE_KEY_LABELS,
-    WOOD_TYPE_LABELS,
+    component_type_labels,
     create_frame,
     delete_frame,
+    design_style_labels,
     filter_frames,
     frame_to_dict,
+    rule_key_labels,
     update_frame,
+    wood_type_labels,
 )
 from logic.furniture_worksets import (
-    ALLOWED_ARMS,
-    ARM_STYLE_LABELS,
-    PIECE_KIND_LABELS,
+    allowed_arms,
+    arm_style_labels,
     create_product_from_frame,
+    piece_kind_labels,
 )
 from logic.products import product_to_dict
 
@@ -39,13 +39,13 @@ def frame_options(request):
         return fail("Permission denied", status=403)
     return success(
         {
-            "design_styles": [{"value": k, "label": v} for k, v in DESIGN_STYLE_LABELS.items()],
-            "wood_types": [{"value": k, "label": v} for k, v in WOOD_TYPE_LABELS.items()],
-            "component_types": [{"value": k, "label": v} for k, v in COMPONENT_TYPE_LABELS.items()],
-            "rule_keys": [{"value": k, "label": v} for k, v in RULE_KEY_LABELS.items()],
-            "piece_kinds": [{"value": k, "label": v} for k, v in PIECE_KIND_LABELS.items()],
-            "arm_styles": [{"value": k, "label": v} for k, v in ARM_STYLE_LABELS.items()],
-            "allowed_arms": {kind: list(styles) for kind, styles in ALLOWED_ARMS.items()},
+            "design_styles": [{"value": k, "label": v} for k, v in design_style_labels().items()],
+            "wood_types": [{"value": k, "label": v} for k, v in wood_type_labels().items()],
+            "component_types": [{"value": k, "label": v} for k, v in component_type_labels().items()],
+            "rule_keys": [{"value": k, "label": v} for k, v in rule_key_labels().items()],
+            "piece_kinds": [{"value": k, "label": v} for k, v in piece_kind_labels().items()],
+            "arm_styles": [{"value": k, "label": v} for k, v in arm_style_labels().items()],
+            "allowed_arms": {kind: list(styles) for kind, styles in allowed_arms().items()},
         }
     )
 

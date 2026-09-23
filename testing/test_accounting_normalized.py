@@ -5,11 +5,12 @@ from django.db.models import Sum
 from django.test import TestCase
 
 from backend.models import Customer, JournalEntry, JournalLine
-from logic.accounting_accounts import get_account, seed_accounts
+from logic.accounting_accounts import get_account
 from logic.accounting_documents import create_accounting_document
 from logic.accounting_transfer import transfer_factory_document_to_office
 from logic.ledger import FACTORY_LEDGER, OFFICE_LEDGER
 from logic.sales import record_sale
+from testing.accounting_helpers import seed_accounts
 
 
 class NormalizedAccountingTest(TestCase):

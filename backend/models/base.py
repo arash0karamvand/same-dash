@@ -1,5 +1,7 @@
 """Shared model primitives."""
 
+import uuid
+
 from django.db import models
 from django.db.models import Q
 
@@ -86,6 +88,15 @@ class ReferenceCodeModel(models.Model):
 class TimeStampedModel(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        abstract = True
+
+
+class PublicUUIDModel(models.Model):
+    """Stable public identity for cross-module accounting origins."""
+
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
 
     class Meta:
         abstract = True

@@ -4,7 +4,6 @@ from django.db import transaction
 
 from backend.models import Account, JournalEntry
 from logic.accounting import is_auto_approved_accounting_user
-from logic.accounting_accounts import seed_accounts
 from logic.accounting_documents import create_accounting_document
 from logic.ledger import FACTORY_LEDGER, OFFICE_LEDGER
 
@@ -54,8 +53,6 @@ def _line_preview(line):
 
 
 def preview_transfer(*, document_code="", document_number=None):
-    seed_accounts(ledger=OFFICE_LEDGER)
-    seed_accounts(ledger=FACTORY_LEDGER)
     journal = _factory_journal(document_code, document_number)
     transferred = getattr(journal, "transferred_journal", None)
     lines = [_line_preview(line) for line in journal.lines.all()]

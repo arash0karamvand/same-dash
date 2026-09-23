@@ -82,6 +82,7 @@ def create_customer(data):
         raise ValueError("Customer with this phone already exists")
 
     birthday, has_birthday = parse_birthday(data)
+    credit_limit = _parse_credit_limit(data)
     customer = Customer.objects.create(
         full_name=full_name,
         phone=phone,
@@ -89,6 +90,7 @@ def create_customer(data):
         address=(data.get("address") or "").strip(),
         notes=(data.get("notes") or "").strip(),
         membership_code=generate_membership_code(),
+        credit_limit=credit_limit,
     )
     if has_birthday:
         customer.birthday = birthday
@@ -110,8 +112,27 @@ def update_customer(customer, data):
         customer.is_active = bool(data.get("is_active"))
     if has_birthday:
         customer.birthday = birthday
+    if "credit_limit" in data:
+        customer.credit_limit = _parse_credit_limit(data)
     customer.save()
     return customer
+
+
+def _parse_credit_limit(data):
+    if "credit_limit" not in data:
+        return None
+    raw = data.get("credit_limit")
+    if raw in (None, ""):
+        return None
+    from decimal import Decimal, InvalidOperation
+
+    try:
+        value = Decimal(str(raw))
+    except (InvalidOperation, TypeError):
+        raise ValueError("سقف اعتبار نامعتبر است.")
+    if value < 0:
+        raise ValueError("سقف اعتبار نمی‌تواند منفی باشد.")
+    return value
 
 
 def get_customer(pk, with_level=False):

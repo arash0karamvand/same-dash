@@ -8,21 +8,24 @@ from decimal import Decimal, InvalidOperation
 from io import BytesIO
 
 from django.db import transaction
-from django.utils import timezone
 
 from backend.models import Account, JournalEntry
-from logic.accounting import create_journal
-from logic.accounting_accounts import seed_accounts
+from backend.models.accounting import defer_account_closure_rebuild
 from logic.chart_of_accounts import infer_account_class, infer_normal_balance, slug_for_code
 from logic.jalali import parse_jalali_date
 from logic.ledger import OFFICE_LEDGER
 
 SHEET_ALIASES = {
-    "general": ("تراز کل",),
-    "subsidiary": ("تراز معین", "تراز معين"),
-    "detailed": ("تراز تفصیلی", "تراز تفصيلي"),
-    "detail_ledger": ("ریز نمونه", "ريز نمونه"),
+    "general": ("تراز کل", "تراز كل"),
+    "subsidiary": ("تراز معین", "تراز معين", "تراز معي"),
+    "detailed": ("تراز تفصیلی", "تراز تفصيلي", "تراز تفصيل"),
+    "detail_ledger": ("ریز نمونه", "ريز نمونه", "ریز", "ريز"),
 }
+
+DETAIL_LEDGER_SAMPLE_NOTE = (
+    "شیت «ریز نمونه» فقط گردش یک حساب را نشان می‌دهد و سند جداگانه‌ای از آن ساخته نمی‌شود؛ "
+    "مانده و گردش همه حساب‌ها از تراز تفصیلی ثبت می‌شود."
+)
 
 TOTAL_LABELS = {"جمع", "جمع کل", "جمع كل"}
 DETAILED_CODE_RE = re.compile(r"(\d{3,4}/\d+/[\d]+)")
@@ -61,6 +64,7 @@ class ParsedExcel:
     detail_ledger_account_code: str = ""
     detail_ledger_account_name: str = ""
     detail_ledger_rows: list[DetailLedgerRow] = field(default_factory=list)
+    recognized_accounts: list[dict] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
 
@@ -73,8 +77,21 @@ def _normalize_text(value):
         text.replace("ي", "ی")
         .replace("ك", "ک")
         .replace("\u200c", "")
+        .translate(str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789"))
         .strip()
     )
+
+
+def _normalize_account_code(value):
+    code = _normalize_text(value)
+    if not code:
+        return ""
+    if re.fullmatch(r"\d+\.0+", code):
+        code = code.split(".", 1)[0]
+    code = code.replace("\\", "/").replace("ـ", "")
+    code = re.sub(r"(?<=\d)\s*[-._]\s*(?=\d)", "/", code)
+    code = re.sub(r"\s*/\s*", "/", code)
+    return code.strip(" /")
 
 
 def _parse_money(value):
@@ -142,7 +159,7 @@ def _parse_trial_balance_sheet(worksheet):
     totals = None
     data_start = header_index + 2
     for row in rows[data_start:]:
-        code = _normalize_text(row[0] if row else "")
+        code = _normalize_account_code(row[0] if row else "")
         name = _normalize_text(row[1] if row and len(row) > 1 else "")
         if not code and not name:
             continue
@@ -224,7 +241,9 @@ def _parse_detail_ledger_sheet(worksheet):
 
 
 def parse_account_code(code):
-    parts = [part.strip() for part in _normalize_text(code).split("/") if part.strip()]
+    parts = [part.strip() for part in _normalize_account_code(code).split("/") if part.strip()]
+    if not parts or any(not part.isdigit() for part in parts):
+        raise ValueError(f"کد حساب نامعتبر: {code}")
     if len(parts) == 1:
         return "general", parts[0], None, None
     if len(parts) == 2:
@@ -232,6 +251,50 @@ def parse_account_code(code):
     if len(parts) >= 3:
         return "detailed", parts[0], parts[1], parts[2]
     raise ValueError(f"کد حساب نامعتبر: {code}")
+
+
+def _recognized_accounts(parsed, *, ledger=OFFICE_LEDGER):
+    """فهرست حساب‌هایی که واقعاً از فایل تشخیص داده شده‌اند."""
+    existing = set(ledger.accounts().values_list("path", flat=True))
+    recognized = []
+    seen = {}
+    conflicts = []
+    for level, rows in (
+        ("general", parsed.general_rows),
+        ("subsidiary", parsed.subsidiary_rows),
+        ("detailed", parsed.detailed_rows),
+    ):
+        for row in rows:
+            try:
+                parsed_level, general, subsidiary, detail = parse_account_code(row.code)
+            except ValueError as exc:
+                parsed.errors.append(str(exc))
+                continue
+            if parsed_level != level:
+                parsed.warnings.append(
+                    f"سطح کد {row.code} با شیت {level} هم‌خوان نیست."
+                )
+                continue
+            path = "/".join(part for part in (general, subsidiary, detail) if part)
+            previous = seen.get(path)
+            if previous and previous != row.name:
+                conflicts.append(
+                    f"کد {path} با دو عنوان «{previous}» و «{row.name}» دیده شد."
+                )
+                continue
+            if previous:
+                continue
+            seen[path] = row.name
+            recognized.append({
+                "level": level,
+                "code": row.code,
+                "path": path,
+                "name": row.name or f"حساب {path}",
+                "parent_path": path.rpartition("/")[0],
+                "status": "existing" if path in existing else "new",
+            })
+    parsed.errors.extend(conflicts)
+    return recognized
 
 
 def validate_excel_workbook(workbook):
@@ -335,7 +398,7 @@ def _get_or_create_general_account(code, name, *, ledger=OFFICE_LEDGER):
             account.save(update_fields=["name"])
         return account, False
 
-    slug = slug_for_code(code)
+    slug = slug_for_code(code, ledger=ledger)
     account_class = infer_account_class(code)
     account, created = Account.objects.get_or_create(
         ledger=ledger.model, slug=slug,
@@ -394,20 +457,80 @@ def _get_or_create_detailed(general_code, sub_code, detail_code, name, *, ledger
     return detail, True
 
 
-def _resolve_detailed_by_code(full_code, fallback_name="", *, ledger=OFFICE_LEDGER):
-    level, general_code, sub_code, detail_code = parse_account_code(full_code)
-    if level != "detailed":
-        raise ValueError(f"کد تفصیلی نامعتبر: {full_code}")
-    return _get_or_create_detailed(general_code, sub_code, detail_code, fallback_name, ledger=ledger)
+def _estimate_import_stats(parsed, *, ledger=OFFICE_LEDGER):
+    """Read-only preview — no writes."""
+    ledger_row = ledger.model
+    general_existing = set(
+        Account.objects.filter(ledger=ledger_row, parent__isnull=True).values_list("code", flat=True)
+    )
+    sub_existing = set(
+        Account.objects.filter(
+            ledger=ledger_row,
+            parent__isnull=False,
+            parent__parent__isnull=True,
+        ).values_list("parent__code", "code")
+    )
+    detail_existing = set(
+        Account.objects.filter(
+            ledger=ledger_row,
+            parent__parent__isnull=False,
+            parent__parent__parent__isnull=True,
+        ).values_list("parent__parent__code", "parent__code", "code")
+    )
+
+    accounts_created = accounts_updated = 0
+    for row in parsed.general_rows:
+        if row.code in general_existing:
+            accounts_updated += 1
+        else:
+            accounts_created += 1
+
+    subsidiaries_created = subsidiaries_updated = 0
+    for row in parsed.subsidiary_rows:
+        level, general_code, sub_code, _ = parse_account_code(row.code)
+        if level != "subsidiary":
+            continue
+        if (general_code, sub_code) in sub_existing:
+            subsidiaries_updated += 1
+        else:
+            subsidiaries_created += 1
+
+    details_created = details_updated = 0
+    for row in parsed.detailed_rows:
+        level, general_code, sub_code, detail_code = parse_account_code(row.code)
+        if level != "detailed":
+            continue
+        if (general_code, sub_code, detail_code) in detail_existing:
+            details_updated += 1
+        else:
+            details_created += 1
+
+    return {
+        "accounts_created": accounts_created,
+        "accounts_updated": accounts_updated,
+        "subsidiaries_created": subsidiaries_created,
+        "subsidiaries_updated": subsidiaries_updated,
+        "details_created": details_created,
+        "details_updated": details_updated,
+        **_estimate_balance_stats(parsed, ledger=ledger),
+    }
 
 
-@transaction.atomic
-def import_excel_file(file_obj, *, dry_run=False, approve=False, force=False, ledger=OFFICE_LEDGER):
-    seed_accounts(ledger=ledger)
-    parsed = parse_excel_file(file_obj)
-    if parsed.errors:
-        return _build_report(parsed, dry_run=dry_run, committed=False)
+def _estimate_balance_stats(parsed, *, ledger):
+    opening, turnover = _balance_lines(_leaf_balance_rows(parsed))
+    codes = [code for code, lines in zip(_balance_document_codes(parsed), (opening, turnover)) if lines]
+    return {
+        "opening_lines": len(opening),
+        "turnover_lines": len(turnover),
+        "imbalance": int(_imbalance(opening) + _imbalance(turnover)),
+        "journals_created": len(codes),
+        "journals_existing": sum(
+            _live_import_journals(code, ledger=ledger).count() for code in codes
+        ),
+    }
 
+
+def _import_chart_rows(parsed, *, ledger=OFFICE_LEDGER):
     stats = {
         "accounts_created": 0,
         "accounts_updated": 0,
@@ -415,8 +538,6 @@ def import_excel_file(file_obj, *, dry_run=False, approve=False, force=False, le
         "subsidiaries_updated": 0,
         "details_created": 0,
         "details_updated": 0,
-        "entries_created": 0,
-        "entries_skipped": 0,
     }
 
     for row in parsed.general_rows:
@@ -448,56 +569,293 @@ def import_excel_file(file_obj, *, dry_run=False, approve=False, force=False, le
         else:
             stats["details_updated"] += 1
 
-    if parsed.detail_ledger_rows:
-        if not parsed.detail_ledger_account_code:
-            parsed.errors.append("کد حساب تفصیلی در شیت ریز یافت نشد.")
-            return _build_report(parsed, dry_run=dry_run, committed=False, stats=stats)
+    return stats
 
-        detailed, _ = _resolve_detailed_by_code(
-            parsed.detail_ledger_account_code,
-            parsed.detail_ledger_account_name,
-            ledger=ledger,
-        )
-        documents = {}
 
-        for row in parsed.detail_ledger_rows:
-            if row.debit <= 0 and row.credit <= 0:
-                continue
-            try:
-                entry_date = parse_jalali_date(row.entry_date)
-            except ValueError as exc:
-                parsed.warnings.append(f"تاریخ نامعتبر {row.entry_date}: {exc}")
-                continue
+def _leaf_balance_rows(parsed):
+    """ردیف‌های قابل ثبت هر حساب کل.
 
-            documents.setdefault((row.document_number, entry_date), []).append(row)
+    اگر جمع تفصیلی‌های یک کل با تراز کل برابر باشد، فقط تفصیلی‌ها ثبت می‌شوند
+    (خروجی برخی نرم‌افزارها معینِ بدون تفصیلی را در تفصیلیِ معین دیگری می‌آورد).
+    وگرنه هر معین با تفصیلی‌هایش، و معینِ بدون تفصیلی با مبلغ خودش ثبت می‌شود.
+    """
+    details, subs = {}, {}
+    for row in parsed.detailed_rows:
+        level, general_code, sub_code, _ = parse_account_code(row.code)
+        if level == "detailed":
+            details.setdefault(general_code, {}).setdefault(sub_code, []).append(row)
+    for row in parsed.subsidiary_rows:
+        level, general_code, sub_code, _ = parse_account_code(row.code)
+        if level == "subsidiary":
+            subs.setdefault(general_code, {})[sub_code] = row
 
-        for (number, entry_date), rows in documents.items():
-            if JournalEntry.objects.filter(ledger__code=ledger.id, document_number=number).exists():
-                stats["entries_skipped"] += len(rows)
-                continue
-            debit = sum(row.debit for row in rows)
-            credit = sum(row.credit for row in rows)
-            if len(rows) < 2 or debit != credit:
-                parsed.warnings.append(f"سند {number} نامتوازن یا تک‌ردیفی بود و وارد نشد.")
-                stats["entries_skipped"] += len(rows)
-                continue
-            create_journal(
-                lines=[{"account": detailed, "debit": row.debit, "credit": row.credit,
-                        "description": row.description or f"سند {number}"} for row in rows],
-                entry_type="manual", description=f"سند وارداتی {number}",
-                document_number=number, entry_date=entry_date,
-                is_approved=approve, ledger=ledger,
+    leaves = []
+    for general in parsed.general_rows:
+        general_details = details.get(general.code, {})
+        general_subs = subs.get(general.code, {})
+        detail_rows = [row for rows in general_details.values() for row in rows]
+        if not general_subs and not detail_rows:
+            leaves.append(general)
+            continue
+        mismatched = [
+            sub.code for sub_code, sub in general_subs.items()
+            if _row_amounts(sub) != _sum_amounts(general_details.get(sub_code, []))
+        ]
+        if detail_rows and _sum_amounts(detail_rows) == _row_amounts(general):
+            leaves.extend(detail_rows)
+        else:
+            leaves.extend(detail_rows)
+            leaves.extend(
+                sub for sub_code, sub in general_subs.items() if sub_code not in general_details
             )
-            stats["entries_created"] += len(rows)
+            mismatched = [code for code in mismatched if parse_account_code(code)[2] in general_details]
+        if mismatched:
+            parsed.warnings.append(
+                f"حساب {general.code}: مانده معین‌های {'، '.join(mismatched[:6])}"
+                f"{' …' if len(mismatched) > 6 else ''} با جمع تفصیلی‌هایشان برابر نیست؛ "
+                "مبالغ تفصیلی ثبت شد."
+            )
+    return leaves
+
+
+def _row_amounts(row):
+    return (
+        row.opening_debit - row.opening_credit,
+        row.turnover_debit,
+        row.turnover_credit,
+    )
+
+
+def _sum_amounts(rows):
+    return (
+        sum((r.opening_debit - r.opening_credit for r in rows), Decimal(0)),
+        sum((r.turnover_debit for r in rows), Decimal(0)),
+        sum((r.turnover_credit for r in rows), Decimal(0)),
+    )
+
+
+def _balance_lines(leaves):
+    """ردیف‌های یک‌طرفه برای سند افتتاحیه و سند گردش دوره."""
+    opening, turnover = [], []
+    for row in leaves:
+        net_opening = row.opening_debit - row.opening_credit
+        if net_opening > 0:
+            opening.append((row, net_opening, Decimal(0)))
+        elif net_opening < 0:
+            opening.append((row, Decimal(0), -net_opening))
+        if row.turnover_debit > 0:
+            turnover.append((row, row.turnover_debit, Decimal(0)))
+        if row.turnover_credit > 0:
+            turnover.append((row, Decimal(0), row.turnover_credit))
+    return opening, turnover
+
+
+def _imbalance(lines):
+    return sum((d for _, d, _ in lines), Decimal(0)) - sum((c for _, _, c in lines), Decimal(0))
+
+
+def _balance_document_codes(parsed):
+    date_from = (parsed.metadata.get("date_from") or "").replace("/", "")
+    date_to = (parsed.metadata.get("date_to") or "").replace("/", "")
+    return f"XL-OB-{date_from}", f"XL-TB-{date_from}-{date_to}"
+
+
+def _balancing_account(ledger):
+    """حساب فنی اختلاف؛ ناترازی فایل هرگز مانع ورود اطلاعات نمی‌شود."""
+    from logic.chart_of_accounts import ACCOUNT_SLUGS
+
+    general = ledger.accounts().filter(slug=ACCOUNT_SLUGS.RETAINED_EARNINGS, parent__isnull=True).first()
+    if general is None:
+        general = Account.objects.create(
+            ledger=ledger.model,
+            parent=None,
+            slug=ACCOUNT_SLUGS.RETAINED_EARNINGS,
+            code="6320",
+            name="سود و زیان انباشته",
+            account_class="equity",
+            normal_balance="credit",
+            sort_order=6320,
+            is_active=True,
+        )
+    if not general.children.exists():
+        return general
+    slug = f"{general.slug}-import-diff"
+    existing = general.children.filter(slug=slug).first()
+    if existing is not None:
+        if not existing.is_active:
+            existing.is_active = True
+            existing.save(update_fields=["is_active"])
+        if existing.is_postable:
+            return existing
+
+    code = "9999"
+    suffix = 1
+    while general.children.filter(code=code).exists():
+        suffix += 1
+        code = f"9999{suffix}"
+    return Account.objects.create(
+        ledger=ledger.model,
+        parent=general,
+        slug=slug if existing is None else f"{slug}-{suffix}",
+        code=code,
+        name="اختلاف تراز واردات",
+        account_class=general.account_class,
+        normal_balance=general.normal_balance,
+        sort_order=9999,
+        is_active=True,
+    )
+
+
+def _live_import_journals(base_code, *, ledger):
+    return (
+        JournalEntry.objects.filter(ledger__code=ledger.id, document_code__startswith=base_code)
+        .exclude(status_ref_id=JournalEntry.STATUS_VOID)
+        .exclude(corrections__isnull=False)
+        .exclude(corrects__isnull=False)
+    )
+
+
+def _claim_document_code(base_code, *, ledger, force, parsed):
+    """کد سند جدید؛ None اگر همین دوره قبلاً وارد شده و جایگزینی خواسته نشده."""
+    from logic.document_issuance import DocumentIssuanceService
+
+    service = DocumentIssuanceService()
+    for journal in _live_import_journals(base_code, ledger=ledger):
+        if journal.status == JournalEntry.STATUS_POSTED:
+            if not force:
+                parsed.warnings.append(
+                    f"سند {journal.document_code} قبلاً وارد و قطعی شده است؛ "
+                    "برای جایگزینی گزینه «جایگزینی تراز قبلی» را فعال کنید."
+                )
+                return None
+            service.issue_correction(journal, reason="جایگزینی با فایل اکسل جدید")
+        else:
+            service.retire_draft(journal, reason="جایگزینی با فایل اکسل جدید")
+    used = JournalEntry.objects.filter(
+        ledger__code=ledger.id, document_code__startswith=base_code,
+    ).count()
+    return base_code if used == 0 else f"{base_code}-R{used + 1}"
+
+
+def _write_balance_journal(lines, *, code, entry_date, description, ledger, approve, accounts_by_path):
+    from backend.models import JournalLine
+    from logic.accounting import _allocate_document
+
+    ledger_row, number, code = _allocate_document(
+        ledger=ledger, entry_date=entry_date, document_code=code,
+    )
+    journal = JournalEntry.objects.create(
+        ledger=ledger_row, document_number=number, document_code=code,
+        entry_type="opening", entry_date=entry_date, description=description,
+        status=JournalEntry.STATUS_DRAFT,
+    )
+    JournalLine.objects.bulk_create(
+        [
+            JournalLine(
+                journal=journal,
+                account=accounts_by_path[row.code] if row is not None else accounts_by_path[None],
+                debit=debit, credit=credit, line_number=index,
+                description=(row.name if row is not None else "اختلاف تراز فایل وارداتی")[:500],
+            )
+            for index, (row, debit, credit) in enumerate(lines, 1)
+        ],
+        batch_size=1000,
+    )
+    journal.refresh_totals(save=True)
+    if approve:
+        journal.post()
+    return journal
+
+
+def _import_trial_balances(parsed, *, ledger, approve, force):
+    stats = {"opening_lines": 0, "turnover_lines": 0, "imbalance": 0, "journals_created": 0}
+    date_from, date_to = parsed.metadata.get("date_from"), parsed.metadata.get("date_to")
+    if not date_to:
+        parsed.errors.append("تاریخ پایان دوره («تا تاریخ») در سربرگ تراز یافت نشد.")
+        return stats
+
+    leaves = _leaf_balance_rows(parsed)
+    opening, turnover = _balance_lines(leaves)
+    accounts_by_path = {
+        account.path: account for account in ledger.accounts().filter(path__in={row.code for row in leaves})
+    }
+    parent_ids = set(ledger.accounts().exclude(parent__isnull=True).values_list("parent_id", flat=True))
+    for row in leaves:
+        account = accounts_by_path.get(row.code)
+        if account is None:
+            parsed.errors.append(f"حساب {row.code} در کدینگ یافت نشد.")
+        elif account.id in parent_ids:
+            parsed.errors.append(f"حساب {row.code} زیرحساب دارد و مانده مستقیم نمی‌پذیرد.")
+    if parsed.errors:
+        return stats
+
+    opening_code, turnover_code = _balance_document_codes(parsed)
+    jobs = (
+        (opening, opening_code, parse_jalali_date(date_from or date_to), "سند افتتاحیه وارداتی"),
+        (turnover, turnover_code, parse_jalali_date(date_to),
+         f"گردش وارداتی {date_from or ''} تا {date_to}"),
+    )
+    for lines, code, entry_date, description in jobs:
+        if not lines:
+            continue
+        base_code = code
+        difference = _imbalance(lines)
+        if difference:
+            try:
+                accounts_by_path[None] = _balancing_account(ledger)
+            except ValueError as exc:
+                parsed.errors.append(str(exc))
+                return stats
+            lines = lines + [(None, -difference, Decimal(0)) if difference < 0 else (None, Decimal(0), difference)]
+            stats["imbalance"] += int(difference)
+            parsed.warnings.append(
+                f"{description}: فایل ناتراز است؛ اختلاف {int(abs(difference)):,} ریال "
+                "به‌صورت خودکار در حساب فنی «اختلاف تراز واردات» ثبت شد."
+            )
+        code = _claim_document_code(base_code, ledger=ledger, force=force, parsed=parsed)
+        if code is None:
+            continue
+        _write_balance_journal(
+            lines, code=code, entry_date=entry_date, description=description,
+            ledger=ledger, approve=approve, accounts_by_path=accounts_by_path,
+        )
+        stats["journals_created"] += 1
+        stats["opening_lines" if base_code == opening_code else "turnover_lines"] = len(lines)
+    return stats
+
+
+def import_excel_file(file_obj, *, dry_run=False, approve=False, force=False, ledger=OFFICE_LEDGER):
+    parsed = parse_excel_file(file_obj)
+    parsed.recognized_accounts = _recognized_accounts(parsed, ledger=ledger)
+    if parsed.errors:
+        return _build_report(parsed, dry_run=dry_run, committed=False)
+
+    if parsed.detail_ledger_rows:
+        parsed.warnings.append(DETAIL_LEDGER_SAMPLE_NOTE)
 
     if dry_run:
-        transaction.set_rollback(True)
+        stats = _estimate_import_stats(parsed, ledger=ledger)
+        balanced = not any(
+            w for w in parsed.warnings
+            if "گردش بدهکار" in w or "افتتاحیه بدهکار" in w
+        )
+        return _build_report(parsed, dry_run=True, committed=False, stats=stats, balanced=balanced)
+
+    with transaction.atomic():
+        with defer_account_closure_rebuild():
+            stats = _import_chart_rows(parsed, ledger=ledger)
+        stats.update(_import_trial_balances(parsed, ledger=ledger, approve=approve, force=force))
+        if parsed.errors:
+            transaction.set_rollback(True)
+
+    if parsed.errors:
+        return _build_report(parsed, dry_run=False, committed=False, stats=stats)
 
     balanced = not any(
         w for w in parsed.warnings
         if "گردش بدهکار" in w or "افتتاحیه بدهکار" in w
     )
-    return _build_report(parsed, dry_run=dry_run, committed=not dry_run, stats=stats, balanced=balanced)
+    return _build_report(parsed, dry_run=False, committed=True, stats=stats, balanced=balanced)
 
 
 def _build_report(parsed, *, dry_run, committed, stats=None, balanced=True):
@@ -525,6 +883,17 @@ def _build_report(parsed, *, dry_run, committed, stats=None, balanced=True):
             "turnover_balanced": bool(totals and totals.turnover_debit == totals.turnover_credit),
         },
         "detail_ledger_account": parsed.detail_ledger_account_code,
+        "recognized_accounts": parsed.recognized_accounts,
+        "account_detection": {
+            "total": len(parsed.recognized_accounts),
+            "new": sum(1 for row in parsed.recognized_accounts if row["status"] == "new"),
+            "existing": sum(1 for row in parsed.recognized_accounts if row["status"] == "existing"),
+        },
+        "import_mode": {
+            "chart_from_trial_balance": True,
+            "balances_from_trial_balance": True,
+            "detail_sample_account": parsed.detail_ledger_account_code or "",
+        },
         "warnings": parsed.warnings,
         "errors": parsed.errors,
     }

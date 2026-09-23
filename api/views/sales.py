@@ -50,7 +50,9 @@ from logic.sellers import get_seller_for_user, resolve_sale_branch_for_create
 
 
 def _serialize_sales(user, sales):
-    return [sale_to_dict(s, user=user, include_lines=True) for s in sales]
+    from logic.sales_accounting import attach_accounting_journals
+
+    return [sale_to_dict(s, user=user, include_lines=True) for s in attach_accounting_journals(sales)]
 
 
 def _report_success(user, payload):
@@ -189,6 +191,8 @@ def sale_list(request):
             if data.get("stock_source_kind")
             else None,
             seat_count=data.get("seat_count"),
+            credit_override_reason=(data.get("credit_override_reason") or "").strip(),
+            vat_rate=data.get("vat_rate") or 0,
         )
     except ValueError as exc:
         return fail(str(exc), status=400)
@@ -300,6 +304,8 @@ def sale_detail(request, pk):
             kwargs["line_items"] = data.get("line_items") or []
         if "seat_count" in data:
             kwargs["seat_count"] = data.get("seat_count")
+        if "vat_rate" in data:
+            kwargs["vat_rate"] = data.get("vat_rate")
         if "installments" in data:
             kwargs["installments"] = data.get("installments") or []
         kwargs["recorded_by"] = request.user
@@ -336,6 +342,11 @@ def sale_record_payment(request, pk):
             amount,
             description=(data.get("description") or "").strip(),
             recorded_by=request.user,
+            idempotency_key=(
+                request.headers.get("Idempotency-Key")
+                or data.get("idempotency_key")
+                or ""
+            ),
         )
     except ValueError as exc:
         return fail(str(exc), status=400)
@@ -632,3 +643,42 @@ def sale_pickup_complete(request, pk):
         entity_id=sale.id,
     )
     return success(sale_to_dict(sale, include_lines=True, user=request.user))
+
+
+@api_view("POST")
+def sale_finalize(request, pk):
+    """تایید نهایی فاکتور و صدور سند فروش در هسته حسابداری."""
+    from logic.sales_accounting import finalize_sale_invoice
+
+    if not has_permission(request.user, APPROVE_SALE_ACCOUNTING):
+        return fail("Permission denied", status=403)
+    sale = get_sale(pk)
+    if sale is None:
+        return fail("فاکتور یافت نشد", status=404)
+    if not can_view_sale(request.user, sale):
+        return fail("Permission denied", status=403)
+    try:
+        payload = finalize_sale_invoice(sale, request.user)
+    except ValueError as exc:
+        return fail(str(exc), status=400)
+    log_action(
+        request.user,
+        "update",
+        f"تایید نهایی فاکتور #{sale.id} — سند {payload['journal']['document_code']}",
+        entity_type="Sale",
+        entity_id=sale.id,
+    )
+    return success(payload)
+
+
+@api_view("GET")
+def sale_journals(request, pk):
+    """سندهای حسابداری مرتبط با یک فاکتور فروش."""
+    from logic.sales_accounting import sale_journals_payload
+
+    sale = get_sale(pk)
+    if sale is None:
+        return fail("فاکتور یافت نشد", status=404)
+    if not can_view_sale(request.user, sale):
+        return fail("Permission denied", status=403)
+    return success(sale_journals_payload(sale))

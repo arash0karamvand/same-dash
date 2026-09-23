@@ -6,25 +6,54 @@ from django.db import transaction
 from django.db.models import Q
 
 from backend.models import Frame, FurnitureWorkset, FurnitureWorksetPiece, Product
+from logic.dynamic_choices import (
+    allowed_arms_map,
+    assembly_piece_kinds,
+    choice_dict,
+)
 
-PIECE_KIND_LABELS = dict(Frame.PIECE_KIND_CHOICES)
-ARM_STYLE_LABELS = dict(Frame.ARM_STYLE_CHOICES)
+ARM_NONE = "none"
+PIECE_ARMCHAIR = "armchair"
 
-ALLOWED_ARMS = {
-    Frame.PIECE_ARMCHAIR: (Frame.ARM_NONE, Frame.ARM_ONE, Frame.ARM_TWO),
-    Frame.PIECE_SOFA_2: (Frame.ARM_ONE_LEFT, Frame.ARM_ONE_RIGHT, Frame.ARM_TWO),
-    Frame.PIECE_SOFA_3: (Frame.ARM_ONE_LEFT, Frame.ARM_ONE_RIGHT, Frame.ARM_TWO),
-    Frame.PIECE_SOFA_4: (Frame.ARM_ONE_LEFT, Frame.ARM_ONE_RIGHT, Frame.ARM_TWO),
-    Frame.PIECE_SOFA_5: (Frame.ARM_ONE_LEFT, Frame.ARM_ONE_RIGHT, Frame.ARM_TWO),
-    Frame.PIECE_CHAISE: (Frame.ARM_ONE_LEFT, Frame.ARM_ONE_RIGHT),
-    Frame.PIECE_POUF: (Frame.ARM_NONE,),
-    Frame.PIECE_BENCH: (Frame.ARM_NONE,),
-    Frame.PIECE_LOVESEAT: (Frame.ARM_NONE,),
-    Frame.PIECE_SIDE_TABLE: (Frame.ARM_NONE,),
-    Frame.PIECE_COFFEE_TABLE: (Frame.ARM_NONE,),
-}
 
-ASSEMBLY_PIECES = {Frame.PIECE_SIDE_TABLE, Frame.PIECE_COFFEE_TABLE}
+def piece_kind_labels():
+    labels = choice_dict("frame_piece_kind")
+    if labels:
+        return labels
+    return dict(Frame.PIECE_KIND_CHOICES)
+
+
+def arm_style_labels():
+    labels = choice_dict("frame_arm_style")
+    if labels:
+        return labels
+    return dict(Frame.ARM_STYLE_CHOICES)
+
+
+def allowed_arms():
+    mapped = allowed_arms_map()
+    if mapped:
+        return mapped
+    return {
+        "armchair": ("none", "one", "two"),
+        "sofa_2": ("one_left", "one_right", "two"),
+        "sofa_3": ("one_left", "one_right", "two"),
+        "sofa_4": ("one_left", "one_right", "two"),
+        "sofa_5": ("one_left", "one_right", "two"),
+        "chaise": ("one_left", "one_right"),
+        "pouf": ("none",),
+        "bench": ("none",),
+        "loveseat": ("none",),
+        "side_table": ("none",),
+        "coffee_table": ("none",),
+    }
+
+
+# Backward-compatible module aliases
+PIECE_KIND_LABELS = piece_kind_labels()
+ARM_STYLE_LABELS = arm_style_labels()
+ALLOWED_ARMS = allowed_arms()
+ASSEMBLY_PIECES = assembly_piece_kinds() or {"side_table", "coffee_table"}
 RECIPE_ID_KEYS = (
     "paint_recipe_id",
     "fabric_recipe_id",
@@ -39,13 +68,14 @@ def validate_piece_arm(piece_kind, arm_style):
     style = (arm_style or "").strip()
     if not kind:
         return "", ""
-    if kind not in ALLOWED_ARMS:
+    arms = allowed_arms()
+    if kind not in arms:
         raise ValueError("نوع قطعه نامعتبر است.")
-    allowed = ALLOWED_ARMS[kind]
+    allowed = arms[kind]
     if not style:
         style = allowed[0]
     if style not in allowed:
-        label = PIECE_KIND_LABELS.get(kind, kind)
+        label = piece_kind_labels().get(kind, kind)
         raise ValueError(f"حالت دسته برای «{label}» نامعتبر است.")
     return kind, style
 
@@ -53,20 +83,24 @@ def validate_piece_arm(piece_kind, arm_style):
 def piece_label(piece_kind, arm_style=""):
     kind = (piece_kind or "").strip()
     style = (arm_style or "").strip()
-    base = PIECE_KIND_LABELS.get(kind, kind)
+    labels = piece_kind_labels()
+    arm_labels = arm_style_labels()
+    base = labels.get(kind, kind)
     if not kind:
         return ""
-    if style and style != Frame.ARM_NONE:
-        return f"{base} {ARM_STYLE_LABELS.get(style, style)}"
-    if style == Frame.ARM_NONE and kind == Frame.PIECE_ARMCHAIR:
+    if style and style != ARM_NONE:
+        return f"{base} {arm_labels.get(style, style)}"
+    if style == ARM_NONE and kind == PIECE_ARMCHAIR:
         return f"{base} بدون دسته"
     return base
 
 
 def piece_slots():
     slots = []
-    for kind, styles in ALLOWED_ARMS.items():
-        group = PIECE_KIND_LABELS[kind]
+    labels = piece_kind_labels()
+    arm_labels = arm_style_labels()
+    for kind, styles in allowed_arms().items():
+        group = labels[kind]
         for style in styles:
             slots.append(
                 {
@@ -74,8 +108,8 @@ def piece_slots():
                     "arm_style": style,
                     "label": piece_label(kind, style),
                     "group": group,
-                    "arm_label": ARM_STYLE_LABELS.get(style, style),
-                    "show_arm": bool(style) and (style != Frame.ARM_NONE or kind == Frame.PIECE_ARMCHAIR),
+                    "arm_label": arm_labels.get(style, style),
+                    "show_arm": bool(style) and (style != ARM_NONE or kind == PIECE_ARMCHAIR),
                 }
             )
     return slots
@@ -89,8 +123,8 @@ def piece_to_dict(row):
         "quantity": row.quantity,
         "sort_order": row.sort_order,
         "piece_label": piece_label(row.piece_kind, row.arm_style),
-        "piece_kind_display": PIECE_KIND_LABELS.get(row.piece_kind, row.piece_kind),
-        "arm_style_display": ARM_STYLE_LABELS.get(row.arm_style, row.arm_style),
+        "piece_kind_display": piece_kind_labels().get(row.piece_kind, row.piece_kind),
+        "arm_style_display": arm_style_labels().get(row.arm_style, row.arm_style),
     }
 
 

@@ -11,6 +11,7 @@ class Branch(models.Model):
     color = models.CharField("رنگ", max_length=20, default="#6366f1")
     sort_order = models.PositiveIntegerField("ترتیب", default=0)
     is_active = models.BooleanField("فعال", default=True)
+    is_profit_center = models.BooleanField("مرکز درآمد", default=True)
     work_start = models.TimeField("شروع ساعت کاری", null=True, blank=True)
     work_end = models.TimeField("پایان ساعت کاری", null=True, blank=True)
     created_at = models.DateTimeField("تاریخ ایجاد", auto_now_add=True)

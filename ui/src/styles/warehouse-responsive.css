@@ -1,0 +1,400 @@
+/* استایل‌های Responsive برای گزارش‌های انبار */
+
+/* Mobile First - زیر 768px */
+@media (max-width: 767px) {
+  .stat-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .stat-card {
+    padding: 16px !important;
+  }
+
+  .stat-card-value {
+    font-size: 24px !important;
+  }
+
+  .filter-bar {
+    flex-direction: column !important;
+    gap: 12px !important;
+  }
+
+  .filter-bar > * {
+    width: 100% !important;
+  }
+
+  /* جداول در موبایل */
+  .table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .table {
+    min-width: 460px;
+    font-size: 12px;
+  }
+
+  .table th,
+  .table td {
+    padding: 8px 6px !important;
+    white-space: nowrap;
+  }
+
+  /* نمودارها در موبایل */
+  canvas {
+    max-height: 250px !important;
+  }
+
+  /* دکمه‌های Export */
+  .export-buttons {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .export-buttons button {
+    width: 100%;
+  }
+
+  /* Tabs در موبایل */
+  .branch-tabs,
+  .workflow-filter-tabs {
+    overflow-x: auto;
+    flex-wrap: nowrap !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .branch-tab,
+  .workflow-filter-tab {
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* Card spacing */
+  .card {
+    margin-bottom: 16px !important;
+  }
+
+  /* Dashboard در موبایل */
+  .print-container > div[style*="grid"] {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Tablet - 768px تا 1024px */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .stat-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  .filter-bar {
+    flex-wrap: wrap;
+  }
+
+  .filter-bar > * {
+    flex: 1 1 200px;
+  }
+
+  canvas {
+    max-height: 300px !important;
+  }
+
+  /* Grid layouts */
+  .print-container > div[style*="grid"] {
+    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)) !important;
+  }
+}
+
+/* Desktop - بیشتر از 1024px */
+@media (min-width: 1025px) {
+  .stat-grid {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  }
+
+  /* Wide screens */
+  @media (min-width: 1440px) {
+    .stat-grid {
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    }
+  }
+}
+
+/* انیمیشن‌ها */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.card,
+.stat-card {
+  animation: fadeIn 0.3s ease-out;
+}
+
+/* Smooth transitions */
+.branch-tab,
+.workflow-filter-tab,
+button,
+.link {
+  transition: all 0.2s ease;
+}
+
+.branch-tab:hover,
+.workflow-filter-tab:hover {
+  transform: translateY(-2px);
+}
+
+/* Loading State */
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  font-size: 16px;
+  color: var(--text-muted);
+}
+
+/* Empty State */
+.empty-state {
+  padding: 60px 20px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+/* Stat Card Hover Effect */
+.stat-card {
+  transition: all 0.3s ease;
+  cursor: default;
+}
+
+.stat-card[onclick],
+.stat-card[role="button"] {
+  cursor: pointer;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+}
+
+/* Badge improvements */
+.badge {
+  font-weight: 600;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 12px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Table improvements */
+.table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.table thead th {
+  position: sticky;
+  top: 0;
+  background: var(--surface-1);
+  z-index: 1;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.table tbody tr {
+  transition: background-color 0.2s ease;
+}
+
+.table tbody tr:hover {
+  background-color: var(--surface-2);
+}
+
+/* Chart container */
+.chart-container {
+  position: relative;
+  height: 300px;
+  margin: 16px 0;
+}
+
+/* Alert styling */
+.alert-error {
+  animation: fadeIn 0.3s ease-out;
+  border-radius: 8px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Filter bar improvements */
+.filter-bar {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.filter-bar .field {
+  flex: 1 1 200px;
+  min-width: 150px;
+}
+
+/* Button group */
+.button-group {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Scrollbar styling */
+.table-wrap::-webkit-scrollbar,
+.branch-tabs::-webkit-scrollbar,
+.workflow-filter-tabs::-webkit-scrollbar {
+  height: 6px;
+}
+
+.table-wrap::-webkit-scrollbar-track,
+.branch-tabs::-webkit-scrollbar-track,
+.workflow-filter-tabs::-webkit-scrollbar-track {
+  background: var(--surface-1);
+  border-radius: 3px;
+}
+
+.table-wrap::-webkit-scrollbar-thumb,
+.branch-tabs::-webkit-scrollbar-thumb,
+.workflow-filter-tabs::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+.table-wrap::-webkit-scrollbar-thumb:hover,
+.branch-tabs::-webkit-scrollbar-thumb:hover,
+.workflow-filter-tabs::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  .table tbody tr:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+
+  .stat-card:hover {
+    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+  }
+}
+
+/* Accessibility improvements */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Focus styles */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Loading spinner */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loading::before {
+  content: '';
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 3px solid var(--border);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  margin-left: 12px;
+}
+
+/* Tooltip */
+[title] {
+  position: relative;
+  cursor: help;
+}
+
+/* Grid improvements */
+.responsive-grid {
+  display: grid;
+  gap: 24px;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+
+@media (max-width: 767px) {
+  .responsive-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+/* Card improvements */
+.card {
+  overflow: hidden;
+}
+
+.card-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* Number formatting - RTL for English numbers */
+.ltr {
+  direction: ltr;
+  text-align: left;
+}
+
+/* Compact mode for small screens */
+@media (max-width: 480px) {
+  body {
+    font-size: 14px;
+  }
+
+  .stat-card-label {
+    font-size: 12px;
+  }
+
+  .stat-card-value {
+    font-size: 20px !important;
+  }
+
+  .card-title {
+    font-size: 16px;
+  }
+
+  .table {
+    font-size: 11px;
+  }
+
+  .badge {
+    font-size: 10px;
+    padding: 3px 8px;
+  }
+}

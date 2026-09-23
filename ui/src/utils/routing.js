@@ -17,6 +17,13 @@ export function parseRoute(pathname = window.location.pathname) {
     return { portal: null, page: null }
   }
   const segments = normalized.split('/').filter(Boolean)
+  // حسابداری فقط در پورتال اداری وجود دارد؛ لینک قدیمی کارخانه را همان‌جا باز کن.
+  if (
+    segments[0] === 'factory'
+    && (segments[1] === 'accounting' || segments[1] === 'factory-accounting')
+  ) {
+    return { portal: 'office', page: 'accounting' }
+  }
   const portal = segments[0]
   const page = canonicalizePage(segments[1] || null)
   if (!PORTALS.some((p) => p.id === portal)) {

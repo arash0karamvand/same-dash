@@ -16,20 +16,39 @@ from backend.models import (
     Material,
     Product,
 )
+from logic.dynamic_choices import choice_dict
 from logic.furniture_worksets import (
-    ARM_STYLE_LABELS,
-    PIECE_KIND_LABELS,
+    arm_style_labels,
     default_frame_name,
+    piece_kind_labels,
     validate_piece_arm,
     workset_to_dict,
 )
 from logic.materials import approved_materials_filter, material_to_dict
 
 
-DESIGN_STYLE_LABELS = dict(Frame.DESIGN_STYLE_CHOICES)
-WOOD_TYPE_LABELS = dict(Frame.WOOD_TYPE_CHOICES)
-COMPONENT_TYPE_LABELS = dict(FrameServiceComponent.COMPONENT_TYPE_CHOICES)
-RULE_KEY_LABELS = dict(FrameComponentMaterialRule.RULE_KEY_CHOICES)
+def design_style_labels():
+    return choice_dict("frame_design_style") or dict(Frame.DESIGN_STYLE_CHOICES)
+
+
+def wood_type_labels():
+    return choice_dict("frame_wood_type") or dict(Frame.WOOD_TYPE_CHOICES)
+
+
+def component_type_labels():
+    return choice_dict("frame_component_type") or dict(FrameServiceComponent.COMPONENT_TYPE_CHOICES)
+
+
+def rule_key_labels():
+    return choice_dict("frame_rule_key") or dict(FrameComponentMaterialRule.RULE_KEY_CHOICES)
+
+
+DESIGN_STYLE_LABELS = design_style_labels()
+WOOD_TYPE_LABELS = wood_type_labels()
+COMPONENT_TYPE_LABELS = component_type_labels()
+RULE_KEY_LABELS = rule_key_labels()
+PIECE_KIND_LABELS = piece_kind_labels()
+ARM_STYLE_LABELS = arm_style_labels()
 
 DEFAULT_SERVICE_COMPONENTS = [
     (FrameServiceComponent.TYPE_THREE_SEATER, 1, 0),

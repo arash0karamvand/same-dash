@@ -1,7 +1,11 @@
 """Accounting reports over hierarchical accounts and journal lines."""
 
+from datetime import datetime, time, timedelta
 from decimal import Decimal
+
 from django.db.models import Count, F, Q, Sum
+from django.utils import timezone
+from django.utils.dateparse import parse_date
 
 from backend.models import Account, AccountClosure, Customer, JournalEntry, JournalLine, Sale
 from logic.accounting_ledger import ledger_for_accounts, ledger_totals
@@ -16,15 +20,34 @@ def _lines(ledger, approved_only=False):
     return qs.filter(journal__status_ref_id=JournalEntry.STATUS_POSTED) if approved_only else qs
 
 
+def _day_start(value):
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        day = timezone.localtime(value).date() if timezone.is_aware(value) else value.date()
+    elif hasattr(value, "year"):
+        day = value
+    else:
+        day = parse_date(str(value)[:10])
+    if day is None:
+        return None
+    start = datetime.combine(day, time.min)
+    if timezone.is_naive(start):
+        start = timezone.make_aware(start)
+    return start
+
+
 def _balance_for(account, base, date_from=None, date_to=None):
     ids = AccountClosure.objects.filter(ancestor=account).values("descendant_id")
     qs = base.filter(account_id__in=ids)
-    opening = qs.filter(journal__entry_date__date__lt=date_from) if date_from else qs.none()
+    start = _day_start(date_from)
+    end = _day_start(date_to)
+    opening = qs.filter(journal__entry_date__lt=start) if start else qs.none()
     turnover = qs
-    if date_from:
-        turnover = turnover.filter(journal__entry_date__date__gte=date_from)
-    if date_to:
-        turnover = turnover.filter(journal__entry_date__date__lte=date_to)
+    if start:
+        turnover = turnover.filter(journal__entry_date__gte=start)
+    if end:
+        turnover = turnover.filter(journal__entry_date__lt=end + timedelta(days=1))
     op, turn = opening.aggregate(d=Sum("debit"), c=Sum("credit")), turnover.aggregate(d=Sum("debit"), c=Sum("credit"))
     net_open = Decimal(op["d"] or 0) - Decimal(op["c"] or 0)
     net = net_open + Decimal(turn["d"] or 0) - Decimal(turn["c"] or 0)
@@ -71,10 +94,12 @@ def _trial(depth, *, date_from=None, date_to=None, account_class=None,
         rows.append(row)
     totals = ledger_totals(rows)
     turnover = base
-    if date_from:
-        turnover = turnover.filter(journal__entry_date__date__gte=date_from)
-    if date_to:
-        turnover = turnover.filter(journal__entry_date__date__lte=date_to)
+    start = _day_start(date_from)
+    end = _day_start(date_to)
+    if start:
+        turnover = turnover.filter(journal__entry_date__gte=start)
+    if end:
+        turnover = turnover.filter(journal__entry_date__lt=end + timedelta(days=1))
     raw = turnover.aggregate(d=Sum("debit"), c=Sum("credit"))
     totals.update(raw_turnover_debit=int(raw["d"] or 0), raw_turnover_credit=int(raw["c"] or 0),
                   turnover_balanced=(raw["d"] or 0) == (raw["c"] or 0))
@@ -205,3 +230,32 @@ def customer_accounting_data(customer_id):
             "accounting_entries_count": entries.count(),
             "accounting_total": int(entries.aggregate(v=Sum("debit"))["v"] or 0),
             "sales": list(sales), "entries": list(entries)}
+
+
+def profit_center_report():
+    from backend.models import Branch
+
+    rows = []
+    branches = Branch.objects.filter(is_profit_center=True).order_by("sort_order", "label")
+    for branch in branches:
+        journals = JournalEntry.objects.filter(status_ref_id=JournalEntry.STATUS_POSTED).filter(
+            Q(branch=branch)
+            | Q(
+                branch__isnull=True,
+                order_links__relation_type="sale",
+                order_links__order__branch=branch,
+            )
+        ).distinct()
+        lines = JournalLine.objects.filter(journal__in=journals)
+        revenue = lines.filter(account__account_class="revenue").aggregate(d=Sum("debit"), c=Sum("credit"))
+        expense = lines.filter(account__account_class="expense").aggregate(d=Sum("debit"), c=Sum("credit"))
+        revenue_net = int(Decimal(revenue["c"] or 0) - Decimal(revenue["d"] or 0))
+        expense_net = int(Decimal(expense["d"] or 0) - Decimal(expense["c"] or 0))
+        rows.append({
+            "branch": branch.code,
+            "label": branch.label,
+            "revenue": revenue_net,
+            "expense": expense_net,
+            "profit": revenue_net - expense_net,
+        })
+    return {"results": rows}

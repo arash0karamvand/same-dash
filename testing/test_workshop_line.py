@@ -17,13 +17,24 @@ from backend.models import (
     Product,
     Sale,
     SaleLineItem,
+    FabricCatalogNode,
     WorkshopRecipe,
 )
 from logic.materials import committed_material_demand, compute_factory_order_material_requirements
 from logic.production_line import spawn_workshop_jobs_for_sale
 from logic.products import product_to_dict, resolve_line_item_from_catalog
 from logic.sale_workflow import receive_factory_order
-from logic.workshop_recipes import apply_product_workset, create_recipe
+from logic.workshop_recipes import (
+    apply_product_workset,
+    create_catalog_node,
+    create_paint_category,
+    create_recipe,
+    delete_catalog_node,
+    fabric_named_ids,
+    filter_recipes,
+    recipe_to_dict,
+    update_recipe,
+)
 
 
 class WorkshopLineTests(TestCase):
@@ -49,6 +60,8 @@ class WorkshopLineTests(TestCase):
                 "kind": WorkshopRecipe.KIND_PAINT,
                 "name": "گردویی",
                 "color_name": "گردویی",
+                "paint_category": WorkshopRecipe.PAINT_CATEGORY_PAINT,
+                "stock_unit": "کیلوگرم",
                 "materials": [{"material_id": self.paint_material.id, "quantity": 1, "unit": "کیلو"}],
             }
         )
@@ -120,7 +133,12 @@ class WorkshopLineTests(TestCase):
         workshop = BetaCarpentryWorkshop.objects.create(name="نجاری داخلی", kind=BetaCarpentryWorkshop.KIND_INTERNAL)
         foam = create_recipe({"kind": WorkshopRecipe.KIND_FOAM, "name": "فوم سرد", "materials": []})
         cushion = create_recipe({"kind": WorkshopRecipe.KIND_CUSHION, "name": "کوسن ساده", "materials": []})
-        fabric = create_recipe({"kind": WorkshopRecipe.KIND_FABRIC, "name": "مخمل", "color_name": "کرم", "materials": []})
+        fabric = create_recipe({
+            "kind": WorkshopRecipe.KIND_FABRIC,
+            "name": "مخمل",
+            "materials": [],
+            **fabric_named_ids(),
+        })
         apply_product_workset(
             self.product,
             {
@@ -167,3 +185,216 @@ class WorkshopLineTests(TestCase):
         self.assertTrue(getattr(result, "spawned_workshop_jobs", None))
         self.assertIn("paint", result.spawned_workshop_jobs["created"])
         self.assertEqual(BetaPaintOrder.objects.filter(sale_id=sale.pk).count(), 1)
+
+
+class PaintRegistrationTests(TestCase):
+    def _paint(self, **extra):
+        payload = {
+            "kind": WorkshopRecipe.KIND_PAINT,
+            "name": "سیلر سنباده‌خور",
+            "paint_category": WorkshopRecipe.PAINT_CATEGORY_PUTTY,
+            "stock_unit": "لیتر",
+            "current_stock": "4",
+            "min_stock": "10",
+            "unit_cost": "1000",
+            "brand": "کارخانه نمونه",
+        }
+        payload.update(extra)
+        return create_recipe(payload)
+
+    def test_paint_requires_category_and_unit(self):
+        with self.assertRaises(ValueError):
+            create_recipe({"kind": WorkshopRecipe.KIND_PAINT, "name": "بدون دسته"})
+        with self.assertRaises(ValueError):
+            create_recipe(
+                {
+                    "kind": WorkshopRecipe.KIND_PAINT,
+                    "name": "بدون واحد",
+                    "paint_category": WorkshopRecipe.PAINT_CATEGORY_PAINT,
+                }
+            )
+
+    def test_paint_registration_assigns_code_value_and_shortage(self):
+        recipe = self._paint()
+        data = recipe_to_dict(recipe)
+        self.assertEqual(data["item_code"], "PNT-0001")
+        self.assertEqual(data["paint_category_display"], "بتونه و سیلر")
+        self.assertEqual(data["stock_status"], "low")
+        self.assertEqual(data["stock_value"], 4000)
+        self.assertEqual(data["brand"], "کارخانه نمونه")
+        self.assertEqual(data["storage_shelf"], "")
+
+    def test_zero_stock_is_separate_from_shortage(self):
+        data = recipe_to_dict(self._paint(current_stock="0", min_stock="2"))
+        self.assertEqual(data["stock_status"], "zero")
+
+    def test_duplicate_code_is_rejected(self):
+        first = self._paint(item_code="PNT-CUSTOM")
+        with self.assertRaises(ValueError):
+            self._paint(name="قلم دوم", item_code="PNT-CUSTOM")
+        self.assertEqual(first.item_code, "PNT-CUSTOM")
+
+    def test_negative_stock_and_cost_are_rejected(self):
+        with self.assertRaises(ValueError):
+            self._paint(current_stock="-1")
+        with self.assertRaises(ValueError):
+            self._paint(unit_cost="-5")
+
+    def test_search_matches_code_and_brand(self):
+        recipe = self._paint(item_code="PNT-SEARCH", brand="برند ویژه")
+        found = list(filter_recipes(WorkshopRecipe.objects.all(), search="PNT-SEARCH"))
+        self.assertEqual([row.id for row in found], [recipe.id])
+        by_brand = list(filter_recipes(WorkshopRecipe.objects.all(), search="برند ویژه"))
+        self.assertEqual([row.id for row in by_brand], [recipe.id])
+
+    def test_fabric_recipe_skips_paint_fields(self):
+        recipe = create_recipe({
+            "kind": WorkshopRecipe.KIND_FABRIC,
+            "name": "کتان",
+            **fabric_named_ids(brand="منسوجات آریا", cloth="کتان شست"),
+        })
+        self.assertEqual(recipe.paint_category, "")
+        self.assertTrue(recipe.item_code.startswith("KLT-"))
+        self.assertEqual(recipe.stock_unit, "متر")
+
+    def test_update_keeps_blank_brand_and_rejects_bad_unit(self):
+        recipe = self._paint(brand="", storage_shelf="")
+        updated = update_recipe(recipe, {"current_stock": "12", "min_stock": "10"})
+        data = recipe_to_dict(updated)
+        self.assertEqual(data["stock_status"], "ok")
+        self.assertEqual(data["brand"], "")
+        with self.assertRaises(ValueError):
+            update_recipe(recipe, {"stock_unit": "متر"})
+
+    def test_custom_paint_category_can_be_created_and_used(self):
+        option = create_paint_category("رزین")
+        self.assertTrue(option.code.startswith("c"))
+        recipe = self._paint(paint_category=option.code, name="رزین پلی‌استر")
+        self.assertEqual(recipe_to_dict(recipe)["paint_category_display"], "رزین")
+        with self.assertRaises(ValueError):
+            create_paint_category("رزین")
+        with self.assertRaises(ValueError):
+            create_paint_category("تینر")
+
+
+TINY_PNG = (
+    "data:image/png;base64,"
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="
+)
+
+
+class FabricCaliteTests(TestCase):
+    def _fabric(self, **extra):
+        payload = {
+            "kind": WorkshopRecipe.KIND_FABRIC,
+            "name": "نشست روشن",
+            "current_stock": "18",
+            "min_stock": "6",
+            "unit_cost": "250000",
+            "roll_count": 2,
+            "image_url": TINY_PNG,
+            "technical_specs": "عرض ۱۵۰",
+            **fabric_named_ids(),
+        }
+        payload.update(extra)
+        return create_recipe(payload)
+
+    def test_paint_does_not_require_fabric_fields(self):
+        recipe = create_recipe({
+            "kind": WorkshopRecipe.KIND_PAINT,
+            "name": "سیلرکاری",
+            "paint_category": WorkshopRecipe.PAINT_CATEGORY_PUTTY,
+            "stock_unit": "لیتر",
+        })
+        data = recipe_to_dict(recipe)
+        self.assertEqual(data["fabric_category"], "")
+        self.assertEqual(data["company_code"], "")
+        self.assertEqual(data["origin_country"], "")
+        self.assertEqual(data["gallery_urls"], [])
+        self.assertTrue(data["item_code"].startswith("PNT-"))
+
+    def test_fabric_requires_the_catalog_chain(self):
+        with self.assertRaises(ValueError):
+            create_recipe({"kind": WorkshopRecipe.KIND_FABRIC, "name": "بدون زنجیره"})
+        with self.assertRaises(ValueError):
+            self._fabric(fabric_brand_id=None, name="بدون برند")
+
+    def test_calite_assigns_code_and_keeps_meters(self):
+        data = recipe_to_dict(self._fabric())
+        self.assertEqual(data["item_code"], "KLT-0001")
+        self.assertEqual(data["company_display"], "بافندگی نورا")
+        self.assertEqual(data["fabric_category_display"], "مخمل ساده")
+        self.assertEqual(data["color_name"], "استخوانی")
+        self.assertEqual(data["stock_unit"], "متر")
+        self.assertEqual(data["current_stock"], 18)
+        self.assertEqual(data["roll_count"], 2)
+        self.assertEqual(data["stock_status"], "ok")
+        self.assertEqual(data["origin_country"], "ایران")
+        self.assertTrue(data["image_url"].startswith("data:image/png"))
+
+    def test_second_calite_increments_code(self):
+        self._fabric(name="اول")
+        second = recipe_to_dict(self._fabric(name="دوم", color_name="دودی"))
+        self.assertEqual(second["item_code"], "KLT-0002")
+
+    def test_catalog_chain_rejects_bad_parent_and_duplicates(self):
+        country = FabricCatalogNode.objects.get(kind=FabricCatalogNode.KIND_COUNTRY, name="چین")
+        with self.assertRaises(ValueError):
+            create_catalog_node({"kind": "color", "name": "قرمز", "parent_id": country.id})
+        brand = create_catalog_node({"kind": "brand", "name": "نساجی پارس", "parent_id": country.id})
+        with self.assertRaises(ValueError):
+            create_catalog_node({"kind": "brand", "name": "نساجی پارس", "parent_id": country.id})
+        color = create_catalog_node({"kind": "color", "name": "یشمی", "parent_id": brand.id})
+        cloth = create_catalog_node({"kind": "type", "name": "ابریشم خام", "parent_id": color.id})
+        recipe = self._fabric(
+            name="ابریشم پارس",
+            fabric_country_id=country.id,
+            fabric_brand_id=brand.id,
+            fabric_color_id=color.id,
+            fabric_type_id=cloth.id,
+        )
+        data = recipe_to_dict(recipe)
+        self.assertEqual(data["company_display"], "نساجی پارس")
+        self.assertEqual(data["fabric_category_display"], "ابریشم خام")
+        self.assertEqual(data["color_name"], "یشمی")
+        with self.assertRaises(ValueError):
+            delete_catalog_node(color)
+        with self.assertRaises(ValueError):
+            delete_catalog_node(cloth)
+
+    def test_mismatched_color_is_rejected(self):
+        aria = fabric_named_ids(brand="منسوجات آریا")
+        nura = fabric_named_ids()
+        with self.assertRaises(ValueError):
+            self._fabric(fabric_brand_id=nura["fabric_brand_id"], fabric_color_id=aria["fabric_color_id"])
+
+    def test_negative_meters_and_http_image_are_rejected(self):
+        with self.assertRaises(ValueError):
+            self._fabric(current_stock="-1")
+        with self.assertRaises(ValueError):
+            self._fabric(roll_count=-2)
+        with self.assertRaises(ValueError):
+            self._fabric(unit_cost="-5")
+        with self.assertRaises(ValueError):
+            self._fabric(image_url="https://example.com/swatch.jpg")
+        with self.assertRaises(ValueError):
+            self._fabric(image_url="not-a-link")
+
+    def test_brand_filter_shows_only_that_brand(self):
+        nura = self._fabric(name="نورا", item_code="KLT-NURA")
+        aria_ids = fabric_named_ids(brand="منسوجات آریا")
+        self._fabric(name="آریا", item_code="KLT-ARIA", **aria_ids)
+        found = list(filter_recipes(
+            WorkshopRecipe.objects.all(),
+            kind="fabric",
+            brand_id=nura.fabric_brand_id,
+        ))
+        self.assertEqual([row.id for row in found], [nura.id])
+
+    def test_update_keeps_brand_when_only_meters_change(self):
+        recipe = self._fabric()
+        updated = update_recipe(recipe, {"current_stock": "4", "min_stock": "6"})
+        data = recipe_to_dict(updated)
+        self.assertEqual(data["company_display"], "بافندگی نورا")
+        self.assertEqual(data["stock_status"], "low")
+        self.assertTrue(data["image_url"].startswith("data:image/png"))

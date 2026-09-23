@@ -1,42 +1,59 @@
-// کاوشگر دفتر کل — درخت حساب + پنل تراکنش (جایگزین ۴ پنل موازی)
+// کاوشگر دفتر کل — Modern Tree + Detail Panel
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Icon from '../icons/Icon'
 import { Button, EmptyState } from '../ui'
 import { TERMS } from '../../config/accountingTerms'
-import { formatNumber, formatRial } from '../../utils/format'
-import { useMediaQuery } from '../../hooks/useMediaQuery'
-import { fromLegacy } from '../../styles/tw.js'
+import { formatRial } from '../../utils/format'
+import { useIsCompactTablet, useIsPhone } from '../../hooks/breakpoints'
+
+/**
+ * Professional Ledger Explorer
+ * - Enhanced tree navigation with keyboard support
+ * - High data density display
+ * - Color-coded balances
+ * - Responsive collapsible panels
+ */
 
 function balanceLabel(row) {
   if (!row) return null
   const debit = Number(row.balance_debit) || 0
   const credit = Number(row.balance_credit) || 0
   if (!debit && !credit) return null
-  if (debit >= credit) return { amount: debit - credit, side: TERMS.debit }
-  return { amount: credit - debit, side: TERMS.credit }
+  if (debit >= credit) return { amount: debit - credit, side: TERMS.debit, type: 'debit' }
+  return { amount: credit - debit, side: TERMS.credit, type: 'credit' }
 }
 
 function TreeNode({ label, code, balance, depth = 0, active, expanded, hasChildren, onToggle, onSelect }) {
   return (
-    <div className={fromLegacy(`acct-tree-node acct-tree-node--depth-${depth}${active ? ' is-active' : ''}`)}>
-      <div className={fromLegacy("acct-tree-node-row")}>
+    <div className={`acct-ledger-account-row depth-${depth}${active ? ' is-active' : ''}`}>
+      <div className="acct-ledger-account-line">
         {hasChildren ? (
-          <button type="button" className={fromLegacy("acct-tree-toggle")} onClick={onToggle} aria-label={expanded ? 'بستن' : 'باز کردن'}>
-            <Icon name={expanded ? 'chevron-up' : 'chevron-down'} size={14} />
+          <button
+            type="button"
+            onClick={onToggle}
+            aria-label={expanded ? 'بستن' : 'باز کردن'}
+            className="acct-ledger-expand"
+          >
+            <Icon name={expanded ? 'minus' : 'plus'} size={12} />
           </button>
         ) : (
-          <span className={fromLegacy("acct-tree-toggle acct-tree-toggle--spacer")} />
+          <span className="acct-ledger-expand-spacer" />
         )}
-        <button type="button" className={fromLegacy("acct-tree-select")} onClick={onSelect}>
-          <span className={fromLegacy("acct-tree-code")}>{code}</span>
-          <span className={fromLegacy("acct-tree-name")}>{label}</span>
-          {balance && (
-            <span className={fromLegacy("acct-tree-balance")}>
-              {formatRial(balance.amount)}
-              <small>{balance.side}</small>
-            </span>
-          )}
+        <button
+          type="button"
+          onClick={onSelect}
+          className="acct-ledger-account-select"
+        >
+          <span className="acct-ledger-account-name">{label}</span>
+          <span className="acct-ledger-account-meta">
+            <span className="acct-ledger-account-code">{code || '—'}</span>
+            {balance && (
+              <span className={`acct-ledger-account-balance ${balance.type === 'debit' ? 'acct-debit' : 'acct-credit'}`}>
+                {formatRial(balance.amount)} · {balance.side}
+              </span>
+            )}
+          </span>
         </button>
       </div>
     </div>
@@ -69,10 +86,27 @@ export default function LedgerExplorer({
   onQuickDoc,
   onManageAccount,
 }) {
-  const compact = useMediaQuery('(max-width: 1024px)')
+  const compact = useIsCompactTablet()
+  const isPhone = useIsPhone()
   const [treeOpen, setTreeOpen] = useState(!compact)
+  const [treeVisible, setTreeVisible] = useState(true)
+  const [isFullscreen, setIsFullscreen] = useState(false)
   const [expandedGenerals, setExpandedGenerals] = useState(() => new Set())
   const [expandedSubs, setExpandedSubs] = useState(() => new Set())
+
+  useEffect(() => {
+    if (!isFullscreen) return undefined
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setIsFullscreen(false)
+    }
+    window.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [isFullscreen])
 
   const generalBalanceMap = useMemo(() => {
     const map = new Map()
@@ -93,11 +127,16 @@ export default function LedgerExplorer({
           const text = `${acc.code} ${acc.name}`.toLowerCase()
           if (text.includes(q)) return true
           const subs = subsidiaries.filter((s) => s.account_id === acc.id)
-          return subs.some((s) => `${s.full_code} ${s.name}`.toLowerCase().includes(q))
+          return subs.some((sub) => {
+            if (`${sub.full_code || sub.code} ${sub.name}`.toLowerCase().includes(q)) return true
+            return details
+              .filter((detail) => detail.subsidiary_id === sub.id)
+              .some((detail) => `${detail.full_code || detail.code} ${detail.name}`.toLowerCase().includes(q))
+          })
         }),
       }))
       .filter((g) => g.accounts?.length)
-  }, [accountGroups, subsidiaries, q])
+  }, [accountGroups, subsidiaries, details, q])
 
   const toggleGeneral = (id) => {
     setExpandedGenerals((prev) => {
@@ -153,32 +192,49 @@ export default function LedgerExplorer({
   }
 
   const treePanel = (
-    <div className={fromLegacy("acct-ledger-tree")}>
-      <div className={fromLegacy("acct-ledger-tree-head")}>
-        <h3>درخت حساب‌ها</h3>
+      <div className="acct-glass-panel" style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', padding: 0, zIndex: 101, background: 'var(--acct-glass-bg-strong)' }}>
+      <div style={{ padding: 16, borderBottom: '1px solid var(--acct-glass-border)' }}>
+        <h3 style={{ margin: '0 0 12px 0', fontSize: 16, fontWeight: 700 }}>
+          حساب‌ها
+        </h3>
         <input
-          className={fromLegacy("search-input")}
+          className="acct-input"
           value={treeSearch}
           onChange={(e) => onTreeSearchChange?.(e.target.value)}
-          placeholder="جستجوی کد یا عنوان…"
+          placeholder="جستجوی کد یا عنوان حساب..."
+          style={{ width: '100%' }}
+          tabIndex={0}
         />
       </div>
-      <div className={fromLegacy("acct-ledger-tree-body")}>
+      <div style={{ 
+        flex: 1, 
+        overflowY: 'auto',
+        padding: '8px'
+      }}>
         {loadingGeneral && !filteredGroups.length ? (
-          <div className={fromLegacy("loading")}>در حال بارگذاری…</div>
+          <div style={{ 
+            textAlign: 'center', 
+            padding: '2rem',
+            color: '#6B7280'
+          }}>
+            <Icon name="hourglass" size={24} />
+            <p style={{ marginTop: '8px', fontSize: '13px' }}>در حال بارگذاری...</p>
+          </div>
         ) : !filteredGroups.length ? (
-          <EmptyState text="حسابی یافت نشد." />
+          <EmptyState text="حسابی یافت نشد. واژه‌ی دیگری جستجو کنید." />
         ) : (
           filteredGroups.map((group) => (
-            <section key={group.class} className={fromLegacy("acct-tree-group")}>
-              <p className={fromLegacy("acct-tree-group-label")}>{group.class_label}</p>
+            <section key={group.class || group.class_label} className="acct-ledger-account-group">
+              <p className="acct-ledger-account-group-title">
+                {group.class_label}
+              </p>
               {(group.accounts || []).map((acc) => {
                 const balRow = generalBalanceMap.get(acc.id)
                 const isActive = drillGeneral?.account_id === acc.id && !drillSubsidiary && !drillDetailed
-                const expanded = expandedGenerals.has(acc.id) || drillGeneral?.account_id === acc.id
+                const expanded = Boolean(q) || expandedGenerals.has(acc.id) || drillGeneral?.account_id === acc.id
                 const accSubs = subsidiaries.filter((s) => s.account_id === acc.id)
                 return (
-                  <div key={acc.id} className={fromLegacy("acct-tree-branch")}>
+                  <div key={acc.id}>
                     <TreeNode
                       label={acc.name}
                       code={acc.code}
@@ -193,10 +249,10 @@ export default function LedgerExplorer({
                     {expanded && accSubs.map((sub) => {
                       const subBal = drillSubsidiaryRows.find((r) => r.subsidiary_id === sub.id)
                       const subActive = drillSubsidiary?.subsidiary_id === sub.id && !drillDetailed
-                      const subExpanded = expandedSubs.has(sub.id) || drillSubsidiary?.subsidiary_id === sub.id
+                      const subExpanded = Boolean(q) || expandedSubs.has(sub.id) || drillSubsidiary?.subsidiary_id === sub.id
                       const subDetails = details.filter((d) => d.subsidiary_id === sub.id)
                       return (
-                        <div key={sub.id} className={fromLegacy("acct-tree-branch")}>
+                        <div key={sub.id}>
                           <TreeNode
                             label={sub.name}
                             code={sub.full_code || sub.code}
@@ -227,13 +283,25 @@ export default function LedgerExplorer({
                             )
                           })}
                           {subExpanded && loadingDetailed && !subDetails.length && (
-                            <p className={fromLegacy("muted small acct-tree-loading")}>در حال بارگذاری تفصیلی…</p>
+                            <p style={{ 
+                              padding: '8px 16px 8px 64px',
+                              color: '#9CA3AF',
+                              fontSize: '12px'
+                            }}>
+                              در حال بارگذاری تفصیلی...
+                            </p>
                           )}
                         </div>
                       )
                     })}
                     {expanded && loadingSubsidiary && !accSubs.length && (
-                      <p className={fromLegacy("muted small acct-tree-loading")}>در حال بارگذاری معین…</p>
+                      <p style={{ 
+                        padding: '8px 16px 8px 48px',
+                        color: '#9CA3AF',
+                        fontSize: '12px'
+                      }}>
+                        در حال بارگذاری معین...
+                      </p>
                     )}
                   </div>
                 )
@@ -245,51 +313,168 @@ export default function LedgerExplorer({
     </div>
   )
 
+  const showDesktopTree = !compact && treeVisible
+  const gridColumns = !showDesktopTree
+    ? (sidePanel && !isFullscreen ? 'minmax(0, 1fr) minmax(280px, 360px)' : 'minmax(0, 1fr)')
+    : (sidePanel
+      ? 'minmax(240px, 280px) minmax(0, 1fr) minmax(280px, 360px)'
+      : 'minmax(240px, 280px) minmax(0, 1fr)')
+
   return (
-    <div className={fromLegacy(`acct-ledger-explorer${sidePanel ? ' has-side-panel' : ''}`)}>
-      {compact && (
-        <div className={fromLegacy("acct-ledger-mobile-bar")}>
+    <div
+      className={`acct-ledger-workspace${isFullscreen ? ' is-fullscreen' : ''}`}
+      style={{
+        display: 'grid',
+        gridTemplateColumns: gridColumns,
+        gap: 'var(--acct-space-md)',
+        minHeight: isFullscreen ? 0 : 560,
+      }}
+    >
+      {compact && !isFullscreen && (
+        <div className="acct-ledger-mobile-bar" style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gridColumn: '1 / -1'
+        }}>
           <Button type="button" variant="ghost" onClick={() => setTreeOpen((v) => !v)}>
-            {treeOpen ? 'بستن درخت' : 'انتخاب حساب'}
+            <Icon name="menu" size={16} />
+            {treeOpen ? 'بستن حساب‌ها' : 'انتخاب حساب'}
           </Button>
-          {breadcrumb && <span className={fromLegacy("acct-ledger-crumb muted")}>{breadcrumb}</span>}
+          {breadcrumb && <span className="acct-ledger-crumb">{breadcrumb}</span>}
         </div>
       )}
 
-      <div className={fromLegacy("acct-ledger-layout")}>
-        {(!compact || treeOpen) && (
-          <aside className={fromLegacy(`acct-ledger-tree-panel${compact ? ' acct-ledger-tree-panel--sheet' : ''}`)}>
-            {treePanel}
-          </aside>
-        )}
+      {(showDesktopTree || (compact && treeOpen && !isFullscreen)) && (
+        <aside style={{
+          ...(compact ? {
+            position: 'fixed',
+            top: '80px',
+            right: 0,
+            bottom: 0,
+            width: '320px',
+            zIndex: 100,
+            boxShadow: 'var(--shadow-lg)',
+          } : {
+            height: isFullscreen ? 'calc(100dvh - 28px)' : 'calc(100vh - 220px)',
+          })
+        }}>
+          {treePanel}
+        </aside>
+      )}
 
-        <section className={fromLegacy("acct-ledger-detail-panel liquid-glass liquid-glass--panel")}>
-          <header className={fromLegacy("acct-ledger-detail-head")}>
+      <section className="acct-glass-panel" style={{ 
+        padding: isPhone ? 12 : 16,
+        display: 'flex',
+        flexDirection: 'column',
+        minWidth: 0,
+        overflow: 'hidden',
+      }}>
+        <header className="acct-ledger-focus-head">
+          <div style={{ 
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+            marginBottom: '8px'
+          }}>
             <div>
-              <h2>{TERMS.ledger}</h2>
-              {detailHint ? <p className={fromLegacy("acct-ledger-detail-sub")}>{detailHint}</p> : (
-                <p className={fromLegacy("muted")}>از درخت سمت راست یک حساب انتخاب کنید.</p>
+              <h2 style={{ 
+                margin: 0,
+                fontSize: '20px',
+                fontWeight: '700',
+              }}>
+                {TERMS.ledger}
+              </h2>
+              {detailHint ? (
+                <p style={{ 
+                  margin: '4px 0 0',
+                  fontSize: '14px',
+                  color: 'var(--text-secondary)'
+                }}>
+                  {detailHint}
+                </p>
+              ) : (
+                <p style={{ 
+                  margin: '4px 0 0',
+                  fontSize: '13px',
+                  color: 'var(--text-secondary)'
+                }}>
+                  از بخش حساب‌ها یک حساب انتخاب کنید.
+                </p>
               )}
-              {breadcrumb && !compact && <p className={fromLegacy("acct-ledger-crumb muted")}>{breadcrumb}</p>}
+              {breadcrumb && !compact && (
+                <p style={{ 
+                  margin: '8px 0 0',
+                  fontSize: '12px',
+                  fontFamily: 'var(--font-mono)',
+                  color: 'var(--text-secondary)'
+                }}>
+                  {breadcrumb}
+                </p>
+              )}
             </div>
-            <div className={fromLegacy("acct-ledger-detail-actions")}>
+            <div className="acct-ledger-actions">
+              {!compact && (
+                <button
+                  type="button"
+                  onClick={() => setTreeVisible((visible) => !visible)}
+                  className="acct-btn acct-btn--secondary acct-btn--sm"
+                  title={treeVisible ? 'مخفی کردن حساب‌ها' : 'نمایش حساب‌ها'}
+                >
+                  <Icon name="menu" size={14} />
+                  <span>{treeVisible ? 'بستن حساب‌ها' : 'حساب‌ها'}</span>
+                </button>
+              )}
               {canCreate && (
                 <>
-                  <Button type="button" size="sm" onClick={onQuickDoc}>+ سند سریع</Button>
-                  <Button type="button" size="sm" variant="ghost" onClick={onManageAccount}>مدیریت حساب</Button>
+                <button 
+                  type="button" 
+                  onClick={onQuickDoc}
+                  className="acct-btn acct-btn--primary acct-btn--sm"
+                  tabIndex={0}
+                >
+                  <Icon name="plus" size={14} />
+                  <span>سند سریع</span>
+                </button>
+                <button 
+                  type="button" 
+                  onClick={onManageAccount}
+                  className="acct-btn acct-btn--secondary acct-btn--sm"
+                  tabIndex={0}
+                >
+                  <Icon name="gear" size={14} />
+                  <span>مدیریت</span>
+                </button>
                 </>
               )}
+              <button 
+                type="button" 
+                onClick={() => setIsFullscreen((fullscreen) => !fullscreen)}
+                className="acct-btn acct-btn--primary acct-btn--sm"
+                title={isFullscreen ? 'بازگشت به نمای عادی (Esc)' : 'نمایش تمام‌صفحه'}
+              >
+                <Icon name={isFullscreen ? 'minus' : 'plus'} size={14} />
+                <span>{isFullscreen ? 'نمای عادی' : 'تمام‌صفحه'}</span>
+              </button>
             </div>
-          </header>
-          <div className={fromLegacy("acct-ledger-detail-body")}>
-            {ledgerPanel || <EmptyState text="حسابی انتخاب نشده — از درخت یک حساب را برگزینید." />}
           </div>
-        </section>
+        </header>
+        <div className="acct-ledger-results">
+          {ledgerPanel || (
+            <EmptyState text="حسابی انتخاب نشده — از درخت یک حساب را برگزینید." />
+          )}
+        </div>
+      </section>
 
-        {sidePanel && (
-          <aside className={fromLegacy("acct-ledger-side-panel")}>{sidePanel}</aside>
-        )}
-      </div>
+      {sidePanel && !isFullscreen && (
+        <aside className="acct-glass-panel" style={{ 
+          padding: '16px',
+          overflowY: 'auto',
+          background: 'var(--acct-glass-bg-strong)'
+        }}>
+          {sidePanel}
+        </aside>
+      )}
     </div>
   )
 }

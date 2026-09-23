@@ -12,7 +12,7 @@ const QUEUE_OPTIONS = [
   { value: 'merchant', label: 'بازرگان' },
 ]
 
-export default function Factory() {
+export default function Factory({ portal }) {
   const [queue, setQueue] = useState('all')
 
   const extraParams = {
@@ -24,6 +24,8 @@ export default function Factory() {
   return (
     <WorkflowOrdersPage
       key={queue}
+      portal={portal}
+      cyclePage="factory"
       title="ساخت کارخانه"
       subtitle="سفارش‌هایی که باید ساخته شوند — بدون نمایش قیمت"
       emptyTitle="سفارشی برای ساخت نیست"

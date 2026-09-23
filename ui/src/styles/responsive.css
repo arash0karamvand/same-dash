@@ -39,6 +39,12 @@ body,
     max-width: none;
   }
 
+  /* بهبود نمایش صفحات حسابداری */
+  .accounting-page--v2 .acct-v2-main {
+    width: 100%;
+    min-width: 0;
+  }
+
   .btn {
     min-height: 44px;
   }
@@ -266,6 +272,41 @@ body,
   .acct-v2-mobile-nav {
     margin: 0 -14px;
     padding: 0 14px 6px;
+  }
+
+  .layout--mobile .topbar {
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .layout--mobile .topbar .btn-sm {
+    min-height: 40px;
+    min-width: 40px;
+    padding-inline: 10px;
+  }
+
+  .content--mobile {
+    padding-bottom: calc(92px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .layout--mobile .mobile-bottom-nav {
+    display: flex;
+  }
+
+  .accounting-page--v2 .acct-v2-subnav {
+    margin-inline: -4px;
+    padding-inline: 4px;
+  }
+
+  /* جداول حسابداری در موبایل */
+  .accounting-table {
+    font-size: 0.75rem;
+  }
+
+  .accounting-table th,
+  .accounting-table td {
+    padding: 0.375rem 0.5rem;
   }
 
   .invoice-modal-toolbar {

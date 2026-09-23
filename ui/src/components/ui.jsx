@@ -1,8 +1,9 @@
 // مجموعه کامپوننت‌های پایه و قابل‌استفاده مجدد رابط کاربری.
 
 import { forwardRef, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import Icon from './icons/Icon'
-import { useMediaQuery } from '../hooks/useMediaQuery'
+import { useIsPhone } from '../hooks/breakpoints'
 import { PAGE_SIZE } from '../config/pagination'
 import { badgeStyle, badgeVariantFromColor } from '../config/statusColors'
 import { toPersianDigits } from '../utils/jalali'
@@ -107,8 +108,8 @@ export function Card({ title, actions, children, className = '', elevated = fals
   )
 }
 
-export function Modal({ title, open, onClose, children, wide = false, className = '' }) {
-  const isMobile = useMediaQuery('(max-width: 767px)')
+export function Modal({ title, open, onClose, children, wide = false, className = '', overlayClassName = '' }) {
+  const isMobile = useIsPhone()
 
   useEffect(() => {
     if (!open) return undefined
@@ -118,10 +119,18 @@ export function Modal({ title, open, onClose, children, wide = false, className 
 
   if (!open) return null
 
-  return (
-    <div className={tw.modalOverlay} onClick={onClose}>
+  return createPortal(
+    <div 
+      className={cn(tw.modalOverlay, overlayClassName)} 
+      onClick={onClose}
+      style={{
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
+        background: 'rgba(0, 0, 0, 0.4)'
+      }}
+    >
       <div
-        className={cn(tw.modal, wide && tw.modalWide, isMobile && tw.modalSheet, className)}
+        className={cn('acct-glass-modal', tw.modal, wide && tw.modalWide, isMobile && tw.modalSheet, className)}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
@@ -129,14 +138,40 @@ export function Modal({ title, open, onClose, children, wide = false, className 
       >
         {isMobile && <div className={tw.modalSheetHandle} aria-hidden />}
         <div className={tw.modalHead}>
-          <h3>{title}</h3>
-          <button type="button" className={tw.modalClose} onClick={onClose} aria-label="بستن">
-            <Icon name="x" size={18} />
+          <h3 style={{ 
+            fontSize: '18px',
+            fontWeight: '700',
+            color: '#111827'
+          }}>
+            {title}
+          </h3>
+          <button 
+            type="button" 
+            className={tw.modalClose} 
+            onClick={onClose} 
+            aria-label="بستن"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: '36px',
+              height: '36px',
+              borderRadius: '6px',
+              border: 'none',
+              background: 'transparent',
+              cursor: 'pointer',
+              transition: 'background var(--transition-fast)'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.background = '#F3F4F6'}
+            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+          >
+            <Icon name="x" size={20} />
           </button>
         </div>
         <div className={tw.modalBody}>{children}</div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

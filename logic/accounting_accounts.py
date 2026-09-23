@@ -1,17 +1,44 @@
-"""Chart of accounts CRUD and seed — definitions live in chart_of_accounts.py."""
+"""Chart of accounts CRUD; account rows are created from uploaded workbooks."""
 
 from django.db.models import Max
 
 from backend.models import Account, AccountClosure
-from logic.chart_of_accounts import (
-    ACCOUNT_CLASS_LABELS,
-    CHART_OF_ACCOUNTS,
-    ENTRY_TYPE_TO_SLUG,
-    PAYMENT_METHOD_TO_SLUG,
-)
+from logic.chart_of_accounts import ACCOUNT_CLASS_LABELS
+from logic.dynamic_choices import entry_type_account_map, payment_method_account_map
 from logic.ledger import OFFICE_LEDGER
 
-# Backward-compatible aliases
+def _entry_type_to_slug():
+    return entry_type_account_map() or {
+        "sale": "product_sales",
+        "receivable": "receivables",
+        "payment": "bank",
+        "refund": "raw_materials_purchase_return",
+        "adjustment": "admin_overhead",
+        "other": "other_revenue",
+        "manual": "other_revenue",
+    }
+
+
+def _payment_method_to_slug():
+    return payment_method_account_map() or {
+        "cash": "cash_documents",
+        "check": "collection_at_bank",
+        "card": "bank",
+        "transfer": "bank",
+    }
+
+
+def entry_type_to_slug():
+    return _entry_type_to_slug()
+
+
+def payment_method_to_slug():
+    return _payment_method_to_slug()
+
+
+# Backward-compatible aliases (evaluated at import; prefer functions above at runtime)
+ENTRY_TYPE_TO_SLUG = entry_type_to_slug()
+PAYMENT_METHOD_TO_SLUG = payment_method_to_slug()
 ENTRY_TYPE_ACCOUNT_SLUGS = ENTRY_TYPE_TO_SLUG
 PAYMENT_METHOD_ACCOUNT_SLUGS = PAYMENT_METHOD_TO_SLUG
 
@@ -35,24 +62,45 @@ def _depth(depth, ledger=OFFICE_LEDGER):
     return qs.none()
 
 
-def seed_accounts(*, ledger=OFFICE_LEDGER):
-    ledger_row = ledger.model
-    for row in CHART_OF_ACCOUNTS:
-        Account.objects.update_or_create(
-            ledger=ledger_row,
-            slug=row["slug"],
-            defaults={**row, "is_active": True, "parent": None},
-        )
-
-
 def get_account(slug, *, required=True, ledger=OFFICE_LEDGER):
     account = _accounts(ledger).filter(slug=slug, is_active=True).first()
-    if not account:
-        seed_accounts(ledger=ledger)
-        account = _accounts(ledger).filter(slug=slug, is_active=True).first()
     if not account and required:
-        raise ValueError(f"حساب «{slug}» یافت نشد.")
+        from logic.chart_of_accounts import chart_row_for_slug
+
+        row = chart_row_for_slug(slug) or {}
+        label = f"{row['code']} — {row['name']}" if row.get("code") else slug
+        raise ValueError(
+            f"حساب «{label}» در کدینگ دفتر {ledger.label} تعریف نشده است؛ "
+            "آن را با بارگذاری فایل اکسل یا از صفحه کدینگ اضافه کنید."
+        )
     return account
+
+
+def get_posting_account(slug, *, ledger=OFFICE_LEDGER, leaf_slug=""):
+    """حساب قابل ثبت برای کنترل‌هایی که تفصیلی زیرمجموعه دارند."""
+    account = get_account(slug, ledger=ledger)
+    if account.is_postable:
+        return account
+    child_slug = leaf_slug or f"{slug}-general"
+    child = Account.objects.filter(ledger=account.ledger, slug=child_slug).first()
+    if child is not None:
+        return child
+    code = "00"
+    suffix = 1
+    while Account.objects.filter(ledger=account.ledger, parent=account, code=code).exists():
+        suffix += 1
+        code = f"{suffix:02d}"
+    return Account.objects.create(
+        ledger=account.ledger,
+        parent=account,
+        slug=child_slug,
+        code=code,
+        name="طرف حساب عمومی",
+        account_class=account.account_class,
+        normal_balance=account.normal_balance,
+        sort_order=999,
+        is_active=True,
+    )
 
 
 def resolve_account_for_entry(*, account_id=None, account_slug=None, entry_type=None, ledger=OFFICE_LEDGER):
@@ -61,7 +109,7 @@ def resolve_account_for_entry(*, account_id=None, account_slug=None, entry_type=
         return qs.get(pk=account_id)
     if account_slug:
         return get_account(account_slug, ledger=ledger)
-    slug = ENTRY_TYPE_TO_SLUG.get(entry_type)
+    slug = entry_type_to_slug().get(entry_type)
     if slug:
         return get_account(slug, ledger=ledger)
     raise ValueError("حساب سند مشخص نشده است.")
@@ -69,7 +117,7 @@ def resolve_account_for_entry(*, account_id=None, account_slug=None, entry_type=
 
 def payment_account_for_sale(sale, *, ledger=OFFICE_LEDGER):
     return get_account(
-        PAYMENT_METHOD_TO_SLUG.get(sale.payment_method or "cash", "bank"),
+        payment_method_to_slug().get(sale.payment_method or "cash", "bank"),
         ledger=ledger,
     )
 
@@ -137,7 +185,6 @@ def detailed_to_dict(detail):
 
 
 def accounts_grouped(*, ledger=OFFICE_LEDGER):
-    seed_accounts(ledger=ledger)
     groups = []
     for key, label in ACCOUNT_CLASS_LABELS.items():
         qs = _depth(0, ledger).filter(account_class=key, is_active=True).order_by("sort_order", "name")

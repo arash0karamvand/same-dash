@@ -4,7 +4,7 @@ from decimal import Decimal
 from django.db.models import Q, Sum
 
 from backend.models import AccountClosure, JournalEntry, JournalLine
-from logic.accounting_accounts import account_to_dict, seed_accounts
+from logic.accounting_accounts import account_to_dict
 from logic.ledger import OFFICE_LEDGER
 
 
@@ -15,7 +15,6 @@ def _split(debit, credit):
 
 def ledger_for_accounts(*, date_from=None, date_to=None, account_class=None,
                         approved_only=False, ledger=OFFICE_LEDGER):
-    seed_accounts(ledger=ledger)
     accounts = ledger.accounts().filter(parent__isnull=True, is_active=True)
     if account_class:
         accounts = accounts.filter(account_class=account_class)

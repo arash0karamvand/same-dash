@@ -166,8 +166,9 @@ def register_sale_checks(sale, registration_account, deposit_account, user=None)
             entry_type="payment",
             description=desc,
             sale=sale,
-            is_approved=True,
+            is_approved=False,
             entry_date=sale.sold_at,
+            branch=sale.branch,
         )
         inst.registration_account = registration_account
         inst.deposit_account = deposit_account
@@ -227,7 +228,8 @@ def clear_registered_check(installment, recorded_by=None):
         entry_type="payment",
         description=desc,
         sale=sale,
-        is_approved=True,
+        is_approved=False,
+        branch=sale.branch,
     )
 
     sale.paid_amount += amount

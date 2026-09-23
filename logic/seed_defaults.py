@@ -3,7 +3,6 @@
 from decimal import Decimal
 
 from backend.models import LoyaltyLevel, Material, ProductMaterial
-from logic.accounting_accounts import seed_accounts
 from logic.config_seed import seed_config_defaults, _table_exists
 
 DEFAULT_LOYALTY_LEVELS = [
@@ -57,17 +56,6 @@ DEMO_MATERIALS = [
 ]
 
 
-def seed_accounts_safe():
-    """طرح حساب — فقط اگر جدول حساب وجود دارد."""
-    from backend.models import Account
-
-    if not _table_exists(Account):
-        return
-    from logic.accounting_accounts import seed_accounts
-
-    seed_accounts()
-
-
 def seed_loyalty_levels():
     """سطوح باشگاه مشتریان — idempotent."""
     from backend.models import LoyaltyLevel
@@ -87,9 +75,14 @@ def seed_loyalty_levels():
 
 
 def seed_system_defaults():
-    """تنظیمات پایه: شعب، lookup، منو، نقش‌ها، طرح حساب، سطوح وفاداری."""
+    """تنظیمات پایه: شعب، lookup، منو، نقش‌ها، دفترها، سطوح وفاداری.
+
+    کدینگ حساب‌ها seed نمی‌شود؛ از فایل اکسل ساخته می‌شود.
+    """
     seed_config_defaults()
-    seed_accounts_safe()
+    from logic.ledger import ensure_ledgers
+
+    ensure_ledgers()
     seed_loyalty_levels()
 
 

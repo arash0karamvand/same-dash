@@ -21,7 +21,6 @@ import Factory from './pages/Factory'
 import FactoryBuilt from './pages/FactoryBuilt'
 import FreightOrders from './pages/FreightOrders'
 import Accounting from './pages/Accounting'
-import FactoryAccounting from './pages/FactoryAccounting'
 import Users from './pages/Users'
 import Attendance from './pages/Attendance'
 import Checks from './pages/Checks'
@@ -69,7 +68,6 @@ const PAGES = {
   products: Products,
   materials: Materials,
   accounting: Accounting,
-  'factory-accounting': FactoryAccounting,
   users: Users,
   roles: Roles,
   settings: Settings,

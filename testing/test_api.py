@@ -7,7 +7,7 @@ from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 
 from auth import roles
-from backend.models import AccountingEntry, Customer, LoyaltyLevel, Sale, Seller
+from backend.models import AccountingEntry, Customer, JournalEntry, LoyaltyLevel, Sale, Seller
 from testing.role_helpers import ensure_legacy_test_roles
 
 User = get_user_model()
@@ -162,6 +162,9 @@ class CustomerApiTest(TestCase):
 
 class SaleApiTest(TestCase):
     def setUp(self):
+        from testing.accounting_helpers import seed_accounts
+
+        seed_accounts()
         LoyaltyLevel.objects.create(name="Bronze", min_purchase=0, max_purchase=10_000_000)
         self.op = make_user("op", role=roles.OPERATOR)
         make_user("op_other", role=roles.OPERATOR)
@@ -330,6 +333,9 @@ class StaffApiTest(TestCase):
 
 class AccountingApiTest(TestCase):
     def setUp(self):
+        from testing.accounting_helpers import seed_accounts
+
+        seed_accounts()
         make_user("acc", role=roles.ACCOUNTANT)
         make_user("op", role=roles.OPERATOR)
         self.client = Client()
@@ -427,7 +433,7 @@ class AccountingApiTest(TestCase):
         entry2.refresh_from_db()
         self.assertEqual(int(entry2.credit), 1000)
 
-    def test_sale_delete_removes_accounting_entries(self):
+    def test_sale_delete_keeps_auditable_correction_entries(self):
         from logic.sales import record_sale
 
         make_user("sm", role=roles.SALES_MANAGER)
@@ -440,7 +446,9 @@ class AccountingApiTest(TestCase):
         body = parse(resp)
         self.assertTrue(body["ok"])
         self.assertGreater(body["data"]["accounting_entries_deleted"], 0)
-        self.assertEqual(AccountingEntry.objects.filter(sale=sale).count(), 0)
+        journals = JournalEntry.objects.filter(order_links__order=sale)
+        self.assertTrue(journals.filter(corrects__isnull=False).exists())
+        self.assertGreater(AccountingEntry.objects.filter(sale=sale).count(), 0)
 
     def test_approved_entry_not_editable(self):
         entry_id = parse(self._create_manual_entry(is_approved=True))["data"]["id"]
@@ -527,8 +535,7 @@ class AccountingApiTest(TestCase):
         self.assertTrue(body["ok"])
         self.assertTrue(body["data"]["committed"])
         self.assertGreater(DetailedAccount.objects.count(), 0)
-        self.assertEqual(body["data"]["stats"]["entries_created"], 0)
-        self.assertEqual(body["data"]["stats"]["entries_skipped"], 2)
+        self.assertEqual(body["data"]["stats"]["journals_created"], 1)
 
 
 class UserManagementTest(TestCase):

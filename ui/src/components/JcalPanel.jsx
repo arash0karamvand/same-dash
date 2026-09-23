@@ -2,6 +2,7 @@
 
 import { createPortal } from 'react-dom'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { MQ } from '../hooks/breakpoints'
 import { fromLegacy } from '../styles/tw.js'
 
 const PANEL_WIDTH = { date: 380, month: 320, select: 220, menu: 280 }
@@ -9,7 +10,7 @@ const PANEL_HEIGHT = { date: 300, month: 300, select: 320, menu: 240 }
 const POPOVER_Z = 6000
 
 function isMobileViewport() {
-  return window.matchMedia('(max-width: 767px)').matches
+  return window.matchMedia(MQ.phone).matches
 }
 
 function computePosition(anchorRect, panelRect, variant) {

@@ -106,6 +106,8 @@ VIEW_BETA_ASSEMBLY = "view_beta_assembly"
 MANAGE_BETA_ASSEMBLY = "manage_beta_assembly"
 VIEW_BETA_CLEARANCE = "view_beta_clearance"
 MANAGE_BETA_CLEARANCE = "manage_beta_clearance"
+VIEW_OFFICE_FORMS = "view_office_forms"
+MANAGE_OFFICE_FORMS = "manage_office_forms"
 
 PERMISSION_LABELS = {
     VIEW_CUSTOMERS: "مشاهده مشتریان",
@@ -200,6 +202,8 @@ PERMISSION_LABELS = {
     MANAGE_BETA_ASSEMBLY: "مدیریت مونتاژ (بتا)",
     VIEW_BETA_CLEARANCE: "مشاهده ترخیص (بتا)",
     MANAGE_BETA_CLEARANCE: "مدیریت ترخیص (بتا)",
+    VIEW_OFFICE_FORMS: "مشاهده فرم‌های اداری",
+    MANAGE_OFFICE_FORMS: "مدیریت فرم‌های اداری",
 }
 
 ALL_PERMISSIONS = {
@@ -295,6 +299,8 @@ ALL_PERMISSIONS = {
     MANAGE_BETA_ASSEMBLY,
     VIEW_BETA_CLEARANCE,
     MANAGE_BETA_CLEARANCE,
+    VIEW_OFFICE_FORMS,
+    MANAGE_OFFICE_FORMS,
 }
 
 ROLE_PERMISSIONS = {
@@ -445,6 +451,11 @@ PERMISSION_GROUPS = [
         "id": "system",
         "label": "سیستم",
         "permissions": [VIEW_DASHBOARD, VIEW_AUDIT_LOGS, VIEW_ORG_CHART],
+    },
+    {
+        "id": "office_forms",
+        "label": "فرم‌های اداری",
+        "permissions": [VIEW_OFFICE_FORMS, MANAGE_OFFICE_FORMS],
     },
 ]
 

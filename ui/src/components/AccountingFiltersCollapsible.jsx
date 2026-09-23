@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import Icon from './icons/Icon'
-import { useMediaQuery } from '../hooks/useMediaQuery'
+import { useIsCompactTablet } from '../hooks/breakpoints'
 import { fromLegacy } from '../styles/tw.js'
 
 export default function AccountingFiltersCollapsible({
@@ -11,7 +11,7 @@ export default function AccountingFiltersCollapsible({
   title = 'فیلتر گزارش',
   defaultOpen = false,
 }) {
-  const compact = useMediaQuery('(max-width: 900px)')
+  const compact = useIsCompactTablet()
   const [open, setOpen] = useState(defaultOpen || !compact)
 
   const summary = useMemo(() => {

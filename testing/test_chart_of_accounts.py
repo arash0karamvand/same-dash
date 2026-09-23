@@ -2,9 +2,9 @@ from decimal import Decimal
 
 from django.test import TestCase
 
+from backend.models import Account
 from logic.chart_of_accounts import (
     ACCOUNT_SLUGS,
-    CHART_OF_ACCOUNTS,
     PAYMENT_ACCOUNT_SLUGS,
     POSTING_RULES,
     code_for_slug,
@@ -17,18 +17,14 @@ from logic.posting import build_journal_lines
 
 
 class ChartOfAccountsTest(TestCase):
-    def test_chart_has_33_unique_accounts(self):
+    def test_empty_chart_is_valid_before_first_excel_import(self):
+        self.assertFalse(Account.objects.exists())
         errors = validate_chart_integrity()
         self.assertEqual(errors, [])
-        self.assertEqual(len(CHART_OF_ACCOUNTS), 33)
-        slugs = [row["slug"] for row in CHART_OF_ACCOUNTS]
-        codes = [row["code"] for row in CHART_OF_ACCOUNTS]
-        self.assertEqual(len(slugs), len(set(slugs)))
-        self.assertEqual(len(codes), len(set(codes)))
 
     def test_slug_and_code_lookup(self):
         self.assertEqual(slug_for_code("1210"), ACCOUNT_SLUGS.BANK)
-        self.assertEqual(code_for_slug(ACCOUNT_SLUGS.BANK), "1210")
+        self.assertIsNone(code_for_slug(ACCOUNT_SLUGS.BANK))
         self.assertTrue(slug_for_code("9999").startswith("excel_"))
 
     def test_infer_class_and_balance(self):
@@ -41,10 +37,16 @@ class ChartOfAccountsTest(TestCase):
         self.assertEqual(infer_normal_balance("asset"), "debit")
 
     def test_payment_slugs_in_chart(self):
+        from testing.accounting_helpers import seed_accounts
+
+        seed_accounts()
         for slug in PAYMENT_ACCOUNT_SLUGS:
             self.assertIsNotNone(code_for_slug(slug))
 
     def test_posting_rules_reference_valid_slugs(self):
+        from testing.accounting_helpers import seed_accounts
+
+        seed_accounts()
         for rule_name, rules in POSTING_RULES.items():
             for rule in rules:
                 slug = rule.get("slug")
@@ -54,7 +56,7 @@ class ChartOfAccountsTest(TestCase):
 
 class PostingRulesTest(TestCase):
     def setUp(self):
-        from logic.accounting_accounts import seed_accounts
+        from testing.accounting_helpers import seed_accounts
 
         seed_accounts()
 

@@ -7,7 +7,7 @@ import { Badge, Button, Card, Field, FilterBar, Modal, StatCard } from '../compo
 import PortalModuleMatrix from '../components/PortalModuleMatrix'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmContext'
-import { useMediaQuery } from '../hooks/useMediaQuery'
+import { useIsCompactTablet } from '../hooks/breakpoints'
 import {
   collectPortalPermissionCodes,
   toggleExtraOnlyPermissions,
@@ -101,7 +101,7 @@ function UserBoardCard({ user, currentUserId, onEdit, onDeactivate }) {
 export default function Users() {
   const { user: currentUser } = useAuth()
   const confirm = useConfirm()
-  const isMobile = useMediaQuery('(max-width: 900px)')
+  const isMobile = useIsCompactTablet()
   const [users, setUsers] = useState([])
   const [stats, setStats] = useState({ total: 0, active: 0, pending: 0, departments: {} })
   const [roles, setRoles] = useState([])

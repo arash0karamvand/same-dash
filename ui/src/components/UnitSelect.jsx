@@ -1,13 +1,6 @@
 import Select from './Select'
+import { useConfig } from '../context/ConfigContext'
 import { fromLegacy } from '../styles/tw.js'
-
-export const MATERIAL_UNIT_PRESETS = [
-  { value: 'متر', label: 'متر' },
-  { value: 'لیتر', label: 'لیتر' },
-  { value: 'گالن', label: 'گالن' },
-  { value: 'عدد', label: 'عدد' },
-  { value: 'کیلوگرم', label: 'کیلوگرم' },
-]
 
 export const CUSTOM_UNIT_VALUE = '__custom__'
 
@@ -18,7 +11,12 @@ export function resolveUnitValue(preset, customValue, fallback = 'متر') {
   return preset || fallback
 }
 
-export function splitUnitValue(unit, presets = MATERIAL_UNIT_PRESETS) {
+export function useMaterialUnitPresets() {
+  const { choices } = useConfig()
+  return choices('material_unit')
+}
+
+export function splitUnitValue(unit, presets) {
   const value = (unit || '').trim()
   const match = presets.find((p) => p.value === value)
   if (match) {
@@ -32,9 +30,11 @@ export default function UnitSelect({
   customValue,
   onPresetChange,
   onCustomChange,
-  presets = MATERIAL_UNIT_PRESETS,
+  presets: presetsProp,
   placeholder = 'انتخاب واحد',
 }) {
+  const configPresets = useMaterialUnitPresets()
+  const presets = presetsProp ?? configPresets
   const options = [
     ...presets,
     { value: CUSTOM_UNIT_VALUE, label: 'سایر (دستی)' },

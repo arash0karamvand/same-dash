@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from 'react'
 import { officeApi } from '../api/client'
+import OfficeCycleNav from '../components/OfficeCycleNav'
 import OfficeSectionCard from '../components/OfficeSectionCard'
 import { OFFICE_ORDERS_FILTER, recordFiltersToQueryString } from '../config/recordFilterSections'
 import { useConfig } from '../context/ConfigContext'
@@ -145,6 +146,7 @@ export default function OfficeOrders() {
 
   return (
     <div className={fromLegacy("page office-orders-tracking")}>
+      <OfficeCycleNav current="office-orders" />
       <OfficeSectionCard
         section={OFFICE_ORDERS_FILTER}
         actions={<Button type="button" variant="ghost" onClick={() => load({ offset: 0 })}>بروزرسانی</Button>}

@@ -3,6 +3,8 @@ import { fromLegacy } from '../styles/tw.js'
 
 import { materialsApi } from '../api/client'
 
+import MaterialReports from './MaterialReports'
+
 import MoneyInput from '../components/MoneyInput'
 import Select from '../components/Select'
 
@@ -93,6 +95,14 @@ const EMPTY_MATERIAL = {
 
   unit_cost: '',
 
+  valuation_method: 'weighted_average',
+
+  reorder_point: '',
+
+  freight_amount: '',
+
+  freight_treatment: 'capitalize',
+
   stock: '',
 
   description: '',
@@ -117,9 +127,15 @@ export default function Materials() {
 
   const canApprove = hasPermission(user, 'approve_materials')
 
+  const [section, setSection] = useState('list')
+
   useRegisterPageGuide(
     'materials',
-    isOffice ? PAGE_GUIDE_DEFAULTS.materials_office : PAGE_GUIDE_DEFAULTS.materials_shop,
+    isOffice
+      ? PAGE_GUIDE_DEFAULTS.materials_office
+      : section === 'reports'
+        ? PAGE_GUIDE_DEFAULTS.materials_reports
+        : PAGE_GUIDE_DEFAULTS.materials_shop,
   )
 
   const [materials, setMaterials] = useState([])
@@ -203,7 +219,10 @@ export default function Materials() {
 
 
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    if (!isOffice && section === 'reports') return
+    load()
+  }, [load, isOffice, section])
 
 
 
@@ -244,6 +263,14 @@ export default function Materials() {
       unit_custom: custom,
 
       unit_cost: String(m.unit_cost ?? ''),
+
+      valuation_method: m.valuation_method || 'weighted_average',
+
+      reorder_point: m.reorder_point != null ? String(m.reorder_point) : '',
+
+      freight_amount: '',
+
+      freight_treatment: 'capitalize',
 
       stock: m.stock != null ? String(m.stock) : '',
 
@@ -290,6 +317,14 @@ export default function Materials() {
         unit: resolveUnitValue(form.unit_preset, form.unit_custom),
 
         unit_cost: Number(form.unit_cost) || 0,
+
+        valuation_method: form.valuation_method || 'weighted_average',
+
+        reorder_point: form.reorder_point === '' ? 0 : Number(form.reorder_point),
+
+        freight_amount: form.freight_amount === '' ? 0 : Number(form.freight_amount),
+
+        freight_treatment: form.freight_treatment || 'capitalize',
 
         stock: form.stock === '' ? null : Number(form.stock),
 
@@ -430,12 +465,30 @@ export default function Materials() {
 
       </div>
 
+      {!isOffice && (
+        <div className={fromLegacy('branch-tabs settings-tabs')}>
+          <button
+            type="button"
+            className={fromLegacy(`branch-tab ${section === 'list' ? 'active' : ''}`)}
+            onClick={() => setSection('list')}
+          >
+            فهرست
+          </button>
+          <button
+            type="button"
+            className={fromLegacy(`branch-tab ${section === 'reports' ? 'active' : ''}`)}
+            onClick={() => setSection('reports')}
+          >
+            گزارش انبار
+          </button>
+        </div>
+      )}
 
+      {error && section !== 'reports' && <div className={fromLegacy("alert-error")}>{error}</div>}
 
-      {error && <div className={fromLegacy("alert-error")}>{error}</div>}
-
-
-
+      {!isOffice && section === 'reports' ? (
+        <MaterialReports />
+      ) : (
       <Card>
 
         <FilterBar>
@@ -589,7 +642,10 @@ export default function Materials() {
 
                     <td>{formatMoney(m.unit_cost)}</td>
 
-                    <td>{m.stock != null ? m.stock : '—'}</td>
+                    <td>
+                      {m.stock != null ? m.stock : '—'}
+                      {m.below_reorder ? <span className={fromLegacy('doc-unbalanced')}> زیر نقطه سفارش</span> : null}
+                    </td>
 
                     <td>{m.inventory_value != null ? formatMoney(m.inventory_value) : '—'}</td>
 
@@ -707,8 +763,7 @@ export default function Materials() {
         )}
 
       </Card>
-
-
+      )}
 
       <Modal
 
@@ -797,6 +852,42 @@ export default function Materials() {
             <Field label="قیمت واحد (تمام‌شده)">
 
               <MoneyInput min="0" value={form.unit_cost} onChange={(e) => setForm({ ...form, unit_cost: e.target.value })} required />
+
+            </Field>
+
+            <Field label="روش ارزیابی">
+
+              <select value={form.valuation_method || 'weighted_average'} onChange={(e) => setForm({ ...form, valuation_method: e.target.value })}>
+
+                <option value="weighted_average">میانگین موزون</option>
+
+                <option value="fifo">FIFO</option>
+
+              </select>
+
+            </Field>
+
+            <Field label="نقطه سفارش">
+
+              <input className={fromLegacy('ltr')} type="number" min="0" step="0.001" value={form.reorder_point || ''} onChange={(e) => setForm({ ...form, reorder_point: e.target.value })} />
+
+            </Field>
+
+            <Field label="هزینه حمل رسید">
+
+              <input className={fromLegacy('ltr')} type="number" min="0" value={form.freight_amount || ''} onChange={(e) => setForm({ ...form, freight_amount: e.target.value })} />
+
+            </Field>
+
+            <Field label="ثبت حمل">
+
+              <select value={form.freight_treatment || 'capitalize'} onChange={(e) => setForm({ ...form, freight_treatment: e.target.value })}>
+
+                <option value="capitalize">سرشکن در بهای کالا</option>
+
+                <option value="period_expense">هزینه دوره</option>
+
+              </select>
 
             </Field>
 

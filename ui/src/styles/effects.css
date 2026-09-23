@@ -228,12 +228,17 @@ body::after {
   background-size: 180px 180px;
 }
 
+html:has(body.nav-open),
+html:has(body.sheet-open),
+html:has(body.modal-open) {
+  overflow: hidden;
+}
+
 body.nav-open,
 body.sheet-open,
 body.modal-open {
   overflow: hidden;
-  position: fixed;
-  width: 100%;
+  touch-action: none;
 }
 
 /* Jelly capsule — gloss via pseudo-elements */
@@ -249,6 +254,22 @@ body.modal-open {
     inset 0 -16px 28px -16px var(--jelly-shade-bottom),
     var(--jelly-drop-soft);
   transition: background 0.3s ease, border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* Unlayered liquid-glass otherwise beats Tailwind position utilities (e.g. mobile menu sheet). */
+.jelly.fixed,
+.liquid-glass.fixed {
+  position: fixed;
+}
+
+.jelly.absolute,
+.liquid-glass.absolute {
+  position: absolute;
+}
+
+.jelly.sticky,
+.liquid-glass.sticky {
+  position: sticky;
 }
 
 .jelly::before,

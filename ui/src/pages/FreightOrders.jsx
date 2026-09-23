@@ -8,7 +8,7 @@ import { formatJalali, todayIso } from '../utils/jalali'
 import WorkflowOrdersPage from './WorkflowOrdersPage'
 import { fromLegacy } from '../styles/tw.js'
 
-export default function FreightOrders() {
+export default function FreightOrders({ portal }) {
   const [deliveryDate, setDeliveryDate] = useState('')
 
   const extraParams = {
@@ -22,6 +22,8 @@ export default function FreightOrders() {
 
   return (
     <WorkflowOrdersPage
+      portal={portal}
+      cyclePage="freight"
       title="باربری"
       subtitle={subtitle}
       emptyTitle="سفارشی در صف باربری نیست"

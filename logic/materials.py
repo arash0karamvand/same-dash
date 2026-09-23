@@ -38,6 +38,11 @@ def material_to_dict(m):
         "sku": m.sku or "",
         "unit": m.unit,
         "unit_cost": unit_cost,
+        "valuation_method": getattr(m, "valuation_method", Material.VALUATION_WEIGHTED),
+        "reorder_point": float(m.reorder_point or 0),
+        "below_reorder": bool(
+            stock is not None and Decimal(m.reorder_point or 0) > 0 and Decimal(stock) < Decimal(m.reorder_point or 0)
+        ),
         "stock": float(stock) if stock is not None else None,
         "inventory_value": inventory_value,
         "description": m.description or "",
@@ -66,6 +71,7 @@ def product_material_to_dict(pm):
         "material_id": material.id,
         "material": material_to_dict(material),
         "quantity": float(qty),
+        "normal_spoilage_rate": float(getattr(pm, "normal_spoilage_rate", 0) or 0),
         "line_cost": int(line_cost),
         "sort_order": pm.sort_order,
     }
@@ -148,6 +154,8 @@ def create_material(data, *, user=None, auto_approve=False):
         sku=(data.get("sku") or "").strip(),
         unit=(data.get("unit") or "متر").strip() or "متر",
         unit_cost=unit_cost,
+        valuation_method=(data.get("valuation_method") or Material.VALUATION_WEIGHTED),
+        reorder_point=_parse_reorder(data.get("reorder_point")),
         description=(data.get("description") or "").strip(),
         is_active=is_active,
         approval_status=approval_status,
@@ -156,10 +164,15 @@ def create_material(data, *, user=None, auto_approve=False):
         approved_by=approved_by,
     )
     if stock not in (None, 0):
-        InventoryTransaction.objects.create(
-            material=material,
-            quantity=stock,
-            unit_cost=unit_cost,
+        from logic.inventory_costing import receive_stock
+
+        receive_stock(
+            material,
+            stock,
+            unit_cost,
+            freight_amount=data.get("freight_amount") or 0,
+            freight_treatment=data.get("freight_treatment") or "capitalize",
+            previous_unit_cost=0,
             reason="initial_stock",
             reference=f"material:{material.pk}",
             recorded_by=user,
@@ -188,13 +201,40 @@ def update_material(material, data):
         material.sku = (data.get("sku") or "").strip()
     if "unit" in data:
         material.unit = (data.get("unit") or "متر").strip() or "متر"
+    previous_cost = Decimal(material.unit_cost or 0)
+    incoming_cost = None
     if "unit_cost" in data:
         try:
-            material.unit_cost = Decimal(str(data.get("unit_cost") or 0))
+            incoming_cost = Decimal(str(data.get("unit_cost") or 0))
         except (InvalidOperation, TypeError):
             raise ValueError("قیمت متریال نامعتبر است.")
-    if "stock" in data:
-        _apply_stock_update(material, _parse_stock(data.get("stock")))
+    if "valuation_method" in data:
+        from logic.inventory_costing import set_valuation_method
+
+        set_valuation_method(material, data.get("valuation_method"))
+    if "reorder_point" in data:
+        try:
+            reorder = Decimal(str(data.get("reorder_point") or 0))
+        except (InvalidOperation, TypeError):
+            raise ValueError("نقطه سفارش نامعتبر است.")
+        if reorder < 0:
+            raise ValueError("نقطه سفارش نمی‌تواند منفی باشد.")
+        material.reorder_point = reorder
+    stock_change = "stock" in data
+    new_stock = _parse_stock(data.get("stock")) if stock_change else None
+    increased = new_stock is not None and Decimal(new_stock) > Decimal(material.stock or 0)
+    if stock_change:
+        _apply_stock_update(
+            material,
+            new_stock,
+            receipt_unit_cost=data.get("receipt_unit_cost", incoming_cost if incoming_cost is not None else previous_cost),
+            freight_amount=data.get("freight_amount") or 0,
+            freight_treatment=data.get("freight_treatment") or "capitalize",
+            previous_unit_cost=previous_cost,
+            user=None,
+        )
+    if incoming_cost is not None and not increased:
+        material.unit_cost = incoming_cost
     if "description" in data:
         material.description = (data.get("description") or "").strip()
     if "is_active" in data:
@@ -239,6 +279,18 @@ def reject_material(material, user, reason=""):
     return material
 
 
+def _parse_reorder(raw):
+    if raw in (None, ""):
+        return Decimal(0)
+    try:
+        value = Decimal(str(raw))
+    except (InvalidOperation, TypeError):
+        raise ValueError("نقطه سفارش نامعتبر است.")
+    if value < 0:
+        raise ValueError("نقطه سفارش نمی‌تواند منفی باشد.")
+    return value
+
+
 def _parse_stock(raw):
     if raw is None or raw == "":
         return None
@@ -248,22 +300,39 @@ def _parse_stock(raw):
         raise ValueError("موجودی نامعتبر است.")
 
 
-def _apply_stock_update(material, new_stock):
-    """Represent an absolute-stock edit as an append-only adjustment."""
+def _apply_stock_update(
+    material,
+    new_stock,
+    *,
+    receipt_unit_cost=None,
+    freight_amount=0,
+    freight_treatment="capitalize",
+    previous_unit_cost=None,
+    user=None,
+):
+    """Represent an absolute-stock edit as an append-only receipt."""
     if new_stock is None:
         return
     current = Decimal(material.stock or 0)
     if Decimal(new_stock) < current:
         raise ValueError("کاهش موجودی فقط با پایان ساخت سفارش در کارخانه امکان‌پذیر است.")
     delta = Decimal(new_stock) - current
-    if delta:
-        InventoryTransaction.objects.create(
-            material=material,
-            quantity=delta,
-            unit_cost=material.unit_cost,
-            reason="manual_adjustment",
-            reference=f"material:{material.pk}",
-        )
+    if not delta:
+        return
+    from logic.inventory_costing import receive_stock
+
+    cost = receipt_unit_cost if receipt_unit_cost not in (None, "") else material.unit_cost
+    receive_stock(
+        material,
+        delta,
+        cost,
+        freight_amount=freight_amount or 0,
+        freight_treatment=freight_treatment or "capitalize",
+        previous_unit_cost=previous_unit_cost if previous_unit_cost is not None else material.unit_cost,
+        reason="manual_adjustment",
+        reference=f"material:{material.pk}",
+        recorded_by=user,
+    )
 
 
 def _parse_product_materials(raw_items):
@@ -280,10 +349,17 @@ def _parse_product_materials(raw_items):
             raise ValueError("مقدار مصرف متریال نامعتبر است.")
         if quantity <= 0:
             raise ValueError("مقدار مصرف متریال باید بزرگ‌تر از صفر باشد.")
+        try:
+            spoilage = Decimal(str(item.get("normal_spoilage_rate") or 0))
+        except (InvalidOperation, TypeError):
+            raise ValueError("نرخ ضایعات عادی نامعتبر است.")
+        if spoilage < 0 or spoilage > 100:
+            raise ValueError("نرخ ضایعات عادی باید بین ۰ و ۱۰۰ باشد.")
         parsed.append(
             {
                 "material_id": int(material_id),
                 "quantity": quantity,
+                "normal_spoilage_rate": spoilage,
                 "sort_order": int(item.get("sort_order") if item.get("sort_order") is not None else idx),
             }
         )
@@ -304,6 +380,7 @@ def sync_product_materials(product, raw_items):
             raise ValueError("متریال انتخاب‌شده یافت نشد یا هنوز تایید اداری نشده است.")
         pm, _ = ProductMaterial.objects.get_or_create(product=product, material=material)
         pm.quantity = item["quantity"]
+        pm.normal_spoilage_rate = item["normal_spoilage_rate"]
         pm.sort_order = item["sort_order"]
         pm.save()
         keep_material_ids.append(material.pk)
@@ -531,12 +608,18 @@ def deduct_materials_for_factory_order(factory_order):
     if shortages:
         raise ValueError("موجودی متریال کافی نیست — " + "؛ ".join(shortages))
 
+    from logic.inventory_costing import issue_cost
+
     for item in tracked:
         material = locked[item["material_id"]]
+        req_qty = Decimal(str(item["required_quantity"]))
+        cost = issue_cost(material, req_qty)
+        item["unit_cost"] = int(cost)
+        item["line_cost"] = int(req_qty * cost)
         InventoryTransaction.objects.create(
             material=material,
-            quantity=-Decimal(str(item["required_quantity"])),
-            unit_cost=material.unit_cost,
+            quantity=-req_qty,
+            unit_cost=cost,
             reason="production_consumption",
             reference=f"sale:{factory_order.pk}",
         )
@@ -569,12 +652,21 @@ def restore_materials_for_factory_order(factory_order):
             material.pk: material
             for material in Material.objects.select_for_update().filter(pk__in=material_ids).order_by("pk")
         }
+    from logic.inventory_costing import receive_stock
+
     for item in tracked:
         material = locked[item["material_id"]]
-        InventoryTransaction.objects.create(
+        issued = InventoryTransaction.objects.filter(
             material=material,
-            quantity=Decimal(str(item["required_quantity"])),
-            unit_cost=material.unit_cost,
+            reference=f"sale:{factory_order.pk}",
+            reason="production_consumption",
+        ).order_by("-id").first()
+        cost = issued.unit_cost if issued else material.unit_cost
+        receive_stock(
+            material,
+            Decimal(str(item["required_quantity"])),
+            cost,
+            previous_unit_cost=material.unit_cost,
             reason="production_rollback",
             reference=f"sale:{factory_order.pk}",
         )

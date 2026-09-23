@@ -9,6 +9,7 @@ import { Badge, Button, Card, EmptyState, Field, FilterBar, LoadMoreButton } fro
 import { PAGE_SIZE, withPageParams } from '../config/pagination'
 import { formatDate, formatMoney } from '../utils/format'
 import { hasPermission } from '../utils/permissions'
+import OfficeCycleNav from '../components/OfficeCycleNav'
 import { fromLegacy } from '../styles/tw.js'
 
 const WORKFLOW_COLORS = {
@@ -66,6 +67,8 @@ export default function WorkflowOrdersPage({
   onEditOrder = null,
   emptyTitle = 'سفارشی در این مرحله نیست',
   embedInSection = false,
+  portal = '',
+  cyclePage = '',
 }) {
   const { user } = useAuth()
   const { choices } = useConfig()
@@ -463,6 +466,7 @@ export default function WorkflowOrdersPage({
 
   return (
     <div className={fromLegacy("page workflow-orders-page")}>
+      {portal === 'office' && cyclePage && <OfficeCycleNav current={cyclePage} />}
       <div className={fromLegacy("page-head")}>
         <div>
           <h1>{title}</h1>

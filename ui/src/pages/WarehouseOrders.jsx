@@ -3,9 +3,11 @@
 import { cycleApi } from '../api/client'
 import WorkflowOrdersPage from './WorkflowOrdersPage'
 
-export default function WarehouseOrders() {
+export default function WarehouseOrders({ portal }) {
   return (
     <WorkflowOrdersPage
+      portal={portal}
+      cyclePage="warehouse"
       title="انبار"
       subtitle="سفارش‌هایی که باید از انبار یا شعبه مبدأ ارسال شوند"
       emptyTitle="سفارشی در انبار نیست"

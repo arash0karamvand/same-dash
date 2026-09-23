@@ -10,7 +10,7 @@ from logic.furniture_worksets import (
     validate_piece_arm,
 )
 from logic.sales import record_sale
-from logic.workshop_recipes import create_recipe
+from logic.workshop_recipes import create_recipe, fabric_named_ids
 
 
 class FurnitureWorksetTests(TestCase):
@@ -19,9 +19,19 @@ class FurnitureWorksetTests(TestCase):
         self.user = User.objects.create_user(username="suite_user", password="secret123")
         Branch.objects.get_or_create(code="branch_1", defaults={"label": "کمرد", "is_active": True})
         self.customer = Customer.objects.create(full_name="خریدار دست", phone="09121112233")
-        self.fabric_cream = create_recipe({"kind": "fabric", "name": "مخمل کرم"})
-        self.fabric_gray = create_recipe({"kind": "fabric", "name": "مخمل طوسی"})
-        self.paint_walnut = create_recipe({"kind": "paint", "name": "گردویی"})
+        self.fabric_cream = create_recipe({
+            "kind": "fabric",
+            "name": "مخمل کرم",
+            **fabric_named_ids(color="کرم"),
+        })
+        self.fabric_gray = create_recipe({
+            "kind": "fabric",
+            "name": "مخمل طوسی",
+            **fabric_named_ids(brand="منسوجات آریا", color="دودی"),
+        })
+        self.paint_walnut = create_recipe(
+            {"kind": "paint", "name": "گردویی", "paint_category": "paint", "stock_unit": "لیتر"}
+        )
         self.luna = create_workset({
             "name": "لونا",
             "seat_count": 8,

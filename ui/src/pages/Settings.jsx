@@ -14,7 +14,29 @@ const LOOKUP_CATEGORIES = [
   { id: 'order_kind', label: 'نوع سفارش' },
   { id: 'order_status', label: 'وضعیت سفارش' },
   { id: 'discount_type', label: 'نوع تخفیف' },
+  { id: 'accounting_mode', label: 'حالت حسابداری' },
+  { id: 'workflow_stage', label: 'مرحله گردش سفارش' },
+  { id: 'fulfillment_route', label: 'مسیر تحویل' },
+  { id: 'receive_kind', label: 'نوع دریافت کارخانه' },
+  { id: 'attendance_status', label: 'وضعیت حضور' },
+  { id: 'approval_status', label: 'وضعیت تایید' },
   { id: 'staff_kind', label: 'نوع پرسنل' },
+  { id: 'material_unit', label: 'واحد متریال' },
+  { id: 'document_code', label: 'کد نوع سند' },
+  { id: 'account_class', label: 'گروه حساب' },
+  { id: 'normal_balance', label: 'ماهیت حساب' },
+  { id: 'source_module', label: 'ماژول مبدأ حسابداری' },
+  { id: 'frame_design_style', label: 'سبک طراحی کلاف' },
+  { id: 'frame_wood_type', label: 'جنس چوب' },
+  { id: 'frame_piece_kind', label: 'نوع قطعه مبل' },
+  { id: 'frame_arm_style', label: 'حالت دسته' },
+  { id: 'frame_component_type', label: 'نوع قطعه سرویس' },
+  { id: 'frame_rule_key', label: 'قانون متریال کلاف' },
+  { id: 'workshop_recipe_kind', label: 'نوع دستور کارگاه' },
+  { id: 'workshop_paint_category', label: 'دسته رنگ' },
+  { id: 'workshop_fabric_category', label: 'دسته پارچه' },
+  { id: 'workshop_fabric_company', label: 'شرکت پارچه' },
+  { id: 'workshop_fabric_country', label: 'کشور پارچه' },
   { id: 'beta_workshop_kind', label: 'نوع واحد نجاری (بتا)' },
   { id: 'beta_carpentry_kind', label: 'نوع دستور نجاری (بتا)' },
   { id: 'beta_carpentry_status', label: 'وضعیت دستور نجاری (بتا)' },
@@ -25,7 +47,7 @@ const LOOKUP_CATEGORIES = [
   { id: 'beta_qc_grade', label: 'گریدهای کنترل کیفیت (بتا)' },
 ]
 
-const EMPTY_BRANCH = { code: '', label: '', color: 'var(--accent)', sort_order: 0, work_start: '', work_end: '' }
+const EMPTY_BRANCH = { code: '', label: '', color: 'var(--accent)', sort_order: 0, work_start: '', work_end: '', is_profit_center: true }
 const EMPTY_LOOKUP = { category: 'payment_method', code: '', label: '', sort_order: 0 }
 const EMPTY_TICKET_GRADES = {
   grades: [
@@ -328,7 +350,7 @@ export default function Settings() {
                               <td>{b.sort_order}</td>
                               <td>{b.is_active ? 'فعال' : 'غیرفعال'}</td>
                               <td>
-                                <button type="button" className={fromLegacy("link")} onClick={() => { setSelectedBranch(b); setBranchForm({ code: b.code, label: b.label, color: b.color, sort_order: b.sort_order, work_start: b.work_start || '', work_end: b.work_end || '' }); setBranchModal(true) }}>ویرایش</button>
+                                <button type="button" className={fromLegacy("link")} onClick={() => { setSelectedBranch(b); setBranchForm({ code: b.code, label: b.label, color: b.color, sort_order: b.sort_order, work_start: b.work_start || '', work_end: b.work_end || '', is_profit_center: b.is_profit_center !== false }); setBranchModal(true) }}>ویرایش</button>
                                 {' · '}
                                 <button type="button" className={fromLegacy("link")} onClick={() => toggleBranch(b)}>
                                   {b.is_active ? 'غیرفعال' : 'فعال'}
@@ -351,7 +373,7 @@ export default function Settings() {
                             <div><span className={fromLegacy("muted")}>ترتیب</span>{b.sort_order}</div>
                           </div>
                           <div className={fromLegacy("m-card-actions")}>
-                            <button type="button" className={fromLegacy("link")} onClick={() => { setSelectedBranch(b); setBranchForm({ code: b.code, label: b.label, color: b.color, sort_order: b.sort_order, work_start: b.work_start || '', work_end: b.work_end || '' }); setBranchModal(true) }}>ویرایش</button>
+                            <button type="button" className={fromLegacy("link")} onClick={() => { setSelectedBranch(b); setBranchForm({ code: b.code, label: b.label, color: b.color, sort_order: b.sort_order, work_start: b.work_start || '', work_end: b.work_end || '', is_profit_center: b.is_profit_center !== false }); setBranchModal(true) }}>ویرایش</button>
                             <button type="button" className={fromLegacy("link")} onClick={() => toggleBranch(b)}>{b.is_active ? 'غیرفعال' : 'فعال'}</button>
                           </div>
                         </div>
@@ -483,6 +505,10 @@ export default function Settings() {
           <Field label="ترتیب"><input type="number" value={branchForm.sort_order} onChange={(e) => setBranchForm({ ...branchForm, sort_order: Number(e.target.value) })} /></Field>
           <Field label="شروع ساعت کاری"><input className={fromLegacy("ltr")} type="time" value={branchForm.work_start || ''} onChange={(e) => setBranchForm({ ...branchForm, work_start: e.target.value })} /></Field>
           <Field label="پایان ساعت کاری"><input className={fromLegacy("ltr")} type="time" value={branchForm.work_end || ''} onChange={(e) => setBranchForm({ ...branchForm, work_end: e.target.value })} /></Field>
+          <label className={fromLegacy("checkbox")}>
+            <input type="checkbox" checked={branchForm.is_profit_center !== false} onChange={(e) => setBranchForm({ ...branchForm, is_profit_center: e.target.checked })} />
+            مرکز درآمد
+          </label>
           <Button type="submit">ذخیره</Button>
         </form>
       </Modal>

@@ -15,7 +15,8 @@ def _mod(module_id, label, icon, page_key, menu_permissions, section_permissions
     }
 
 
-def _notifications_mod(portal_id):
+def _notifications_mod(portal_id, nav_group=None):
+    extra = {"nav_group": nav_group} if nav_group else {}
     return _mod(
         f"{portal_id}_notifications",
         "اعلان‌ها",
@@ -23,6 +24,7 @@ def _notifications_mod(portal_id):
         "notifications",
         [],
         [],
+        **extra,
     )
 PORTAL_MODULE_SPECS = [
     {
@@ -244,23 +246,7 @@ PORTAL_MODULE_SPECS = [
         "page_key": "office",
         "default_page": "office",
         "modules": [
-            _notifications_mod("office"),
-            _mod(
-                "office_approve",
-                "تایید سفارش",
-                "📋",
-                "office",
-                [P.APPROVE_SALE_ACCOUNTING],
-                [P.APPROVE_SALE_ACCOUNTING, P.EDIT_SALE, P.VIEW_SALES],
-            ),
-            _mod(
-                "office_orders_track",
-                "سفارش‌ها",
-                "📦",
-                "office-orders",
-                [P.APPROVE_SALE_ACCOUNTING, P.VIEW_SALES],
-                [P.APPROVE_SALE_ACCOUNTING, P.VIEW_SALES],
-            ),
+            _notifications_mod("office", "CRM"),
             _mod(
                 "office_customers",
                 "مشتریان",
@@ -268,6 +254,7 @@ PORTAL_MODULE_SPECS = [
                 "customers",
                 [P.VIEW_CUSTOMERS],
                 [P.VIEW_CUSTOMERS, P.EDIT_CUSTOMER, P.CREATE_CUSTOMER],
+                nav_group="CRM",
             ),
             _mod(
                 "office_rfm",
@@ -295,6 +282,25 @@ PORTAL_MODULE_SPECS = [
                     P.VIEW_SMS_LOGS,
                     P.MANAGE_REMINDERS,
                 ],
+                nav_group="CRM",
+            ),
+            _mod(
+                "office_approve",
+                "تایید سفارش",
+                "📋",
+                "office",
+                [P.APPROVE_SALE_ACCOUNTING],
+                [P.APPROVE_SALE_ACCOUNTING, P.EDIT_SALE, P.VIEW_SALES],
+                nav_group="CRM",
+            ),
+            _mod(
+                "office_orders_track",
+                "سفارش‌ها",
+                "📦",
+                "office-orders",
+                [P.APPROVE_SALE_ACCOUNTING, P.VIEW_SALES],
+                [P.APPROVE_SALE_ACCOUNTING, P.VIEW_SALES],
+                nav_group="CRM",
             ),
             _mod(
                 "office_products",
@@ -303,53 +309,7 @@ PORTAL_MODULE_SPECS = [
                 "products",
                 [P.VIEW_PRODUCTS],
                 [P.VIEW_PRODUCTS, P.MANAGE_PRODUCTS],
-            ),
-            _mod(
-                "office_materials",
-                "تایید متریال",
-                "🧵",
-                "materials",
-                [P.APPROVE_MATERIALS],
-                [P.APPROVE_MATERIALS, P.VIEW_MATERIALS, P.MANAGE_MATERIALS],
-            ),
-            _mod(
-                "office_accounting",
-                "حسابداری",
-                "💰",
-                "accounting",
-                [P.VIEW_ACCOUNTING],
-                [
-                    P.VIEW_ACCOUNTING,
-                    P.CREATE_ACCOUNTING,
-                    P.EDIT_ACCOUNTING,
-                    P.DELETE_ACCOUNTING,
-                    P.APPROVE_ACCOUNTING,
-                    P.VIEW_REPORTS,
-                    P.VIEW_FACTORY_ACCOUNTING,
-                    P.TRANSFER_FACTORY_ACCOUNTING_TO_OFFICE,
-                ],
-            ),
-            _mod(
-                "office_factory_accounting",
-                "حسابداری کارخانه",
-                "🏭",
-                "factory-accounting",
-                [P.VIEW_FACTORY_ACCOUNTING],
-                [
-                    P.VIEW_FACTORY_ACCOUNTING,
-                    P.CREATE_FACTORY_ACCOUNTING,
-                    P.EDIT_FACTORY_ACCOUNTING,
-                    P.DELETE_FACTORY_ACCOUNTING,
-                    P.APPROVE_FACTORY_ACCOUNTING,
-                ],
-            ),
-            _mod(
-                "office_checks",
-                "چک و اقساط",
-                "📋",
-                "checks",
-                [P.VIEW_INSTALLMENTS],
-                [P.VIEW_INSTALLMENTS, P.MANAGE_INSTALLMENTS],
+                nav_group="CRM",
             ),
             _mod(
                 "office_factory",
@@ -358,6 +318,7 @@ PORTAL_MODULE_SPECS = [
                 "factory",
                 [P.VIEW_FACTORY_ORDERS],
                 [P.VIEW_FACTORY_ORDERS, P.MANAGE_FACTORY_ORDERS],
+                nav_group="CRM",
             ),
             _mod(
                 "office_factory_built",
@@ -366,6 +327,7 @@ PORTAL_MODULE_SPECS = [
                 "factory-built",
                 [P.VIEW_FACTORY_ORDERS],
                 [P.VIEW_FACTORY_ORDERS],
+                nav_group="CRM",
             ),
             _mod(
                 "office_freight",
@@ -374,6 +336,7 @@ PORTAL_MODULE_SPECS = [
                 "freight",
                 [P.VIEW_FREIGHT_ORDERS],
                 [P.VIEW_FREIGHT_ORDERS, P.MANAGE_FREIGHT_ORDERS],
+                nav_group="CRM",
             ),
             _mod(
                 "office_warehouse",
@@ -382,6 +345,7 @@ PORTAL_MODULE_SPECS = [
                 "warehouse",
                 [P.VIEW_WAREHOUSE_ORDERS, P.MANAGE_WAREHOUSE_ORDERS, P.APPROVE_SALE_ACCOUNTING],
                 [P.VIEW_WAREHOUSE_ORDERS, P.MANAGE_WAREHOUSE_ORDERS, P.APPROVE_SALE_ACCOUNTING],
+                nav_group="CRM",
             ),
             _mod(
                 "office_filter",
@@ -402,6 +366,43 @@ PORTAL_MODULE_SPECS = [
                     P.VIEW_CUSTOMERS,
                     P.VIEW_INSTALLMENTS,
                 ],
+                nav_group="CRM",
+            ),
+            _mod(
+                "office_accounting",
+                "حسابداری",
+                "💰",
+                "accounting",
+                [P.VIEW_ACCOUNTING, P.VIEW_FACTORY_ACCOUNTING],
+                [
+                    P.VIEW_ACCOUNTING,
+                    P.CREATE_ACCOUNTING,
+                    P.EDIT_ACCOUNTING,
+                    P.DELETE_ACCOUNTING,
+                    P.APPROVE_ACCOUNTING,
+                    P.VIEW_REPORTS,
+                    P.VIEW_FACTORY_ACCOUNTING,
+                    P.TRANSFER_FACTORY_ACCOUNTING_TO_OFFICE,
+                ],
+                nav_group="مالی",
+            ),
+            _mod(
+                "office_checks",
+                "چک و اقساط",
+                "📋",
+                "checks",
+                [P.VIEW_INSTALLMENTS],
+                [P.VIEW_INSTALLMENTS, P.MANAGE_INSTALLMENTS],
+                nav_group="مالی",
+            ),
+            _mod(
+                "office_materials",
+                "تایید متریال",
+                "🧵",
+                "materials",
+                [P.APPROVE_MATERIALS],
+                [P.APPROVE_MATERIALS, P.VIEW_MATERIALS, P.MANAGE_MATERIALS],
+                nav_group="مالی",
             ),
         ],
     },
@@ -592,21 +593,6 @@ PORTAL_MODULE_SPECS = [
                 [P.VIEW_FACTORY_PRODUCTS, P.VIEW_MATERIALS],
                 [P.VIEW_FACTORY_PRODUCTS, P.MANAGE_FACTORY_PRODUCTS, P.VIEW_MATERIALS, P.MANAGE_MATERIALS],
                 nav_group="کاتالوگ و مواد",
-            ),
-            _mod(
-                "factory_accounting",
-                "حسابداری",
-                "💰",
-                "factory-accounting",
-                [P.VIEW_FACTORY_ACCOUNTING],
-                [
-                    P.VIEW_FACTORY_ACCOUNTING,
-                    P.CREATE_FACTORY_ACCOUNTING,
-                    P.EDIT_FACTORY_ACCOUNTING,
-                    P.DELETE_FACTORY_ACCOUNTING,
-                    P.APPROVE_FACTORY_ACCOUNTING,
-                ],
-                nav_group="مالی",
             ),
         ],
     },

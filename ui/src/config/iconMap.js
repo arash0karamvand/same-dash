@@ -28,7 +28,6 @@ export const PAGE_ICONS = {
   products: 'package',
   materials: 'fabric',
   accounting: 'coins',
-  'factory-accounting': 'coins',
   'factory-frames': 'package',
   'factory-carpentry': 'wrench',
   'factory-paint': 'fabric',

@@ -4,7 +4,7 @@ from django.core.cache import cache
 
 from backend.models import Branch
 
-CACHE_KEY = "active_branches_v1"
+CACHE_KEY = "active_branches_v2"
 CACHE_TTL = 60
 
 FALLBACK_BRANCHES = [
@@ -34,6 +34,7 @@ def get_active_branches(force_refresh=False):
                 "sort_order": b.sort_order,
                 "work_start": b.work_start.strftime("%H:%M") if b.work_start else "",
                 "work_end": b.work_end.strftime("%H:%M") if b.work_end else "",
+                "is_profit_center": b.is_profit_center,
             }
             for b in qs
         ]
@@ -75,6 +76,7 @@ def branch_to_dict(branch):
         "is_active": branch.is_active,
         "work_start": branch.work_start.strftime("%H:%M") if branch.work_start else "",
         "work_end": branch.work_end.strftime("%H:%M") if branch.work_end else "",
+        "is_profit_center": branch.is_profit_center,
     }
 
 
@@ -86,7 +88,7 @@ def list_all_branches():
     return list(Branch.objects.order_by("sort_order", "label"))
 
 
-def create_branch(*, code, label, color="#6366f1", sort_order=0, is_active=True, work_start=None, work_end=None):
+def create_branch(*, code, label, color="#6366f1", sort_order=0, is_active=True, work_start=None, work_end=None, is_profit_center=True):
     code = (code or "").strip()
     label = (label or "").strip()
     if not code or not label:
@@ -101,6 +103,7 @@ def create_branch(*, code, label, color="#6366f1", sort_order=0, is_active=True,
         is_active=bool(is_active),
         work_start=_parse_time(work_start),
         work_end=_parse_time(work_end),
+        is_profit_center=bool(is_profit_center),
     )
     invalidate_branch_cache()
     return branch
@@ -137,6 +140,8 @@ def update_branch(branch, data):
         branch.work_start = _parse_time(data.get("work_start"))
     if "work_end" in data:
         branch.work_end = _parse_time(data.get("work_end"))
+    if "is_profit_center" in data:
+        branch.is_profit_center = bool(data.get("is_profit_center"))
     branch.save()
     invalidate_branch_cache()
     return branch

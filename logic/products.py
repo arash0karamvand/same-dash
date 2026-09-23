@@ -134,6 +134,13 @@ def product_to_dict(p, include_variants=True, *, audience="sales"):
     if show_sales_price:
         data["default_price"] = int(p.default_price)
         data["display_price"] = int(p.display_price)
+        margin = getattr(p, "target_margin_percent", None)
+        if margin is not None:
+            material_cost = compute_product_material_cost(p)
+            data["target_margin_percent"] = float(margin)
+            data["target_min_price"] = int(
+                Decimal(material_cost) * (Decimal(1) + Decimal(margin) / Decimal(100))
+            )
 
     if show_materials:
         materials = [
@@ -291,6 +298,21 @@ def update_category(category, data):
 
 
 @transaction.atomic
+def _parse_target_margin(data):
+    if "target_margin_percent" not in data:
+        return None, False
+    raw = data.get("target_margin_percent")
+    if raw in (None, ""):
+        return None, True
+    try:
+        value = Decimal(str(raw))
+    except (InvalidOperation, TypeError):
+        raise ValueError("حاشیه سود هدف نامعتبر است.")
+    if value < 0 or value > 100:
+        raise ValueError("حاشیه سود هدف باید بین ۰ و ۱۰۰ باشد.")
+    return value, True
+
+
 def create_product(data, *, allow_sales_price=True, allow_materials=False):
     name = (data.get("name") or "").strip()
     if not name:
@@ -301,6 +323,7 @@ def create_product(data, *, allow_sales_price=True, allow_materials=False):
             default_price = Decimal(str(data.get("default_price") or 0))
         except (InvalidOperation, TypeError):
             raise ValueError("قیمت نامعتبر است.")
+    target_margin, _has_margin = _parse_target_margin(data)
 
     category = None
     category_id = data.get("category_id")
@@ -323,6 +346,7 @@ def create_product(data, *, allow_sales_price=True, allow_materials=False):
         unit=(data.get("unit") or "عدد").strip() or "عدد",
         attributes=attrs or {},
         default_price=default_price,
+        target_margin_percent=target_margin,
         is_active=bool(data.get("is_active", True)),
         category=category,
     )
@@ -371,6 +395,9 @@ def update_product(product, data, *, allow_sales_price=True, allow_materials=Fal
             product.default_price = Decimal(str(data.get("default_price") or 0))
         except (InvalidOperation, TypeError):
             raise ValueError("قیمت نامعتبر است.")
+    margin, has_margin = _parse_target_margin(data)
+    if has_margin:
+        product.target_margin_percent = margin
     if "is_active" in data:
         product.is_active = bool(data.get("is_active"))
     if "category_id" in data:

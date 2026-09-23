@@ -13,7 +13,7 @@ import SiteFooterGuide from './SiteFooterGuide'
 import ThemeToggle from './ThemeToggle'
 import Icon from './icons/Icon'
 import { PageGuideProvider } from '../context/PageGuideContext'
-import { useMediaQuery } from '../hooks/useMediaQuery'
+import { useIsCompactNav, useIsPhone } from '../hooks/breakpoints'
 import { iconForNavItem, iconForPortal } from '../config/iconMap'
 import { getVisiblePortals, canSeeNavItem, getFirstAccessiblePageForPortal } from '../utils/permissions'
 import { groupNavItems } from '../utils/navGroups'
@@ -31,8 +31,8 @@ export default function Layout({ portal, page, onNavigate, children }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [topbarScrolled, setTopbarScrolled] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
-  const isMobile = useMediaQuery('(max-width: 767px)')
-  const isCompactNav = useMediaQuery('(max-width: 1440px)')
+  const isMobile = useIsPhone()
+  const isCompactNav = useIsCompactNav()
   const visiblePortals = getVisiblePortals(user, portals)
   const activePortal = getPortalFromList(portals, portal)
   const pageTitle = activePortal
@@ -115,8 +115,10 @@ export default function Layout({ portal, page, onNavigate, children }) {
   const showTabletMenu = isCompactNav && !isMobile
   const drawerOpen = menuOpen && !isMobile
 
+  const shellMenuOpen = isMobile ? mobileMenuOpen : menuOpen
+
   return (
-    <div className={tw.layout}>
+    <div className={cn('layout', tw.layout, isMobile && 'layout--mobile', shellMenuOpen && 'layout--menu-open', !isMobile && menuOpen && 'menu-open')}>
       <button
         type="button"
         className={cn(tw.sidebarBackdrop, drawerOpen ? tw.sidebarBackdropOpen : tw.sidebarBackdropClosed)}
@@ -198,15 +200,18 @@ export default function Layout({ portal, page, onNavigate, children }) {
 
       <div className={tw.main}>
         <div className={tw.mainChrome}>
-          <header className={cn(tw.topbar, topbarScrolled && tw.topbarScrolled)}>
+          <header className={cn('topbar', tw.topbar, topbarScrolled && tw.topbarScrolled, isMobile && tw.topbarMobile)}>
             <div className={tw.topbarStart}>
-              {showTabletMenu && (
+              {isCompactNav && (
                 <button
                   type="button"
-                  className={cn(tw.menuToggle, menuOpen && tw.menuToggleOpen)}
-                  aria-label={menuOpen ? 'بستن منو' : 'باز کردن منو'}
-                  aria-expanded={menuOpen}
-                  onClick={() => setMenuOpen((open) => !open)}
+                  className={cn(tw.menuToggle, (isMobile ? mobileMenuOpen : menuOpen) && tw.menuToggleOpen)}
+                  aria-label={(isMobile ? mobileMenuOpen : menuOpen) ? 'بستن منو' : 'باز کردن منو'}
+                  aria-expanded={isMobile ? mobileMenuOpen : menuOpen}
+                  onClick={() => {
+                    if (isMobile) setMobileMenuOpen((open) => !open)
+                    else setMenuOpen((open) => !open)
+                  }}
                 >
                   <span className={tw.menuToggleBar} />
                   <span className={tw.menuToggleBar} />
@@ -223,7 +228,7 @@ export default function Layout({ portal, page, onNavigate, children }) {
                 <h2 className={tw.pageTitle}>{pageTitle}</h2>
               </div>
             </div>
-            <div className={tw.userBox}>
+            <div className={cn(tw.userBox, isMobile && tw.userBoxMobile)}>
               <button
                 type="button"
                 className={buttonClass({ variant: 'ghost', size: 'sm', className: 'notification-bell' })}
@@ -243,9 +248,11 @@ export default function Layout({ portal, page, onNavigate, children }) {
               <button className={buttonClass({ variant: 'ghost', size: 'sm', className: tw.hideXs })} type="button" onClick={() => setPasswordOpen(true)}>
                 تغییر رمز
               </button>
-              <button className={buttonClass({ variant: 'ghost', size: 'sm' })} type="button" onClick={logout}>
-                خروج
-              </button>
+              {!isMobile && (
+                <button className={buttonClass({ variant: 'ghost', size: 'sm' })} type="button" onClick={logout}>
+                  خروج
+                </button>
+              )}
             </div>
           </header>
 
@@ -254,7 +261,7 @@ export default function Layout({ portal, page, onNavigate, children }) {
           )}
         </div>
 
-        <main className={tw.content}>
+        <main className={cn('content', tw.content, isMobile && 'content--mobile')}>
           <PageGuideProvider>
             {children}
             <SiteFooterGuide pageKey={page} />
@@ -270,7 +277,7 @@ export default function Layout({ portal, page, onNavigate, children }) {
             currentPortal={portal}
             menuOpen={mobileMenuOpen}
             onNavigate={navigatePortal}
-            onOpenMenu={() => setMobileMenuOpen(true)}
+            onToggleMenu={() => setMobileMenuOpen((open) => !open)}
           />
           <MobileMenuSheet
             open={mobileMenuOpen}

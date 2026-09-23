@@ -17,9 +17,12 @@ import { fromLegacy } from '../styles/tw.js'
 import Sms from './Sms'
 import RfmCashback from '../components/RfmCashback'
 
-const ANALYSIS_TABS = [
+const DAILY_TABS = [
   { id: 'dashboard', label: 'داشبورد' },
   { id: 'worklist', label: 'لیست کار' },
+]
+
+const CLUB_TABS = [
   { id: 'segments', label: 'بخش‌ها' },
   { id: 'settings', label: 'تنظیمات' },
 ]
@@ -135,7 +138,7 @@ export default function Rfm() {
     'manage_birthday_sms',
     'manage_reminders',
   ])
-  const tabs = [...ANALYSIS_TABS, CASHBACK_TAB, ...(canSms ? [SMS_TAB] : [])]
+  const clubTabs = [...CLUB_TABS, CASHBACK_TAB, ...(canSms ? [SMS_TAB] : [])]
 
   const [tab, setTab] = useState('dashboard')
   const [error, setError] = useState('')
@@ -366,17 +369,37 @@ export default function Rfm() {
       {error && <div className={fromLegacy('alert-error')}>{error}</div>}
       {info && <div className={fromLegacy('alert-info')}>{info}</div>}
 
-      <div className={fromLegacy('branch-tabs settings-tabs')}>
-        {tabs.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className={fromLegacy(`branch-tab ${tab === item.id ? 'active' : ''}`)}
-            onClick={() => setTab(item.id)}
-          >
-            {item.label}
-          </button>
-        ))}
+      <div className="mb-4 flex flex-col gap-3">
+        <div>
+          <p className={fromLegacy('muted small')}>کار روزانه</p>
+          <div className={fromLegacy('branch-tabs settings-tabs')}>
+            {DAILY_TABS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={fromLegacy(`branch-tab ${tab === item.id ? 'active' : ''}`)}
+                onClick={() => setTab(item.id)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div>
+          <p className={fromLegacy('muted small')}>تنظیمات باشگاه</p>
+          <div className={fromLegacy('branch-tabs settings-tabs')}>
+            {clubTabs.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                className={fromLegacy(`branch-tab ${tab === item.id ? 'active' : ''}`)}
+                onClick={() => setTab(item.id)}
+              >
+                {item.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       {tab === 'sms' && canSms ? (

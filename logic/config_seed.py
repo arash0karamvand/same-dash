@@ -64,6 +64,12 @@ from auth.permissions import (
     VIEW_SMS_LOGS,
 )
 from auth.permissions import sanitize_role_permissions
+from logic.catalog_defaults import (
+    FACTORY_AND_SYSTEM_LOOKUPS,
+    JOURNAL_ENTRY_TYPE_ACCOUNT_META,
+    PAYMENT_METHOD_ACCOUNT_META,
+    POSTING_RULES,
+)
 from backend.models import (
     AccountingMode,
     ApprovalStatus,
@@ -92,9 +98,9 @@ DEFAULT_BRANCHES = [
 ]
 
 DEFAULT_LOOKUPS = [
-    ("payment_method", "cash", "نقدی", 0, {"color": "#10b981"}),
-    ("payment_method", "card", "کارت‌خوان", 1, {"color": "#6366f1"}),
-    ("payment_method", "check", "چک", 2, {"color": "#f59e0b"}),
+    ("payment_method", "cash", "نقدی", 0, {"color": "#10b981", "account_slug": "cash_documents"}),
+    ("payment_method", "card", "کارت‌خوان", 1, {"color": "#6366f1", "account_slug": "bank"}),
+    ("payment_method", "check", "چک", 2, {"color": "#f59e0b", "account_slug": "collection_at_bank"}),
     ("payment_status", "paid", "پرداخت‌شده", 0, {"color": "#10b981"}),
     ("payment_status", "unpaid", "پرداخت‌نشده", 1, {"color": "#ef4444"}),
     ("payment_status", "installment", "قسطی", 2, {"color": "#f59e0b"}),
@@ -154,6 +160,7 @@ DEFAULT_LOOKUPS = [
     ("beta_qc_grade", "A", "Grade A", 0, {}),
     ("beta_qc_grade", "B", "Grade B", 1, {}),
     ("beta_qc_grade", "C", "Grade C", 2, {}),
+    *FACTORY_AND_SYSTEM_LOOKUPS,
 ]
 
 REFERENCE_ROWS = {
@@ -182,8 +189,14 @@ REFERENCE_ROWS = {
         ("manual", "دستی"), ("sale", "فروش"), ("receivable", "دریافتنی"),
         ("payment", "دریافت / پرداخت"), ("refund", "برگشت"),
         ("adjustment", "تعدیل"), ("other", "سایر"),
+        ("opening", "افتتاحیه / تراز وارداتی"),
     ],
-    JournalEntryStatus: [("draft", "پیش‌نویس"), ("posted", "ثبت قطعی"), ("void", "باطل")],
+    JournalEntryStatus: [
+        ("draft", "پیش‌نویس"),
+        ("pending_review", "در انتظار بررسی"),
+        ("posted", "ثبت قطعی"),
+        ("void", "باطل"),
+    ],
 }
 
 ORG_BUILTIN_ROLES = [
@@ -361,8 +374,53 @@ def seed_lookups():
             if created:
                 opt.is_active = True
                 opt.save(update_fields=["is_active"])
+        _seed_lookup_account_mappings()
+        seed_posting_rules()
     except OperationalError:
         return
+
+
+def _seed_lookup_account_mappings():
+    """نگاشت روش پرداخت و نوع سند به slug حساب — فقط برای ردیف‌های بدون meta."""
+    for code, extra in PAYMENT_METHOD_ACCOUNT_META.items():
+        opt = LookupOption.objects.filter(category="payment_method", code=code).first()
+        if not opt:
+            continue
+        meta = dict(opt.meta or {})
+        if not meta.get("account_slug"):
+            meta.update(extra)
+            opt.meta = meta
+            opt.save(update_fields=["meta"])
+    for sort_order, (code, label) in enumerate(REFERENCE_ROWS.get(JournalEntryType, [])):
+        extra = JOURNAL_ENTRY_TYPE_ACCOUNT_META.get(code)
+        if not extra:
+            continue
+        opt, created = LookupOption.objects.get_or_create(
+            category="journal_entry_type",
+            code=code,
+            defaults={"label": label, "sort_order": sort_order, "meta": extra},
+        )
+        if not created:
+            meta = dict(opt.meta or {})
+            if not meta.get("account_slug"):
+                meta.update(extra)
+                opt.meta = meta
+                opt.save(update_fields=["meta"])
+
+
+def seed_posting_rules():
+    if not _table_exists(LookupOption):
+        return
+    for rule_name, lines in POSTING_RULES.items():
+        LookupOption.objects.get_or_create(
+            category="posting_rule",
+            code=rule_name,
+            defaults={
+                "label": rule_name,
+                "sort_order": 0,
+                "meta": {"lines": lines},
+            },
+        )
 
 
 def seed_reference_tables():
@@ -563,6 +621,12 @@ def seed_config_defaults():
     seed_branches()
     seed_lookups()
     seed_reference_tables()
+    try:
+        from logic.lookups import invalidate_lookup_cache
+
+        invalidate_lookup_cache()
+    except Exception:
+        pass
     seed_menu_sections()
     seed_org_ranks()
     seed_org_roles()

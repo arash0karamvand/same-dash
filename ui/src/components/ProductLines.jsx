@@ -56,6 +56,7 @@ function lineFromProduct(product, quantity = 1) {
     color_name: variant?.color_name || '',
     color_hex: variant?.color_hex || '',
     unit_price: String(catalogPrice(product)),
+    target_min_price: product.target_min_price || '',
     quantity,
   }
 }
@@ -199,6 +200,9 @@ export default function ProductLines({
                   </Field>
                   {line.unit_price && (
                     <p className={fromLegacy('muted small')}>جمع ردیف: {formatMoney(Number(line.unit_price) * Number(line.quantity || 1))}</p>
+                  )}
+                  {line.target_min_price && Number(line.unit_price) < Number(line.target_min_price) && (
+                    <p className={fromLegacy('doc-unbalanced')}>قیمت از حاشیه سود هدف پایین‌تر است.</p>
                   )}
                 </div>
               </div>

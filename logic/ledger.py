@@ -62,3 +62,21 @@ class LedgerConfig:
 
 OFFICE_LEDGER = LedgerConfig("office", "اداری", "S", True)
 FACTORY_LEDGER = LedgerConfig("factory", "کارخانه", "F", False)
+# دفتر قانونی واحد برای تمام ثبت‌های جدید. FACTORY_LEDGER فقط برای تاریخچه و
+# migration سازگار نگه داشته می‌شود.
+LEGAL_LEDGER = OFFICE_LEDGER
+
+
+def ensure_ledgers():
+    """ایجاد دفتر اداری و کارخانه — idempotent."""
+    from backend.models import Ledger
+
+    specs = [
+        (OFFICE_LEDGER.id, OFFICE_LEDGER.label, "office"),
+        (FACTORY_LEDGER.id, FACTORY_LEDGER.label, "factory"),
+    ]
+    for code, name, kind in specs:
+        Ledger.objects.update_or_create(
+            code=code,
+            defaults={"name": name, "kind": kind, "is_active": True},
+        )

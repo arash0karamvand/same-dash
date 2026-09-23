@@ -1,7 +1,7 @@
 // صفحه مدیریت مشتریان: فهرست، جستجو، کیف پول، افزودن/ویرایش و تاریخچه.
 
 import { useEffect, useState } from 'react'
-import { customersApi, levelsApi } from '../api/client'
+import { customersApi, levelsApi, rfmApi } from '../api/client'
 import PersianDateInput from '../components/PersianDateInput'
 import MoneyInput from '../components/MoneyInput'
 import Select from '../components/Select'
@@ -15,16 +15,17 @@ import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmContext'
 import { formatDate, formatMoney } from '../utils/format'
 import { todayIso } from '../utils/jalali'
-import { hasAnyPermission } from '../utils/permissions'
+import { hasAnyPermission, hasPermission } from '../utils/permissions'
 import { fromLegacy } from '../styles/tw.js'
 
-const EMPTY_FORM = { full_name: '', phone: '', email: '', address: '', notes: '', birthday: '' }
+const EMPTY_FORM = { full_name: '', phone: '', email: '', address: '', notes: '', birthday: '', credit_limit: '' }
 const EMPTY_WALLET_FORM = { action: 'deposit', amount: '', description: '' }
 
 export default function Customers({ portal }) {
   const { user } = useAuth()
   const confirm = useConfirm()
   const canEdit = hasAnyPermission(user, ['create_customer', 'edit_customer', 'delete_customer'])
+  const canSendSms = hasPermission(user, 'send_sms')
 
   const [customers, setCustomers] = useState([])
   const [search, setSearch] = useState('')
@@ -50,6 +51,12 @@ export default function Customers({ portal }) {
   const [walletForm, setWalletForm] = useState(EMPTY_WALLET_FORM)
   const [walletSaving, setWalletSaving] = useState(false)
   const [topBuyers, setTopBuyers] = useState(null)
+  const [profileFor, setProfileFor] = useState(null)
+  const [profileHistory, setProfileHistory] = useState(null)
+  const [profileWallet, setProfileWallet] = useState(null)
+  const [profileInfo, setProfileInfo] = useState('')
+  const [profileError, setProfileError] = useState('')
+  const [profileSmsSending, setProfileSmsSending] = useState(false)
 
   useRegisterPageGuide(
     portal !== 'office' ? 'customers' : null,
@@ -100,6 +107,7 @@ export default function Customers({ portal }) {
       address: customer.address || '',
       notes: customer.notes,
       birthday: customer.birthday?.slice(0, 10) || '',
+      credit_limit: customer.credit_limit != null ? String(customer.credit_limit) : '',
     })
     setModalOpen(true)
   }
@@ -176,6 +184,71 @@ export default function Customers({ portal }) {
     }
   }
 
+  const openProfile = async (customer) => {
+    setProfileFor(customer)
+    setProfileHistory(null)
+    setProfileWallet(null)
+    setProfileInfo('')
+    setProfileError('')
+    setWalletForm(EMPTY_WALLET_FORM)
+    try {
+      const [history, wallet] = await Promise.all([
+        customersApi.history(customer.id),
+        customersApi.wallet(customer.id),
+      ])
+      setProfileHistory(history)
+      setProfileWallet(wallet)
+    } catch (e) {
+      setProfileError(e.message)
+    }
+  }
+
+  const submitProfileWallet = async (e) => {
+    e.preventDefault()
+    if (!profileFor) return
+    setWalletSaving(true)
+    setProfileInfo('')
+    setProfileError('')
+    try {
+      const data = await customersApi.walletAdjust(profileFor.id, {
+        action: walletForm.action,
+        amount: Number(walletForm.amount),
+        description: walletForm.description,
+      })
+      setProfileWallet(data)
+      setWalletForm(EMPTY_WALLET_FORM)
+      setProfileInfo('تراکنش با موفقیت ثبت شد.')
+      setProfileFor((prev) => (prev ? { ...prev, wallet_balance: data.balance } : prev))
+      load()
+    } catch (err) {
+      setProfileError(err.message)
+    } finally {
+      setWalletSaving(false)
+    }
+  }
+
+  const sendProfileSms = async () => {
+    if (!profileFor || !canSendSms) return
+    const actionLabel = profileFor.segment_action_title || profileFor.level?.name || 'بخش'
+    if (!await confirm({
+      title: 'ارسال پیامک',
+      message: `پیامک اکشن «${actionLabel}» برای ${profileFor.full_name} ارسال شود؟`,
+      confirmText: 'ارسال',
+    })) return
+    setProfileSmsSending(true)
+    setProfileInfo('')
+    setProfileError('')
+    try {
+      const result = await rfmApi.sendSms(profileFor.id, { force: true })
+      if (result.skipped) setProfileInfo('این مشتری در دورهٔ انتظار پیامک است.')
+      else setProfileInfo(`پیامک برای ${profileFor.full_name} ثبت شد.`)
+    } catch (err) {
+      setProfileError(err.message)
+    } finally {
+      setProfileSmsSending(false)
+    }
+  }
+
   const renderActions = (c) => (
     <div className={fromLegacy("row-actions")}>
       <button type="button" className={fromLegacy("link")} onClick={() => openWallet(c)}>
@@ -229,7 +302,101 @@ export default function Customers({ portal }) {
       )}
 
       {portal === 'office' && (
-        <OfficeSectionCard section={OFFICE_CUSTOMERS_FILTER} />
+        <>
+          <OfficeSectionCard section={OFFICE_CUSTOMERS_FILTER} />
+          <Card
+            title="پیگیری مشتریان"
+            actions={canEdit ? <Button onClick={openCreate}>+ مشتری جدید</Button> : null}
+          >
+            <FilterBar className={fromLegacy("page-filters--toolbar")}>
+              <Field label="جستجو">
+                <input
+                  className={fromLegacy("search-input")}
+                  placeholder="نام، موبایل یا کد باشگاه…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && load()}
+                />
+              </Field>
+              <div className={fromLegacy("page-filters-actions")}>
+                <Button variant="ghost" type="button" onClick={() => load()}>اعمال</Button>
+              </div>
+            </FilterBar>
+            {error && <div className={fromLegacy("alert-error")}>{error}</div>}
+            {loading ? (
+              <div className={fromLegacy("loading")}>در حال بارگذاری…</div>
+            ) : customers.length === 0 ? (
+              <EmptyState text="مشتری‌ای یافت نشد." />
+            ) : (
+              <>
+                <div className={fromLegacy("table-wrap customers-table-desktop")}>
+                  <table className={fromLegacy("table")}>
+                    <thead>
+                      <tr>
+                        <th>نام</th>
+                        <th>موبایل</th>
+                        <th>بخش</th>
+                        <th>کار بعدی</th>
+                        <th>کیف پول</th>
+                        <th>آخرین خرید</th>
+                        <th>عملیات</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {customers.map((c) => (
+                        <tr key={c.id}>
+                          <td>{c.full_name}</td>
+                          <td className={fromLegacy("ltr")}>{c.phone}</td>
+                          <td>{c.level ? <Badge color={c.level.color}>{c.level.name}</Badge> : '—'}</td>
+                          <td>{c.segment_action_title || '—'}</td>
+                          <td>{formatMoney(c.wallet_balance || 0)}</td>
+                          <td>{c.last_purchase_at ? formatDate(c.last_purchase_at) : '—'}</td>
+                          <td>
+                            <button type="button" className={fromLegacy("link")} onClick={() => openProfile(c)}>
+                              پروفایل
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className={fromLegacy("customers-cards-mobile")}>
+                  {customers.map((c) => (
+                    <div key={c.id} className={fromLegacy("customer-card")}>
+                      <div className={fromLegacy("customer-card-head")}>
+                        <div>
+                          <strong>{c.full_name}</strong>
+                          <span className={fromLegacy("ltr muted")}> — {c.phone}</span>
+                        </div>
+                        {c.level ? <Badge color={c.level.color}>{c.level.name}</Badge> : null}
+                      </div>
+                      <p className={fromLegacy("muted small")}>{c.segment_action_title || 'کار بعدی تعریف نشده'}</p>
+                      <div className={fromLegacy("customer-card-stats")}>
+                        <div>
+                          <span className={fromLegacy("muted")}>کیف پول</span>
+                          <strong>{formatMoney(c.wallet_balance || 0)}</strong>
+                        </div>
+                        <div>
+                          <span className={fromLegacy("muted")}>آخرین خرید</span>
+                          <span>{c.last_purchase_at ? formatDate(c.last_purchase_at) : '—'}</span>
+                        </div>
+                      </div>
+                      <button type="button" className={fromLegacy("link")} onClick={() => openProfile(c)}>
+                        پروفایل
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <LoadMoreButton
+                  hasMore={customers.length < total}
+                  loading={loadingMore}
+                  onClick={() => load({ append: true, offset: offset + PAGE_SIZE })}
+                />
+              </>
+            )}
+          </Card>
+        </>
       )}
 
       {portal !== 'office' && (
@@ -364,6 +531,98 @@ export default function Customers({ portal }) {
       </Card>
       )}
 
+      <Modal
+        title={profileFor ? `پروفایل: ${profileFor.full_name}` : ''}
+        open={!!profileFor}
+        onClose={() => setProfileFor(null)}
+        wide
+      >
+        {!profileFor ? null : (
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-wrap items-center gap-2">
+              {profileFor.level ? <Badge color={profileFor.level.color}>{profileFor.level.name}</Badge> : <span className={fromLegacy("muted")}>بدون بخش</span>}
+              <span>{profileFor.segment_action_title || 'کار بعدی تعریف نشده'}</span>
+              <span className={fromLegacy("ltr muted")}>{profileFor.phone}</span>
+            </div>
+            {profileError && <div className={fromLegacy("alert-error")}>{profileError}</div>}
+            {profileInfo && <div className={fromLegacy("alert-info")}>{profileInfo}</div>}
+            {canSendSms && (
+              <div>
+                <Button type="button" onClick={sendProfileSms} disabled={profileSmsSending || !profileFor.level}>
+                  {profileSmsSending ? 'در حال ارسال…' : 'ارسال پیامک بخش'}
+                </Button>
+              </div>
+            )}
+
+            <div>
+              <h4>کیف پول</h4>
+              {!profileWallet ? (
+                <div className={fromLegacy("loading")}>در حال بارگذاری…</div>
+              ) : (
+                <div className={fromLegacy("wallet-panel")}>
+                  <div className={fromLegacy("wallet-balance-banner")}>
+                    <span className={fromLegacy("muted")}>موجودی فعلی</span>
+                    <strong>{formatMoney(profileWallet.balance)}</strong>
+                  </div>
+                  <form onSubmit={submitProfileWallet} className={fromLegacy("form wallet-form")}>
+                    <Field label="نوع تراکنش">
+                      <Select
+                        value={walletForm.action}
+                        onChange={(v) => setWalletForm({ ...walletForm, action: v })}
+                        options={[
+                          { value: 'deposit', label: 'واریز (افزایش)' },
+                          { value: 'withdraw', label: 'برداشت (کاهش)' },
+                        ]}
+                      />
+                    </Field>
+                    <Field label="مبلغ (ریال)">
+                      <MoneyInput
+                        min="1"
+                        value={walletForm.amount}
+                        onChange={(e) => setWalletForm({ ...walletForm, amount: e.target.value })}
+                        required
+                      />
+                    </Field>
+                    <Field label="شرح (اختیاری)">
+                      <input
+                        value={walletForm.description}
+                        onChange={(e) => setWalletForm({ ...walletForm, description: e.target.value })}
+                      />
+                    </Field>
+                    <Button type="submit" disabled={walletSaving}>
+                      {walletSaving ? 'در حال ثبت…' : 'ثبت تراکنش'}
+                    </Button>
+                  </form>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <h4>تاریخچه خرید</h4>
+              {!profileHistory ? (
+                <div className={fromLegacy("loading")}>در حال بارگذاری…</div>
+              ) : profileHistory.sales.length === 0 ? (
+                <EmptyState text="فروشی ثبت نشده." />
+              ) : (
+                <div className={fromLegacy("purchase-history-list")}>
+                  {profileHistory.sales.map((s) => (
+                    <article key={s.id} className={fromLegacy("purchase-history-sale")}>
+                      <div className={fromLegacy("purchase-history-sale-head")}>
+                        <div>
+                          <strong>فاکتور {s.invoice_number || s.id}</strong>
+                          <span className={fromLegacy("muted small")}> — {formatDate(s.sold_at)}</span>
+                        </div>
+                        <span>{formatMoney(s.final_amount)}</span>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </Modal>
+
       <Modal title={editing ? 'ویرایش مشتری' : 'مشتری جدید'} open={modalOpen} onClose={() => setModalOpen(false)}>
         <form onSubmit={save} className={fromLegacy("form")}>
           <Field label="نام کامل">
@@ -374,6 +633,9 @@ export default function Customers({ portal }) {
           </Field>
           <Field label="آدرس">
             <textarea value={form.address} onChange={update('address')} rows={2} placeholder="آدرس منزل یا محل تحویل" />
+          </Field>
+          <Field label="سقف اعتبار چک">
+            <input className={fromLegacy("ltr")} type="number" min="0" value={form.credit_limit || ''} onChange={update('credit_limit')} placeholder="خالی = بدون سقف" />
           </Field>
           <Field label="ایمیل">
             <input className={fromLegacy("ltr")} value={form.email} onChange={update('email')} />

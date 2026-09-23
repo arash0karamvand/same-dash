@@ -92,6 +92,7 @@ def branch_list(request):
             is_active=bool(data.get("is_active", True)),
             work_start=data.get("work_start"),
             work_end=data.get("work_end"),
+            is_profit_center=data.get("is_profit_center", True),
         )
     except ValueError as exc:
         return fail(str(exc), status=400)

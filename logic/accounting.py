@@ -77,11 +77,28 @@ def resolve_entry_accounts(account, *, general="", subsidiary="", detailed=""):
     )
 
 
+def _attach_origins(
+    journal, *, sale=None, factory_order=None, inventory_transaction=None, production_order=None
+):
+    """سرفصل را با کلید خارجی واقعی به UUID ماژول مبدأ وصل می‌کند."""
+    from backend.models import AccountingOrigin
+
+    if sale is not None:
+        journal.attach_origin(sale, module=AccountingOrigin.MODULE_SALES)
+    if factory_order is not None:
+        journal.attach_origin(factory_order, module=AccountingOrigin.MODULE_FACTORY)
+    if production_order is not None:
+        journal.attach_origin(production_order, module=AccountingOrigin.MODULE_FACTORY)
+    if inventory_transaction is not None:
+        journal.attach_origin(inventory_transaction, module=AccountingOrigin.MODULE_WAREHOUSE)
+
+
 @transaction.atomic
 def create_journal(*, lines, entry_type="manual", description="", entry_date=None,
                    is_approved=True, ledger=OFFICE_LEDGER, document_code="",
                    document_number=None, user=None, sale=None, factory_order=None,
-                   transfer_source=None):
+                   transfer_source=None, branch=None, inventory_transaction=None,
+                   production_order=None):
     if len(lines) < 2:
         raise ValueError("سند حسابداری باید حداقل دو ردیف داشته باشد.")
     total_debit = sum(Decimal(line.get("debit") or 0) for line in lines)
@@ -107,6 +124,7 @@ def create_journal(*, lines, entry_type="manual", description="", entry_date=Non
             status=JournalEntry.STATUS_DRAFT,
             created_by=user,
             transfer_source=transfer_source,
+            branch=branch if branch is not None else getattr(sale, "branch", None),
         )
     except IntegrityError as exc:
         raise ValueError("این کد یا شماره سند قبلاً ثبت شده است.") from exc
@@ -122,6 +140,7 @@ def create_journal(*, lines, entry_type="manual", description="", entry_date=Non
             credit=Decimal(line.get("credit") or 0),
             description=(line.get("description") or description or "").strip(),
             line_number=index,
+            cost_center=line.get("cost_center"),
         )
     source = sale or factory_order
     if source:
@@ -130,6 +149,13 @@ def create_journal(*, lines, entry_type="manual", description="", entry_date=Non
             order=source,
             relation_type="sale" if sale else "factory_order",
         )
+    _attach_origins(
+        journal,
+        sale=sale,
+        factory_order=factory_order,
+        inventory_transaction=inventory_transaction,
+        production_order=production_order,
+    )
     if is_approved:
         journal.post()
     return journal
@@ -230,12 +256,27 @@ def approve_sale_accounting_entries(sale, *, ledger=OFFICE_LEDGER):
             journal.post()
 
 
-def delete_entries_for_sale(sale, *, ledger=OFFICE_LEDGER):
+def delete_entries_for_sale(sale, *, ledger=OFFICE_LEDGER, user=None):
     qs = JournalEntry.objects.filter(
         order_links__order=sale, ledger__code=ledger.id
     ).exclude(status_ref_id=JournalEntry.STATUS_VOID).distinct()
     count = sum(journal.lines.count() for journal in qs)
-    qs.update(status_ref_id=JournalEntry.STATUS_VOID, posted_at=None)
+    from logic.document_issuance import DocumentIssuanceService
+
+    service = DocumentIssuanceService()
+    for journal in qs:
+        if journal.status == JournalEntry.STATUS_POSTED:
+            service.issue_correction(
+                journal,
+                reason=f"لغو فروش {sale.invoice_number or sale.pk}",
+                user=user,
+            )
+        else:
+            service.retire_draft(
+                journal,
+                reason=f"لغو فروش {sale.invoice_number or sale.pk}",
+                user=user,
+            )
     return count
 
 
@@ -261,8 +302,10 @@ def delete_accounting_entry(entry, user=None, *, ledger=OFFICE_LEDGER):
             from logic.sales import reverse_payment
 
             reverse_payment(sale, payment_amount, user=user)
-    journal.status = JournalEntry.STATUS_VOID
-    journal.posted_at = None
-    journal.save(update_fields=["status", "posted_at"])
+    if journal.status == JournalEntry.STATUS_POSTED:
+        raise ValueError("سند قطعی قابل حذف نیست؛ سند اصلاحی صادر کنید.")
+    from logic.document_issuance import DocumentIssuanceService
+
+    DocumentIssuanceService().retire_draft(journal, user=user, reason="حذف سند پیش‌نویس")
     return {"deleted": True, "entry_id": entry_id, "sale_deleted": False,
             "sale_id": sale.id if sale else None}

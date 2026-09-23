@@ -8,7 +8,7 @@ import { formatJalali, todayIso } from '../utils/jalali'
 import WorkflowOrdersPage from './WorkflowOrdersPage'
 import { fromLegacy } from '../styles/tw.js'
 
-export default function FactoryBuilt() {
+export default function FactoryBuilt({ portal }) {
   const [builtDate, setBuiltDate] = useState('')
 
   const extraParams = {
@@ -22,6 +22,8 @@ export default function FactoryBuilt() {
 
   return (
     <WorkflowOrdersPage
+      portal={portal}
+      cyclePage="factory-built"
       title="ساخته‌شده‌ها"
       subtitle={subtitle}
       emptyTitle="سفارش ساخته‌شده‌ای یافت نشد"

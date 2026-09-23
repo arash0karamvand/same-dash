@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.db import models
-from django.db.models import Sum
+from django.db.models import Q, Sum
 
 from backend.soft_delete import SoftDeleteModel
 from .base import MONEY_KWARGS, ReferenceCodeModel
@@ -51,6 +51,7 @@ class Customer(SoftDeleteModel):
     joined_at = models.DateTimeField(auto_now_add=True)
     is_active = models.BooleanField(default=True)
     notes = models.TextField(blank=True)
+    credit_limit = models.DecimalField(null=True, blank=True, **MONEY_KWARGS)
     birthday = models.DateField(null=True, blank=True)
     last_purchase_at = models.DateTimeField(null=True, blank=True)
     level = models.ForeignKey(
@@ -61,6 +62,12 @@ class Customer(SoftDeleteModel):
     class Meta:
         ordering = ["-joined_at"]
         indexes = [models.Index(fields=["is_active", "joined_at"], name="ix_customer_active_join")]
+        constraints = [
+            models.CheckConstraint(
+                condition=models.Q(credit_limit__isnull=True) | models.Q(credit_limit__gte=0),
+                name="ck_customer_credit_limit",
+            ),
+        ]
 
     @property
     def wallet_balance(self):

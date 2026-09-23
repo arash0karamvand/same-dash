@@ -1,14 +1,18 @@
-"""Seed full 33-account Iranian chart of accounts into office and factory ledgers."""
+"""Create structural ledgers only; chart accounts come from uploaded Excel."""
 
 from django.db import migrations
 
 
-def seed_full_chart(apps, schema_editor):
-    from logic.accounting_accounts import seed_accounts
-    from logic.ledger import FACTORY_LEDGER, OFFICE_LEDGER
-
-    seed_accounts(ledger=OFFICE_LEDGER)
-    seed_accounts(ledger=FACTORY_LEDGER)
+def create_ledgers(apps, schema_editor):
+    Ledger = apps.get_model("backend", "Ledger")
+    for code, name, kind in (
+        ("office", "اداری", "office"),
+        ("factory", "کارخانه", "factory"),
+    ):
+        Ledger.objects.update_or_create(
+            code=code,
+            defaults={"name": name, "kind": kind, "is_active": True},
+        )
 
 
 class Migration(migrations.Migration):
@@ -18,5 +22,5 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RunPython(seed_full_chart, migrations.RunPython.noop),
+        migrations.RunPython(create_ledgers, migrations.RunPython.noop),
     ]

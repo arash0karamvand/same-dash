@@ -159,17 +159,20 @@ export const tw = {
   topbar:
     'flex shrink-0 items-center justify-between gap-4 py-5 pl-[var(--content-pad-start)] pr-[var(--content-pad-end)] transition-[padding] duration-200 max-compact:flex-wrap max-compact:gap-2.5 max-compact:px-4 max-compact:py-2.5 max-compact:pb-2 max-md:px-3.5 max-md:py-2.5 max-md:pt-[max(10px,env(safe-area-inset-top))] max-md:pb-1.5',
   topbarScrolled: 'pt-3 pb-2',
-  topbarStart: 'flex min-w-0 items-start gap-3.5',
-  topbarTitles: 'flex min-w-0 flex-col gap-1',
+  topbarMobile: 'gap-2 max-md:items-center',
+  topbarStart: 'flex min-w-0 flex-1 items-start gap-3 max-md:items-center max-md:gap-2.5',
+  topbarTitles: 'flex min-w-0 flex-col gap-0.5 max-md:gap-0',
   topbarPortal: 'flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide max-bp380:hidden',
   userBox: 'flex shrink-0 items-center gap-2.5',
+  userBoxMobile: 'gap-1.5 max-bp380:gap-1',
   userInfo: 'flex flex-col items-end gap-px max-md:hidden',
   userName: 'max-w-40 overflow-hidden text-ellipsis whitespace-nowrap font-display text-sm font-semibold max-[1024px]:max-w-[110px]',
   userRole: 'text-xs text-muted max-compact:hidden',
   menuToggle:
-    'hidden h-11 w-11 shrink-0 cursor-pointer flex-col justify-center gap-1.5 rounded-capsule border border-jelly-rim bg-layer-2 p-2.5 shadow-[inset_0_1px_0_var(--jelly-gloss-top)] max-compact:flex max-md:!hidden',
-  menuToggleOpen: 'bg-layer-3 border-jelly-rim-strong',
-  menuToggleBar: 'block h-0.5 rounded-[1px] bg-text',
+    'menu-toggle hidden h-11 w-11 shrink-0 cursor-pointer flex-col justify-center gap-1.5 rounded-capsule border border-jelly-rim bg-layer-2 p-2.5 shadow-[inset_0_1px_0_var(--jelly-gloss-top)] max-compact:flex',
+  menuToggleOpen:
+    'bg-layer-3 border-jelly-rim-strong [&>span:nth-child(1)]:translate-y-[7px] [&>span:nth-child(1)]:rotate-45 [&>span:nth-child(2)]:opacity-0 [&>span:nth-child(3)]:-translate-y-[7px] [&>span:nth-child(3)]:-rotate-45',
+  menuToggleBar: 'block h-0.5 w-full rounded-[1px] bg-text transition-[transform,opacity] duration-200',
   brandLogoAuth: 'mx-auto mb-[18px] flex items-center justify-center text-accent',
   content:
     'min-w-0 w-full flex-1 pt-3 pr-[var(--content-pad-end)] pb-14 pl-[var(--content-pad-start)] max-w-[min(100%,calc(var(--content-max)+var(--content-pad-start)+var(--content-pad-end)))] wide:max-w-none max-compact:max-w-none max-compact:px-4 max-compact:pb-8 max-md:px-3.5 max-md:pt-2 max-md:pb-[calc(92px+env(safe-area-inset-bottom,0px))]',
@@ -267,6 +270,7 @@ export const tw = {
 
 const BTN_VARIANTS = {
   primary: tw.btnPrimary,
+  secondary: tw.btnGhost,
   ghost: tw.btnGhost,
   danger: tw.btnDanger,
   success: tw.btnSuccess,

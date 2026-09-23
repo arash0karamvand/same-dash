@@ -10,6 +10,7 @@ import InstallmentLines, { EMPTY_INSTALLMENT } from '../components/InstallmentLi
 import MoneyInput from '../components/MoneyInput'
 import PersianDateInput from '../components/PersianDateInput'
 import ProductLines from '../components/ProductLines'
+import OfficeCycleNav from '../components/OfficeCycleNav'
 import OfficeSectionCard from '../components/OfficeSectionCard'
 import { OFFICE_APPROVE_FILTER, recordFiltersToQueryString } from '../config/recordFilterSections'
 import SaleDiscountFields, { saleBalanceDue } from '../components/SaleDiscountFields'
@@ -20,37 +21,11 @@ import { formatDate, formatMoney } from '../utils/format'
 import WorkflowOrdersPage from './WorkflowOrdersPage'
 import { fromLegacy } from '../styles/tw.js'
 
-const ORDER_KINDS = [
-  { value: 'normal', label: 'فروش و پرداخت آنی' },
-  { value: 'pre_invoice', label: 'پیش‌فاکتور' },
-  { value: 'deposit', label: 'بیعانیه' },
-]
-
-const PAYMENT_STATUSES = [
-  { value: 'paid', label: 'پرداخت‌شده' },
-  { value: 'unpaid', label: 'پرداخت‌نشده' },
-  { value: 'installment', label: 'قسطی' },
-]
-
-const ROUTE_OPTIONS = [
-  { value: 'factory', label: 'کارخانه' },
-  { value: 'warehouse', label: 'انبار' },
-  { value: 'customer_pickup', label: 'تحویل به مشتری' },
-  { value: 'merchant', label: 'بازرگان' },
-]
-
 const OFFICE_QUEUE_FILTER_DEFAULTS = OFFICE_APPROVE_FILTER.initialFilters
 
 function buildOfficeListQuery(filters) {
   return recordFiltersToQueryString(filters, { limit: OFFICE_APPROVE_FILTER.resultLimit })
 }
-
-const OFFICE_RECEIVE_KINDS = [
-  { value: 'branch_floor', label: 'کف شعبه' },
-  { value: 'warehouse', label: 'انبار' },
-  { value: 'merchant', label: 'بازرگان' },
-  { value: 'repair', label: 'تعمیر' },
-]
 
 const EMPTY_FACTORY_WORK = {
   receive_kind: 'branch_floor',
@@ -116,6 +91,10 @@ export default function Office() {
   const { choices, branches } = useConfig()
   const canCreateFactoryWork = hasPermission(user, 'approve_sale_accounting')
   const paymentMethods = choices('payment_method')
+  const orderKinds = choices('order_kind')
+  const paymentStatuses = choices('payment_status')
+  const receiveKinds = choices('receive_kind')
+  const fulfillmentRoutes = choices('fulfillment_route')
   const [editOrder, setEditOrder] = useState(null)
   const [rejectOrder, setRejectOrder] = useState(null)
   const [rollbackOrder, setRollbackOrder] = useState(null)
@@ -154,7 +133,7 @@ export default function Office() {
   const showInstallments = form.payment_status === 'installment' || form.payment_method === 'check'
   const balanceDue = saleBalanceDue(form)
   const enabledRoutes = cycleMe.enabled_routes?.length ? cycleMe.enabled_routes : ['factory']
-  const routeOptions = ROUTE_OPTIONS.filter((opt) => enabledRoutes.includes(opt.value))
+  const routeOptions = fulfillmentRoutes.filter((opt) => enabledRoutes.includes(opt.value))
 
   useEffect(() => {
     cycleApi.me().then((data) => {
@@ -434,6 +413,7 @@ export default function Office() {
 
   return (
     <>
+      <OfficeCycleNav current="office" />
       <OfficeSectionCard
         section={OFFICE_APPROVE_FILTER}
         onFiltersChange={(filters) => setListFilterQuery(buildOfficeListQuery(filters))}
@@ -531,7 +511,7 @@ export default function Office() {
               <Select
                 value={form.order_kind}
                 onChange={(v) => setForm({ ...form, order_kind: v })}
-                options={ORDER_KINDS}
+                options={orderKinds}
               />
             </Field>
 
@@ -566,7 +546,7 @@ export default function Office() {
               <Select
                 value={form.payment_status}
                 onChange={setPaymentStatus}
-                options={PAYMENT_STATUSES}
+                options={paymentStatuses}
               />
             </Field>
 
@@ -809,7 +789,7 @@ export default function Office() {
             <Select
               value={factoryWork.receive_kind}
               onChange={(v) => setFactoryWork({ ...factoryWork, receive_kind: v })}
-              options={OFFICE_RECEIVE_KINDS}
+              options={receiveKinds}
             />
           </Field>
           <Field label="مشتری (اختیاری)">

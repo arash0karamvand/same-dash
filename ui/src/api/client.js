@@ -285,11 +285,20 @@ export const betaClearanceApi = {
 }
 
 export const workshopRecipesApi = {
-  list: (opts = {}) => get(`/api/workshop-recipes/${listQuery(opts, { kind: opts.kind, include_inactive: opts.include_inactive })}`),
+  list: (opts = {}) => get(`/api/workshop-recipes/${listQuery(opts, { kind: opts.kind, include_inactive: opts.include_inactive, company: opts.company, category: opts.category, country: opts.country, brand_id: opts.brand_id, color_id: opts.color_id, type_id: opts.type_id })}`),
   get: (id) => get(`/api/workshop-recipes/${id}/`),
   create: (data) => post('/api/workshop-recipes/', data),
   update: (id, data) => put(`/api/workshop-recipes/${id}/`, data),
   remove: (id) => del(`/api/workshop-recipes/${id}/`),
+  paintCategories: () => get('/api/workshop-recipes/paint-categories/'),
+  createPaintCategory: (data) => post('/api/workshop-recipes/paint-categories/', data),
+  fabricCategories: () => get('/api/workshop-recipes/fabric-categories/'),
+  createFabricCategory: (data) => post('/api/workshop-recipes/fabric-categories/', data),
+  fabricCompanies: () => get('/api/workshop-recipes/fabric-companies/'),
+  createFabricCompany: (data) => post('/api/workshop-recipes/fabric-companies/', data),
+  fabricCatalog: () => get('/api/workshop-recipes/fabric-catalog/'),
+  createFabricCatalogNode: (data) => post('/api/workshop-recipes/fabric-catalog/', data),
+  removeFabricCatalogNode: (id) => del(`/api/workshop-recipes/fabric-catalog/${id}/`),
 }
 
 export const betaFabricApi = {
@@ -367,6 +376,23 @@ export const materialsApi = {
     const q = p.toString()
     return get(`/api/materials/${q ? `?${q}` : ''}`)
   },
+  reports: (opts = {}) => {
+    const p = new URLSearchParams()
+    if (opts.report) p.set('report', opts.report)
+    if (opts.search) p.set('search', opts.search)
+    if (opts.usage_kind) p.set('usage_kind', opts.usage_kind)
+    if (opts.date_from) p.set('date_from', opts.date_from)
+    if (opts.date_to) p.set('date_to', opts.date_to)
+    if (opts.material_id) p.set('material_id', opts.material_id)
+    if (opts.idle_days) p.set('idle_days', opts.idle_days)
+    const q = p.toString()
+    return get(`/api/materials/reports/${q ? `?${q}` : ''}`)
+  },
+  stocktakes: () => get('/api/materials/stocktakes/'),
+  createStocktake: (data) => post('/api/materials/stocktakes/', data),
+  stocktake: (id) => get(`/api/materials/stocktakes/${id}/`),
+  saveStocktake: (id, data) => put(`/api/materials/stocktakes/${id}/`, data),
+  closeStocktake: (id) => post(`/api/materials/stocktakes/${id}/close/`, {}),
   get: (id) => get(`/api/materials/${id}/`),
   create: (data) => post('/api/materials/', data),
   update: (id, data) => put(`/api/materials/${id}/`, data),
@@ -491,6 +517,8 @@ export const salesApi = {
   recordPayment: (id, data) => post(`/api/sales/${id}/record-payment/`, data),
   confirm: (id) => post(`/api/sales/${id}/confirm/`),
   cancel: (id) => post(`/api/sales/${id}/cancel/`),
+  journals: (id) => get(`/api/sales/${id}/journals/`),
+  finalize: (id) => post(`/api/sales/${id}/finalize/`),
   approveBranch: (id) => post(`/api/sales/${id}/approve-branch/`),
   approveAccounting: (id) => post(`/api/sales/${id}/approve-accounting/`),
   factoryReceive: (id) => post(`/api/sales/${id}/factory-receive/`),
@@ -658,6 +686,7 @@ function accountingParams(opts = {}) {
   if (opts.accountId) p.set('account_id', opts.accountId)
   if (opts.accountClass) p.set('account_class', opts.accountClass)
   if (opts.approved != null && opts.approved !== '') p.set('approved', opts.approved)
+  if (opts.status) p.set('status', opts.status)
   if (opts.dateFrom) p.set('date_from', opts.dateFrom)
   if (opts.dateTo) p.set('date_to', opts.dateTo)
   if (opts.search) p.set('search', opts.search)
@@ -671,6 +700,7 @@ function accountingParams(opts = {}) {
   if (opts.limit) p.set('limit', opts.limit)
   if (opts.documentCode) p.set('document_code', opts.documentCode)
   if (opts.documentNumber != null && opts.documentNumber !== '') p.set('document_number', opts.documentNumber)
+  if (opts.sourceModule) p.set('source_module', opts.sourceModule)
   if (opts.subsidiaryId) p.set('subsidiary_id', opts.subsidiaryId)
   if (opts.detailedId) p.set('detailed_id', opts.detailedId)
   return p.toString()
@@ -751,6 +781,7 @@ function createAccountingApi(basePath) {
     updateDocument: (code, data) => put(`${basePath}/documents/${encodeURIComponent(code)}/`, data),
     deleteDocument: (code) => del(`${basePath}/documents/${encodeURIComponent(code)}/`),
     approveDocument: (code, isApproved) => put(`${basePath}/documents/${encodeURIComponent(code)}/approve/`, { is_approved: isApproved }),
+    submitDocument: (code) => put(`${basePath}/documents/${encodeURIComponent(code)}/submit/`, {}),
     subsidiaries: (opts = {}) => {
       const p = new URLSearchParams()
       if (opts.accountId) p.set('account_id', opts.accountId)
@@ -777,11 +808,18 @@ function createAccountingApi(basePath) {
       if (opts.dryRun) form.append('dry_run', 'true')
       if (opts.approve) form.append('approve', 'true')
       if (opts.force) form.append('force', 'true')
-      const response = await fetch(`${basePath}/import-excel/`, {
-        method: 'POST',
-        credentials: 'include',
-        body: form,
-      })
+      let response
+      try {
+        response = await fetch(`${basePath}/import-excel/`, {
+          method: 'POST',
+          credentials: 'include',
+          body: form,
+        })
+      } catch {
+        const error = new Error('ارتباط با سرور برقرار نشد.')
+        error.status = 0
+        throw error
+      }
       const text = await response.text()
       let payload = null
       if (text) {
@@ -791,13 +829,15 @@ function createAccountingApi(basePath) {
           payload = { ok: false, error: text }
         }
       }
-      if (!response.ok) {
-        const error = new Error((payload && payload.error) || 'خطا در آپلود فایل')
+      if (!response.ok || (payload && payload.ok === false)) {
+        const message = describeApiError(payload, response)
+        const error = new Error(message)
         error.status = response.status
-        error.data = payload && payload.data ? payload.data : payload
+        error.data = payload
         throw error
       }
-      return payload && Object.prototype.hasOwnProperty.call(payload, 'data') ? payload.data : payload
+      const report = payload && Object.prototype.hasOwnProperty.call(payload, 'data') ? payload.data : payload
+      return { ok: true, ...report }
     },
     transferPreview: (opts = {}) => {
       const p = new URLSearchParams()
@@ -807,11 +847,111 @@ function createAccountingApi(basePath) {
       return get(`${basePath}/transfer-preview/${q ? `?${q}` : ''}`)
     },
     transferDocument: (data) => post(`${basePath}/transfer/`, data),
+    books: (opts = {}) => {
+      const p = new URLSearchParams()
+      if (opts.dateFrom) p.set('date_from', opts.dateFrom)
+      if (opts.dateTo) p.set('date_to', opts.dateTo)
+      const q = p.toString()
+      return get(`${basePath}/books/${q ? `?${q}` : ''}`)
+    },
+    booksBeancountPath: (opts = {}) => {
+      const p = new URLSearchParams()
+      if (opts.dateFrom) p.set('date_from', opts.dateFrom)
+      if (opts.dateTo) p.set('date_to', opts.dateTo)
+      const q = p.toString()
+      return `${basePath}/books/beancount/${q ? `?${q}` : ''}`
+    },
+    closeBooks: (data) => post(`${basePath}/books/close/`, data),
+    pushBooks: (data) => post(`${basePath}/books/push/`, data),
+    tradeDocuments: () => get(`${basePath}/trade/`),
+    tradePurchase: (data) => post(`${basePath}/trade/purchase/`, data),
+    tradePurchaseReturn: (data) => post(`${basePath}/trade/purchase-return/`, data),
+    tradeSale: (data) => post(`${basePath}/trade/sale/`, data),
+    tradeSaleReturn: (data) => post(`${basePath}/trade/sale-return/`, data),
+    tradeDiscount: (data) => post(`${basePath}/trade/discount/`, data),
+    tradeKardex: (materialId) => get(`${basePath}/trade/kardex/?material_id=${materialId}`),
   }
 }
 
 export const accountingApi = createAccountingApi('/api/accounting')
-export const factoryAccountingApi = createAccountingApi('/api/factory-accounting')
+
+Object.assign(accountingApi, {
+  profitCenters: () => get('/api/accounting/profit-centers/'),
+  deposits: () => get('/api/accounting/deposits/'),
+  createDeposit: (data) => post('/api/accounting/deposits/', data),
+  allocateDeposit: (id, customerId) => post(`/api/accounting/deposits/${id}/allocate/`, { customer_id: customerId }),
+  checkPlan: () => get('/api/accounting/check-plan/'),
+  payCheck: (id, depositAccountId) => post(`/api/accounting/check-plan/${id}/pay/`, { deposit_account_id: depositAccountId }),
+  costCenters: () => get('/api/accounting/cost-centers/'),
+  saveCostCenter: (data) => post('/api/accounting/cost-centers/', data),
+  updateCostCenter: (id, data) => put(`/api/accounting/cost-centers/${id}/`, data),
+  overheadPeriods: () => get('/api/accounting/overhead/'),
+  saveOverhead: (data) => post('/api/accounting/overhead/', data),
+  allocateOverhead: (id) => post(`/api/accounting/overhead/${id}/allocate/`, {}),
+  wipCloses: () => get('/api/accounting/wip-closes/'),
+  saveWipClose: (data) => post('/api/accounting/wip-closes/', data),
+  spoilage: (opts = {}) => {
+    const p = new URLSearchParams()
+    if (opts.dateFrom) p.set('date_from', opts.dateFrom)
+    if (opts.dateTo) p.set('date_to', opts.dateTo)
+    const q = p.toString()
+    return get(`/api/accounting/spoilage/${q ? `?${q}` : ''}`)
+  },
+  postSpoilage: (opts = {}) => {
+    const p = new URLSearchParams()
+    if (opts.dateFrom) p.set('date_from', opts.dateFrom)
+    if (opts.dateTo) p.set('date_to', opts.dateTo)
+    const q = p.toString()
+    return post(`/api/accounting/spoilage/${q ? `?${q}` : ''}`, {})
+  },
+  reconciliation: (opts = {}) => {
+    const p = new URLSearchParams()
+    if (opts.dateFrom) p.set('date_from', opts.dateFrom)
+    if (opts.dateTo) p.set('date_to', opts.dateTo)
+    return get(`/api/accounting/controls/reconciliation/?${p}`)
+  },
+  scanDiscrepancies: (opts = {}) => {
+    const p = new URLSearchParams()
+    if (opts.dateFrom) p.set('date_from', opts.dateFrom)
+    if (opts.dateTo) p.set('date_to', opts.dateTo)
+    if (opts.domains?.length) p.set('domains', opts.domains.join(','))
+    if (opts.severity?.length) p.set('severity', opts.severity.join(','))
+    if (opts.kinds?.length) p.set('kinds', opts.kinds.join(','))
+    if (opts.search) p.set('search', opts.search)
+    if (opts.status) p.set('status', opts.status)
+    if (opts.entryType) p.set('entry_type', opts.entryType)
+    if (opts.sourceModule) p.set('source_module', opts.sourceModule)
+    if (opts.minDifference != null && opts.minDifference !== '') p.set('min_difference', opts.minDifference)
+    if (opts.blockingOnly) p.set('blocking_only', 'true')
+    if (opts.offset != null) p.set('offset', opts.offset)
+    if (opts.limit) p.set('limit', opts.limit)
+    return get(`/api/accounting/controls/scan/?${p}`)
+  },
+  discrepancyScanExportPath: (opts = {}) => {
+    const p = new URLSearchParams()
+    if (opts.dateFrom) p.set('date_from', opts.dateFrom)
+    if (opts.dateTo) p.set('date_to', opts.dateTo)
+    if (opts.domains?.length) p.set('domains', opts.domains.join(','))
+    if (opts.severity?.length) p.set('severity', opts.severity.join(','))
+    if (opts.kinds?.length) p.set('kinds', opts.kinds.join(','))
+    if (opts.search) p.set('search', opts.search)
+    if (opts.status) p.set('status', opts.status)
+    if (opts.entryType) p.set('entry_type', opts.entryType)
+    if (opts.sourceModule) p.set('source_module', opts.sourceModule)
+    if (opts.minDifference != null && opts.minDifference !== '') p.set('min_difference', opts.minDifference)
+    if (opts.blockingOnly) p.set('blocking_only', 'true')
+    return `/api/accounting/controls/scan/export/?${p}`
+  },
+  closePeriod: (data) => post('/api/accounting/periods/close/', data),
+  reopenPeriod: (id, data) => post(`/api/accounting/periods/${id}/reopen/`, data),
+  managementReport: (kind, opts = {}) => {
+    const p = new URLSearchParams({ kind })
+    if (opts.dateFrom) p.set('date_from', opts.dateFrom)
+    if (opts.dateTo) p.set('date_to', opts.dateTo)
+    if (opts.asOf) p.set('as_of', opts.asOf)
+    return get(`/api/accounting/reports/management/?${p}`)
+  },
+})
 
 export const smsApi = {
   list: (opts = {}) => {

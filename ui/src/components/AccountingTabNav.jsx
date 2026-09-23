@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import Icon from './icons/Icon'
-import { useMediaQuery } from '../hooks/useMediaQuery'
+import { useIsCompactTablet } from '../hooks/breakpoints'
 import { fromLegacy } from '../styles/tw.js'
 
 const TAB_GROUPS = [
@@ -17,12 +17,12 @@ const TAB_GROUPS = [
   },
   {
     label: 'ابزار',
-    ids: ['upload-excel', 'transfer-to-office'],
+    ids: ['upload-excel'],
   },
 ]
 
 export default function AccountingTabNav({ tabs, activeTab, onChange }) {
-  const compact = useMediaQuery('(max-width: 900px)')
+  const compact = useIsCompactTablet()
   const [sheetOpen, setSheetOpen] = useState(false)
 
   const tabMap = useMemo(() => {
@@ -87,11 +87,11 @@ export default function AccountingTabNav({ tabs, activeTab, onChange }) {
     <>
       <button
         type="button"
-        className={fromLegacy("mobile-menu-backdrop")}
+        className={fromLegacy("mobile-menu-backdrop fixed inset-0 z-[340] cursor-pointer border-0 bg-black/55 backdrop-blur-[4px]")}
         aria-label="بستن"
         onClick={() => setSheetOpen(false)}
       />
-      <div className={fromLegacy("accounting-tab-sheet liquid-glass liquid-glass--strong liquid-glass--panel")} role="dialog" aria-modal="true" aria-label="انتخاب بخش حسابداری">
+      <div className={fromLegacy("accounting-tab-sheet fixed inset-x-0 bottom-0 z-[350] flex max-h-[85dvh] flex-col rounded-t-2xl shadow-[0_-8px_32px_rgba(0,0,0,0.18)] liquid-glass liquid-glass--strong liquid-glass--panel")} role="dialog" aria-modal="true" aria-label="انتخاب بخش حسابداری">
         <div className={fromLegacy("mobile-menu-handle")} aria-hidden />
         <div className={fromLegacy("accounting-tab-sheet-head")}>
           <h3>بخش حسابداری</h3>

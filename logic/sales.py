@@ -135,7 +135,7 @@ def _record_deposit_payment(sale, amount, description="", recorded_by=None):
         amount=amount,
         description=description or f"بیعانه فاکتور {sale.invoice_number or sale.pk}",
         sale=sale,
-        is_approved=True,
+        is_approved=False,
         document_code=doc_code,
         document_number=doc_num,
         entry_date=sale.sold_at,
@@ -240,7 +240,7 @@ def _create_sale_accounting(sale, outstanding, *, is_approved=True, force=False)
     create_journal(
         lines=lines, entry_type="sale", description=desc,
         sale=sale, is_approved=is_approved, document_code=doc_code,
-        document_number=doc_num, entry_date=sale.sold_at,
+        document_number=doc_num, entry_date=sale.sold_at, branch=sale.branch,
     )
 
 
@@ -320,6 +320,8 @@ def record_sale(
     accounting_mode=None,
     stock_source=None,
     seat_count=None,
+    credit_override_reason="",
+    vat_rate=0,
 ):
     if recorded_by is not None:
         from logic.sale_attendance import assert_user_can_record_sale
@@ -355,7 +357,12 @@ def record_sale(
     if amount <= 0:
         raise ValueError("مبلغ فروش باید مثبت باشد.")
 
-    final_amount = amount - discount
+    net_amount = amount - discount
+    vat_rate = Decimal(str(vat_rate or 0))
+    if vat_rate < 0:
+        raise ValueError("نرخ مالیات نمی‌تواند منفی باشد.")
+    vat_amount = (net_amount * vat_rate / Decimal(100)).quantize(Decimal("1"))
+    final_amount = net_amount + vat_amount
     order_kind = normalize_order_kind(order_kind)
 
     if order_kind == Sale.ORDER_KIND_DEPOSIT and not delivery_date:
@@ -399,6 +406,15 @@ def record_sale(
         defer_accounting = True
 
     outstanding = final_amount - resolved_paid
+    from logic.credit import assert_customer_credit
+
+    applied_override = assert_customer_credit(
+        customer,
+        outstanding,
+        payment_method,
+        credit_override_reason,
+        recorded_by,
+    )
 
     sale_kwargs = {
         "customer": customer,
@@ -407,6 +423,8 @@ def record_sale(
         "discount_value": Decimal(discount_value or 0),
         "discount": discount,
         "final_amount": final_amount,
+        "vat_rate": vat_rate,
+        "vat_amount": vat_amount,
         "paid_amount": resolved_paid,
         "payment_method": payment_method,
         "payment_status": resolved_status,
@@ -424,6 +442,7 @@ def record_sale(
         "factory_released_at": None,
         "receive_kind": Sale.RECEIVE_KIND_CUSTOMER,
         "seat_count": None if seat_count in (None, "") else int(seat_count),
+        "credit_override_reason": applied_override,
     }
     from logic.stock_locations import LOCATION_WAREHOUSE, default_warehouse, parse_location
 
@@ -541,7 +560,7 @@ def delete_sale(sale, user=None):
         if not inst.is_deleted:
             inst.soft_delete()
 
-    deleted_entries = delete_entries_for_sale(sale)
+    deleted_entries = delete_entries_for_sale(sale, user=user)
 
     if wallet_used > 0:
         _refund_wallet_discount(customer, wallet_used, sale, user=user)
@@ -570,7 +589,14 @@ def delete_sale(sale, user=None):
 
 
 @transaction.atomic
-def record_payment(sale, amount, description="", recorded_by=None, account=None):
+def record_payment(
+    sale,
+    amount,
+    description="",
+    recorded_by=None,
+    account=None,
+    idempotency_key="",
+):
     """ثبت پرداخت/قسط جدید روی فروش — کاهش مطالبات و به‌روزرسانی سطح مشتری."""
     if is_order_cancelled(sale):
         raise ValueError("این سفارش لغو شده و قابل پرداخت نیست.")
@@ -585,6 +611,7 @@ def record_payment(sale, amount, description="", recorded_by=None, account=None)
     if amount > due:
         raise ValueError("مبلغ پرداخت بیش از مانده فاکتور است.")
 
+    before_paid = Decimal(sale.paid_amount or 0)
     sale.paid_amount += amount
     sale.payment_status = "paid" if sale.paid_amount >= sale.final_amount else "installment"
     sale.save(update_fields=["paid_amount", "payment_status"])
@@ -608,8 +635,28 @@ def record_payment(sale, amount, description="", recorded_by=None, account=None)
         accounts={"payment_account": account or payment_account_for_sale(sale)},
         description=desc,
     )
-    create_journal(
-        lines=lines, entry_type="payment", description=description, sale=sale, is_approved=True,
+    from logic.accounting_events import issue_event_draft, register_event
+
+    event_key = (idempotency_key or f"{sale.uuid}:{before_paid}:{sale.paid_amount}").strip()
+    event, _created = register_event(
+        source_module="treasury",
+        source_type="SalePayment",
+        source=event_key,
+        event_type="payment_received",
+        payload={
+            "sale_uuid": str(sale.uuid),
+            "amount": str(amount),
+            "resulting_paid": str(sale.paid_amount),
+        },
+    )
+    issue_event_draft(
+        event,
+        lines=lines,
+        entry_type="payment",
+        description=desc,
+        user=recorded_by,
+        sale=sale,
+        branch=sale.branch,
     )
     _sync_receivable_entry(sale)
     _apply_purchase_to_customer(
@@ -635,6 +682,26 @@ def reverse_payment(sale, amount, user=None):
         raise ValueError("مبلغ بازگشت باید مثبت باشد.")
     if sale.paid_amount < amount:
         raise ValueError("مبلغ بازگشت بیش از پرداخت‌شده فاکتور است.")
+
+    from backend.models import FinancialEvent
+    from logic.accounting_events import reverse_event
+
+    event = (
+        FinancialEvent.objects.filter(
+            source_module="treasury",
+            source_type="SalePayment",
+            event_type="payment_received",
+            payload__sale_uuid=str(sale.uuid),
+            payload__amount=str(amount),
+        )
+        .exclude(status=FinancialEvent.STATUS_VOID)
+        .select_related("journal")
+        .order_by("-id")
+        .first()
+    )
+    if event is None:
+        raise ValueError("سند مبدأ پرداخت برای برگشت یافت نشد.")
+    reverse_event(event, reason=f"برگشت پرداخت فاکتور {sale.invoice_number or sale.pk}", user=user)
 
     sale.paid_amount -= amount
     sale.payment_status = _payment_status_from_paid(sale.final_amount, sale.paid_amount)
@@ -853,7 +920,15 @@ def update_sale(
     if sale.amount <= 0:
         raise ValueError("مبلغ فروش باید مثبت باشد.")
 
-    sale.final_amount = sale.amount - sale.discount
+    if "vat_rate" in meta_fields:
+        sale.vat_rate = Decimal(str(meta_fields.pop("vat_rate") or 0))
+        if sale.vat_rate < 0:
+            raise ValueError("نرخ مالیات نمی‌تواند منفی باشد.")
+    net_amount = sale.amount - sale.discount
+    sale.vat_amount = (net_amount * Decimal(sale.vat_rate or 0) / Decimal(100)).quantize(
+        Decimal("1")
+    )
+    sale.final_amount = net_amount + sale.vat_amount
 
     if paid_amount is not None:
         sale.paid_amount = Decimal(str(paid_amount))
@@ -901,9 +976,10 @@ def update_sale(
                 entry_type="adjustment",
                 description=f"برگشت اصلاحی فروش {sale.invoice_number or sale.pk}",
                 sale=sale,
-                is_approved=True,
+                is_approved=False,
+                branch=sale.branch,
             )
-            _create_sale_accounting(sale, balance_due(sale), is_approved=True, force=True)
+            _create_sale_accounting(sale, balance_due(sale), is_approved=False, force=True)
         else:
             sale_journal.delete()
             _create_sale_accounting(sale, balance_due(sale), is_approved=False, force=True)

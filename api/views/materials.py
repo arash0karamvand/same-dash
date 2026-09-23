@@ -8,8 +8,10 @@ from auth.permissions import (
     VIEW_MATERIALS,
     has_permission,
 )
-from backend.models import Material
+from backend.models import Material, MaterialStocktake
 from logic.audit import log_action
+from logic.material_reports import warehouse_report
+from logic.material_stocktake import close_stocktake, create_stocktake, list_stocktakes, stocktake_sheet, update_stocktake
 from logic.materials import (
     approve_material,
     create_material,
@@ -34,6 +36,16 @@ def _can_create(user):
 
 def _can_approve(user):
     return has_permission(user, APPROVE_MATERIALS) or has_permission(user, MANAGE_MATERIALS)
+
+
+@api_view("GET")
+def material_reports(request):
+    if not _can_view(request.user):
+        return fail("Permission denied", status=403)
+    try:
+        return success(warehouse_report(request.GET))
+    except ValueError as exc:
+        return fail(str(exc), status=400)
 
 
 @api_view("GET", "POST")
@@ -187,3 +199,54 @@ def material_reject(request, pk):
         entity_id=material.id,
     )
     return success(material_to_dict(material))
+
+
+def _stocktake_or_404(pk):
+    return MaterialStocktake.objects.filter(pk=pk).first()
+
+
+@api_view("GET", "POST")
+def material_stocktake_list(request):
+    if request.method == "GET":
+        if not _can_view(request.user):
+            return fail("Permission denied", status=403)
+        return success(list_stocktakes())
+    if not _can_create(request.user):
+        return fail("Permission denied", status=403)
+    try:
+        sheet = create_stocktake(parse_json(request), request.user)
+    except ValueError as exc:
+        return fail(str(exc), status=400)
+    log_action(request.user, "create", f"برگه انبارگردانی متریال #{sheet['id']}")
+    return success(sheet, status=201)
+
+
+@api_view("GET", "PUT")
+def material_stocktake_detail(request, pk):
+    sheet = _stocktake_or_404(pk)
+    if sheet is None:
+        return fail("برگه انبارگردانی یافت نشد.", status=404)
+    if request.method == "GET":
+        if not _can_view(request.user):
+            return fail("Permission denied", status=403)
+        return success(stocktake_sheet(sheet))
+    if not _can_create(request.user):
+        return fail("Permission denied", status=403)
+    try:
+        data = update_stocktake(sheet, parse_json(request))
+    except ValueError as exc:
+        return fail(str(exc), status=400)
+    log_action(request.user, "update", f"ویرایش برگه انبارگردانی #{sheet.id}")
+    return success(data)
+
+
+@api_view("POST")
+def material_stocktake_close(request, pk):
+    if not _can_create(request.user):
+        return fail("Permission denied", status=403)
+    sheet = _stocktake_or_404(pk)
+    if sheet is None:
+        return fail("برگه انبارگردانی یافت نشد.", status=404)
+    data = close_stocktake(sheet, user=request.user)
+    log_action(request.user, "update", f"بستن برگه انبارگردانی #{sheet.id}")
+    return success(data)

@@ -1,0 +1,204 @@
+/* استایل‌های چاپ برای گزارش‌های انبار */
+
+@media print {
+  /* مخفی کردن المان‌های غیرضروری */
+  nav,
+  .branch-tabs,
+  .workflow-filter-tabs,
+  .filter-bar,
+  button,
+  .form-actions,
+  .page-header,
+  .sidebar,
+  .stat-card button {
+    display: none !important;
+  }
+
+  /* تنظیمات صفحه */
+  @page {
+    size: A4;
+    margin: 15mm;
+  }
+
+  body {
+    font-size: 10pt;
+    line-height: 1.4;
+    color: #000;
+    background: white;
+  }
+
+  /* حذف سایه و رنگ‌های پس‌زمینه */
+  .card,
+  .stat-card {
+    box-shadow: none !important;
+    border: 1px solid #ddd;
+    page-break-inside: avoid;
+    margin-bottom: 10mm;
+    background: white !important;
+  }
+
+  /* جداول */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9pt;
+    page-break-inside: auto;
+  }
+
+  thead {
+    display: table-header-group;
+  }
+
+  tr {
+    page-break-inside: avoid;
+    page-break-after: auto;
+  }
+
+  th,
+  td {
+    border: 1px solid #ddd;
+    padding: 4px 6px;
+    text-align: right;
+  }
+
+  th {
+    background-color: #f3f4f6 !important;
+    font-weight: bold;
+  }
+
+  /* نمودارها - کوچک‌تر در چاپ */
+  canvas {
+    max-height: 200px !important;
+    page-break-inside: avoid;
+  }
+
+  /* عنوان‌ها */
+  h1, h2, h3 {
+    page-break-after: avoid;
+    margin-top: 0;
+  }
+
+  h1 {
+    font-size: 18pt;
+    border-bottom: 2px solid #000;
+    padding-bottom: 5px;
+    margin-bottom: 10px;
+  }
+
+  h2 {
+    font-size: 14pt;
+    margin-top: 15px;
+  }
+
+  /* StatCard در چاپ */
+  .stat-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 5mm;
+    margin-bottom: 10mm;
+    page-break-inside: avoid;
+  }
+
+  .stat-card {
+    padding: 8px;
+  }
+
+  .stat-card-label {
+    font-size: 9pt;
+    color: #666;
+  }
+
+  .stat-card-value {
+    font-size: 14pt;
+    font-weight: bold;
+    color: #000;
+  }
+
+  /* Badge */
+  .badge {
+    border: 1px solid currentColor;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 8pt;
+  }
+
+  /* متن کوچک */
+  .muted,
+  .small {
+    font-size: 8pt;
+    color: #666;
+  }
+
+  /* لینک‌ها */
+  a {
+    color: #000;
+    text-decoration: none;
+  }
+
+  /* حذف انیمیشن‌ها */
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  /* صفحه خالی نشود */
+  .page {
+    page-break-before: avoid;
+  }
+
+  /* نمایش URL در footer */
+  .print-footer {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 8pt;
+    color: #999;
+    border-top: 1px solid #ddd;
+    padding: 5px;
+  }
+
+  /* هدر چاپ با اطلاعات سیستم */
+  .print-header {
+    display: block !important;
+    text-align: center;
+    margin-bottom: 10mm;
+    border-bottom: 2px solid #000;
+    padding-bottom: 5px;
+  }
+
+  .print-header h1 {
+    margin: 0;
+    border: none;
+  }
+
+  .print-header .print-date {
+    font-size: 9pt;
+    color: #666;
+    margin-top: 3px;
+  }
+
+  /* جدول موبایل را مخفی کن */
+  .materials-cards-mobile,
+  .m-card {
+    display: none !important;
+  }
+
+  /* فقط جدول دسکتاپ نمایش داده شود */
+  .materials-table-desktop,
+  .table-wrap {
+    display: block !important;
+  }
+}
+
+/* هدر چاپ - فقط در چاپ نمایش داده می‌شود */
+.print-header {
+  display: none;
+}
+
+@media print {
+  .print-header {
+    display: block;
+  }
+}
