@@ -23,8 +23,9 @@ SHEET_ALIASES = {
 }
 
 DETAIL_LEDGER_SAMPLE_NOTE = (
-    "شیت «ریز نمونه» فقط گردش یک حساب را نشان می‌دهد و سند جداگانه‌ای از آن ساخته نمی‌شود؛ "
-    "مانده و گردش همه حساب‌ها از تراز تفصیلی ثبت می‌شود."
+    "شیت «ریز نمونه» گردش واقعی یک حساب است، نه سند تازه برای کل دفتر. "
+    "همان مبالغ داخل رکورد گردش تراز تفصیلی آمده‌اند؛ ثبت دوباره، مانده آن حساب را دوبرابر می‌کند. "
+    "مانده از روی رکوردهای افتتاحیه و گردش محاسبه می‌شود و ستون مانده فایل وارد دفتر نمی‌شود."
 )
 
 TOTAL_LABELS = {"جمع", "جمع کل", "جمع كل"}
@@ -363,6 +364,18 @@ def validate_excel_workbook(workbook):
                 f"با بستانکار ({int(totals.opening_credit)}) برابر نیست."
             )
 
+    for label, rows in (
+        ("تراز کل", parsed.general_rows),
+        ("تراز معین", parsed.subsidiary_rows),
+        ("تراز تفصیلی", parsed.detailed_rows),
+    ):
+        mismatched = _balance_mismatch_count(rows)
+        if mismatched:
+            parsed.warnings.append(
+                f"{label}: ستون مانده {mismatched} حساب با جمع رکوردهای افتتاحیه و گردش یکی نیست. "
+                "همان رکوردها ثبت می‌شوند و مانده از روی آن‌ها محاسبه می‌شود."
+            )
+
     if parsed.detail_ledger_rows:
         detail_debit = sum(row.debit for row in parsed.detail_ledger_rows)
         detail_credit = sum(row.credit for row in parsed.detail_ledger_rows)
@@ -634,8 +647,19 @@ def _sum_amounts(rows):
     )
 
 
+def _balance_mismatch_count(rows):
+    """ستون مانده نتیجه است؛ با جمع رکوردهای افتتاحیه و گردش مقایسه می‌شود."""
+    mismatched = 0
+    for row in rows:
+        calculated = (row.opening_debit - row.opening_credit) + (row.turnover_debit - row.turnover_credit)
+        reported = row.balance_debit - row.balance_credit
+        if calculated != reported:
+            mismatched += 1
+    return mismatched
+
+
 def _balance_lines(leaves):
-    """ردیف‌های یک‌طرفه برای سند افتتاحیه و سند گردش دوره."""
+    """رکورد افتتاحیه و رکورد گردش. ستون مانده فایل اینجا استفاده نمی‌شود."""
     opening, turnover = [], []
     for row in leaves:
         net_opening = row.opening_debit - row.opening_credit
@@ -891,7 +915,9 @@ def _build_report(parsed, *, dry_run, committed, stats=None, balanced=True):
         },
         "import_mode": {
             "chart_from_trial_balance": True,
-            "balances_from_trial_balance": True,
+            "records_from_opening_and_turnover": True,
+            "balances_calculated_from_records": True,
+            "reported_balance_column_ignored": True,
             "detail_sample_account": parsed.detail_ledger_account_code or "",
         },
         "warnings": parsed.warnings,

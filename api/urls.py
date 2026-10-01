@@ -9,6 +9,7 @@ from api.views import payables as accounting_payables
 from api.views import accounting_controls
 from api.views import (
     accounting,
+    activities,
     attendance,
     audit_logs,
     auth,
@@ -17,6 +18,7 @@ from api.views import (
     customers,
     cycle,
     dashboard,
+    dashboard_widgets,
     accounting_modules,
     factory_accounting,
     factory_orders,
@@ -84,6 +86,10 @@ urlpatterns = [
 
     # --- Dashboard ---
     path("dashboard/summary/", dashboard.dashboard_summary, name="dashboard-summary"),
+    path("dashboard/widgets/", dashboard_widgets.widgets_list, name="dashboard-widgets-list"),
+    path("dashboard/widgets/<int:widget_id>/", dashboard_widgets.widget_detail, name="dashboard-widget-detail"),
+    path("dashboard/widgets/reorder/", dashboard_widgets.widgets_reorder, name="dashboard-widgets-reorder"),
+    path("dashboard/metrics/<str:metric_name>/", dashboard_widgets.metric_data, name="dashboard-metric"),
 
     # --- Customers ---
     path("customers/", customers.customer_list, name="customer-list"),
@@ -120,6 +126,7 @@ urlpatterns = [
     path("sales/reports/yearly/", sales.sales_yearly_report, name="sales-yearly-report"),
     path("sales/employee-ranking/", sales.employee_ranking, name="sales-employee-ranking"),
     path("sales/", sales.sale_list, name="sale-list"),
+    path("sales/finish-options/", sales.sale_finish_options, name="sale-finish-options"),
     path("sales/<int:pk>/approve-branch/", sales.sale_approve_branch, name="sale-approve-branch"),
     path("sales/<int:pk>/approve-accounting/", sales.sale_approve_accounting, name="sale-approve-accounting"),
     path("sales/<int:pk>/journals/", sales.sale_journals, name="sale-journals"),
@@ -499,4 +506,10 @@ urlpatterns = [
     path("sms/reminders/preview/", reminder_sms.reminder_preview, name="sms-reminder-preview"),
     path("sms/reminders/<int:pk>/", reminder_sms.reminder_detail, name="sms-reminder-detail"),
     path("sms/reminders/<int:pk>/send/", reminder_sms.reminder_send, name="sms-reminder-send"),
+    # --- Activities & Tasks (/api/activities/, /api/tasks/) ---
+    path("activities/", activities.activities_list, name="activities-list"),
+    path("tasks/", activities.tasks_list, name="tasks-list"),
+    path("tasks/<int:task_id>/", activities.task_detail, name="task-detail"),
+    path("tasks/<int:task_id>/complete/", activities.task_complete, name="task-complete"),
+    path("tasks/<int:task_id>/pin/", activities.task_pin, name="task-pin"),
 ]

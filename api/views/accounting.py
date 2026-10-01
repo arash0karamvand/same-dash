@@ -18,7 +18,9 @@ from logic.accounting_accounts import (
     account_to_dict,
     accounts_grouped,
     create_detailed_account,
+    create_general_account,
     create_subsidiary_account,
+    delete_chart_account,
     detailed_to_dict,
     list_detailed_accounts,
     list_document_models,
@@ -71,6 +73,22 @@ def _entry_dict(entry, *, user, ledger):
     return accounting_to_dict(entry, user=user, ledger=ledger)
 
 
+def _delete_account_response(request, account, ledger, perms):
+    if not has_permission(request.user, perms["delete"]):
+        return fail("Permission denied", status=403)
+    try:
+        delete_chart_account(account)
+    except ValueError as exc:
+        return fail(str(exc), status=400)
+    log_action(
+        request.user,
+        "delete",
+        f"حذف حساب {account.full_code} — {account.name}",
+        entity_type=ledger.entity_type,
+    )
+    return success({"deleted": True, "id": account.id})
+
+
 def make_view(name, *, ledger=OFFICE_LEDGER, perms=None):
     """ساخت view با دفتر و مجوزهای مشخص — برای اداری و کارخانه."""
     perms = perms or DEFAULT_PERMS
@@ -87,9 +105,34 @@ def make_view(name, *, ledger=OFFICE_LEDGER, perms=None):
 
     if name == "account_list":
 
-        @api_view("GET", permission=perms["view"])
+        @api_view("GET", "POST")
         def view(request):
-            return success({"accounts": accounts_grouped(ledger=ledger)})
+            if request.method == "GET":
+                if not has_permission(request.user, perms["view"]):
+                    return fail("Permission denied", status=403)
+                return success({"accounts": accounts_grouped(ledger=ledger)})
+
+            if not has_permission(request.user, perms["create"]):
+                return fail("Permission denied", status=403)
+            data = parse_json(request)
+            try:
+                account = create_general_account(
+                    code=data.get("code"),
+                    name=data.get("name"),
+                    account_class=data.get("account_class"),
+                    normal_balance=data.get("normal_balance") or "debit",
+                    is_active=data.get("is_active", True),
+                    ledger=ledger,
+                )
+            except ValueError as exc:
+                return fail(str(exc), status=400)
+            log_action(
+                request.user,
+                "create",
+                f"حساب کل {account.code} — {account.name}",
+                entity_type=ledger.entity_type,
+            )
+            return success(account_to_dict(account), status=201)
 
         return view
 
@@ -392,7 +435,7 @@ def make_view(name, *, ledger=OFFICE_LEDGER, perms=None):
 
     if name == "account_detail":
 
-        @api_view("GET", "PUT")
+        @api_view("GET", "PUT", "DELETE")
         def view(request, pk):
             from backend.models import Account
             AccountModel = Account
@@ -406,6 +449,9 @@ def make_view(name, *, ledger=OFFICE_LEDGER, perms=None):
                     return fail("Permission denied", status=403)
                 return success(account_to_dict(account))
 
+            if request.method == "DELETE":
+                return _delete_account_response(request, account, ledger, perms)
+
             if not has_permission(request.user, perms["edit"]):
                 return fail("Permission denied", status=403)
 
@@ -413,6 +459,7 @@ def make_view(name, *, ledger=OFFICE_LEDGER, perms=None):
             try:
                 account = update_general_account(
                     account_id=pk,
+                    code=data.get("code"),
                     name=data.get("name"),
                     is_active=data.get("is_active"),
                     ledger=ledger,
@@ -427,7 +474,7 @@ def make_view(name, *, ledger=OFFICE_LEDGER, perms=None):
 
     if name == "subsidiary_account_detail":
 
-        @api_view("GET", "PUT")
+        @api_view("GET", "PUT", "DELETE")
         def view(request, pk):
             from backend.models import Account
             SubsidiaryModel = Account
@@ -443,6 +490,9 @@ def make_view(name, *, ledger=OFFICE_LEDGER, perms=None):
                 if not has_permission(request.user, perms["view"]):
                     return fail("Permission denied", status=403)
                 return success(subsidiary_to_dict(sub))
+
+            if request.method == "DELETE":
+                return _delete_account_response(request, sub, ledger, perms)
 
             if not has_permission(request.user, perms["edit"]):
                 return fail("Permission denied", status=403)
@@ -466,7 +516,7 @@ def make_view(name, *, ledger=OFFICE_LEDGER, perms=None):
 
     if name == "detailed_account_detail":
 
-        @api_view("GET", "PUT")
+        @api_view("GET", "PUT", "DELETE")
         def view(request, pk):
             from backend.models import Account
             DetailedModel = Account
@@ -482,6 +532,9 @@ def make_view(name, *, ledger=OFFICE_LEDGER, perms=None):
                 if not has_permission(request.user, perms["view"]):
                     return fail("Permission denied", status=403)
                 return success(detailed_to_dict(detail))
+
+            if request.method == "DELETE":
+                return _delete_account_response(request, detail, ledger, perms)
 
             if not has_permission(request.user, perms["edit"]):
                 return fail("Permission denied", status=403)

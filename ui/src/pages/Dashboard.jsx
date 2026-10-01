@@ -1,280 +1,106 @@
-// صفحه داشبورد: نمایش ارقام کلیدی، توزیع سطوح و فروش‌های اخیر.
+// صفحه داشبورد با ویجت‌های قابل تنظیم
 
 import { useEffect, useState } from 'react'
-import { dashboardApi, attendanceApi } from '../api/client'
-import { Badge, Card, EmptyState, LinkAction, StatCard } from '../components/ui'
-import AttendanceWidget from '../components/AttendanceWidget'
-import { useAuth } from '../context/AuthContext'
-import { approvalColor } from '../config/statusColors'
-import { formatDate, formatMoney, formatNumber } from '../utils/format'
-import { hasPermission, isSystemAdmin } from '../utils/permissions'
-import { formatJalali, jalaliToIso, PERSIAN_MONTHS, toPersianDigits } from '../utils/jalali'
-import { fromLegacy } from '../styles/tw.js'
-
-function formatJalaliParts(jy, jm, jd) {
-  if (!jy) return '—'
-  return formatJalali(jalaliToIso(jy, jm, jd))
-}
+import { dashboardApi } from '../api/client'
+import WidgetGrid from '../components/dashboard/WidgetGrid'
+import WidgetConfigModal from '../components/dashboard/WidgetConfigModal'
+import { Button } from '../components/ui'
+import { cn, tw } from '../styles/tw'
+import Icon from '../components/icons/Icon'
 
 export default function Dashboard() {
-  const { user } = useAuth()
-  const [stats, setStats] = useState(null)
+  const [widgets, setWidgets] = useState([])
+  const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const showCheckIn = hasPermission(user, 'self_check_in') && !isSystemAdmin(user)
-  const showTodayAttendance = isSystemAdmin(user)
+  const [editMode, setEditMode] = useState(false)
+  const [configModal, setConfigModal] = useState(null)
 
   useEffect(() => {
-    dashboardApi.stats().then(setStats).catch((e) => setError(e.message))
+    loadWidgets()
   }, [])
 
-  const approve = async (id, decision) => {
-    await attendanceApi.approve(id, decision)
-    dashboardApi.stats().then(setStats)
+  const loadWidgets = async () => {
+    try {
+      setLoading(true)
+      const data = await dashboardApi.widgets()
+      setWidgets(data)
+      setError('')
+    } catch (e) {
+      setError(e.message)
+    } finally {
+      setLoading(false)
+    }
   }
 
-  if (error) return <div className={fromLegacy("alert-error")}>{error}</div>
-  if (!stats) return <div className={fromLegacy("loading")}>در حال بارگذاری…</div>
+  const handleSave = async (config) => {
+    try {
+      if (config.id) {
+        await dashboardApi.updateWidget(config.id, config)
+      } else {
+        await dashboardApi.createWidget(config)
+      }
+      loadWidgets()
+    } catch (e) {
+      setError(e.message)
+    }
+  }
 
-  // بیشینه تعداد برای مقیاس‌بندی نمودار میله‌ای ساده
-  const maxCount = Math.max(1, ...stats.level_distribution.map((t) => t.count))
+  const handleDelete = async (id) => {
+    if (!confirm('آیا از حذف این ویجت اطمینان دارید؟')) return
+    
+    try {
+      await dashboardApi.deleteWidget(id)
+      loadWidgets()
+    } catch (e) {
+      setError(e.message)
+    }
+  }
 
   return (
-    <div className={fromLegacy("page")}>
-      {showCheckIn && <AttendanceWidget />}
+    <div className={tw.page}>
+      {/* Header */}
+      <div className={tw.pageHead}>
+        <h2 className={tw.pageTitle}>داشبورد</h2>
+        <div className="flex gap-2">
+          <Button onClick={() => setConfigModal('new')}>
+            <Icon name="plus" size={16} />
+            افزودن ویجت
+          </Button>
+          <Button variant="ghost" onClick={() => setEditMode(!editMode)}>
+            {editMode ? 'اتمام ویرایش' : 'ویرایش'}
+          </Button>
+        </div>
+      </div>
 
-      {showTodayAttendance && (
-        <Card title={`حضور کارمندان امروز (${formatNumber(stats.attendance_today?.count ?? 0)})`}>
-          {!stats.attendance_today?.results?.length ? (
-            <EmptyState text="امروز حضوری ثبت نشده است." />
-          ) : (
-            <>
-              <div className={fromLegacy("table-wrap dashboard-table-desktop")}>
-                <table className={fromLegacy("table")}>
-                  <thead>
-                    <tr>
-                      <th>کارمند</th>
-                      <th>شعبه</th>
-                      <th>وضعیت</th>
-                      <th>ورود</th>
-                      <th>خروج</th>
-                      <th>عملیات</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {stats.attendance_today.results.map((r) => (
-                      <tr key={r.id}>
-                        <td>{r.seller_name}</td>
-                        <td>{r.work_branch_label}</td>
-                        <td>
-                          <Badge color={approvalColor(r.approval_status)}>
-                            {r.approval_status_display}
-                          </Badge>
-                        </td>
-                        <td>{r.check_in_at ? formatDate(r.check_in_at) : '—'}</td>
-                        <td>{r.check_out_at ? formatDate(r.check_out_at) : '—'}</td>
-                        <td className={fromLegacy("row-actions")}>
-                          {r.approval_status === 'pending' ? (
-                            <>
-                              <LinkAction variant="success" onClick={() => approve(r.id, 'approved')}>تایید</LinkAction>
-                              <LinkAction variant="danger" onClick={() => approve(r.id, 'rejected')}>رد</LinkAction>
-                            </>
-                          ) : (
-                            <span className={fromLegacy("muted")}>—</span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div className={fromLegacy("dashboard-cards-mobile")}>
-                {stats.attendance_today.results.map((r) => (
-                  <div key={r.id} className={fromLegacy("m-card")}>
-                    <div className={fromLegacy("m-card-head")}>
-                      <strong>{r.seller_name}</strong>
-                      <Badge color={approvalColor(r.approval_status)}>{r.approval_status_display}</Badge>
-                    </div>
-                    <div className={fromLegacy("muted small")}>{r.work_branch_label}</div>
-                    <div className={fromLegacy("muted small")}>
-                      ورود: {r.check_in_at ? formatDate(r.check_in_at) : '—'}
-                      {' · '}
-                      خروج: {r.check_out_at ? formatDate(r.check_out_at) : '—'}
-                    </div>
-                    {r.approval_status === 'pending' && (
-                      <div className={fromLegacy("m-card-actions")}>
-                        <LinkAction variant="success" onClick={() => approve(r.id, 'approved')}>تایید</LinkAction>
-                        <LinkAction variant="danger" onClick={() => approve(r.id, 'rejected')}>رد</LinkAction>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-        </Card>
+      {/* Error */}
+      {error && <div className={tw.alert}>{error}</div>}
+
+      {/* Widgets */}
+      {loading ? (
+        <div className={tw.loading}>در حال بارگذاری...</div>
+      ) : widgets.length === 0 ? (
+        <div className="text-center py-20 text-muted">
+          <Icon name="layout" size={48} className="mx-auto mb-4 opacity-50" />
+          <p className="mb-4">هنوز ویجتی اضافه نکرده‌اید.</p>
+          <Button onClick={() => setConfigModal('new')}>افزودن اولین ویجت</Button>
+        </div>
+      ) : (
+        <WidgetGrid
+          widgets={widgets}
+          editMode={editMode}
+          onEdit={(w) => setConfigModal(w)}
+          onDelete={handleDelete}
+        />
       )}
 
-      <div className={fromLegacy("stat-grid dashboard-sales-stats")}>
-        <StatCard
-          className={fromLegacy("stat-card--amount")}
-          label="فروش امروز"
-          value={formatMoney(stats.sales_today?.total ?? 0)}
-          hint={
-            stats.sales_today
-              ? `${formatNumber(stats.sales_today.count ?? 0)} فقره — ${formatJalaliParts(
-                  stats.sales_today.jalali_year,
-                  stats.sales_today.jalali_month,
-                  stats.sales_today.jalali_day,
-                )}`
-              : undefined
-          }
-          accent="var(--success)"
+      {/* Config modal */}
+      {configModal && (
+        <WidgetConfigModal
+          widget={configModal === 'new' ? null : configModal}
+          open={!!configModal}
+          onClose={() => setConfigModal(null)}
+          onSave={handleSave}
         />
-        <StatCard
-          className={fromLegacy("stat-card--amount")}
-          label="فروش این هفته"
-          value={formatMoney(stats.sales_this_week?.total ?? 0)}
-          hint={
-            stats.sales_this_week
-              ? `${formatNumber(stats.sales_this_week.count ?? 0)} فقره — ${formatJalaliParts(
-                  stats.sales_this_week.start_jalali_year,
-                  stats.sales_this_week.start_jalali_month,
-                  stats.sales_this_week.start_jalali_day,
-                )} تا ${formatJalaliParts(
-                  stats.sales_this_week.end_jalali_year,
-                  stats.sales_this_week.end_jalali_month,
-                  stats.sales_this_week.end_jalali_day,
-                )}`
-              : undefined
-          }
-          accent="var(--info)"
-        />
-        <StatCard
-          className={fromLegacy("stat-card--amount")}
-          label="فروش این ماه"
-          value={formatMoney(stats.sales_this_month?.total ?? 0)}
-          hint={
-            stats.sales_this_month
-              ? `${formatNumber(stats.sales_this_month.count ?? 0)} فقره${
-                  stats.sales_this_month.jalali_month
-                    ? ` — ${PERSIAN_MONTHS[stats.sales_this_month.jalali_month - 1]} ${toPersianDigits(stats.sales_this_month.jalali_year)}`
-                    : ''
-                }`
-              : undefined
-          }
-          accent="var(--warning)"
-        />
-      </div>
-
-      <div className={fromLegacy("stat-grid dashboard-meta-stats")}>
-        <StatCard label="تعداد مشتریان" value={formatNumber(stats.customers_count)} accent="var(--accent)" />
-        <StatCard className={fromLegacy("stat-card--amount")} label="مجموع فروش" value={formatMoney(stats.total_sales_amount)} accent="var(--warning)" />
-        <StatCard label="پیامک‌های ارسالی" value={formatNumber(stats.sms_sent)} accent="var(--info)" />
-      </div>
-
-      <div className={fromLegacy("grid-2")}>
-        <Card title="توزیع مشتریان در بخش‌های RFM">
-          {stats.level_distribution.length === 0 ? (
-            <EmptyState text="هنوز بخشی تعریف نشده است." />
-          ) : (
-            <div className={fromLegacy("bar-chart")}>
-              {stats.level_distribution.map((level) => (
-                <div key={level.name} className={fromLegacy("bar-row")}>
-                  <span className={fromLegacy("bar-label")}>{level.name}</span>
-                  <div className={fromLegacy("bar-track")}>
-                    <div
-                      className={fromLegacy("bar-fill")}
-                      style={{ width: `${(level.count / maxCount) * 100}%`, background: level.color }}
-                    />
-                  </div>
-                  <span className={fromLegacy("bar-value")}>{formatNumber(level.count)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </Card>
-
-        <Card title="فروش‌های اخیر">
-          {stats.recent_sales.length === 0 ? (
-            <EmptyState text="فروشی ثبت نشده است." />
-          ) : (
-            <>
-              <div className={fromLegacy("table-wrap dashboard-table-desktop")}>
-                <table className={fromLegacy("table")}>
-                  <thead>
-                    <tr>
-                      <th>مشتری</th>
-                      <th>مبلغ</th>
-                      <th>تاریخ</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {stats.recent_sales.map((sale) => (
-                      <tr key={sale.id}>
-                        <td>{sale.customer_name}</td>
-                        <td>{formatMoney(sale.amount)}</td>
-                        <td>{formatDate(sale.created_at)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <div className={fromLegacy("dashboard-cards-mobile")}>
-                {stats.recent_sales.map((sale) => (
-                  <div key={sale.id} className={fromLegacy("m-card")}>
-                    <div className={fromLegacy("m-card-head")}>
-                      <strong>{sale.customer_name}</strong>
-                      <strong>{formatMoney(sale.amount)}</strong>
-                    </div>
-                    <div className={fromLegacy("muted small")}>{formatDate(sale.created_at)}</div>
-                  </div>
-                ))}
-              </div>
-            </>
-          )}
-        </Card>
-      </div>
-
-      {stats.pending_attendance?.length > 0 && (
-        <Card title="حضور در انتظار تایید">
-          <>
-            <div className={fromLegacy("table-wrap dashboard-table-desktop")}>
-              <table className={fromLegacy("table")}>
-                <thead>
-                  <tr><th>فروشنده</th><th>شعبه</th><th>تاریخ</th><th>عملیات</th></tr>
-                </thead>
-                <tbody>
-                  {stats.pending_attendance.map((r) => (
-                    <tr key={r.id}>
-                      <td>{r.seller_name}</td>
-                      <td>{r.work_branch_label}</td>
-                      <td>{formatDate(r.date)}</td>
-                      <td className={fromLegacy("row-actions")}>
-                        <LinkAction variant="success" onClick={() => approve(r.id, 'approved')}>تایید</LinkAction>
-                        <LinkAction variant="danger" onClick={() => approve(r.id, 'rejected')}>رد</LinkAction>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className={fromLegacy("dashboard-cards-mobile")}>
-              {stats.pending_attendance.map((r) => (
-                <div key={r.id} className={fromLegacy("m-card")}>
-                  <div className={fromLegacy("m-card-head")}>
-                    <strong>{r.seller_name}</strong>
-                    <span className={fromLegacy("muted")}>{r.work_branch_label}</span>
-                  </div>
-                  <div className={fromLegacy("muted small")}>{formatDate(r.date)}</div>
-                  <div className={fromLegacy("m-card-actions")}>
-                    <LinkAction variant="success" onClick={() => approve(r.id, 'approved')}>تایید</LinkAction>
-                    <LinkAction variant="danger" onClick={() => approve(r.id, 'rejected')}>رد</LinkAction>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        </Card>
       )}
     </div>
   )

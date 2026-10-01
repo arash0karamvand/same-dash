@@ -15,12 +15,5 @@ export const BETA_QC_GRADE = 'beta_qc_grade'
 export function useBetaOptions() {
   const { choices } = useConfig()
 
-  // fallback فهرستی است که خود API برمی‌گرداند؛ تا قبل از رسیدن تنظیمات، فرم خالی نماند.
-  return useCallback(
-    (category, fallback = []) => {
-      const fromConfig = choices(category)
-      return fromConfig.length ? fromConfig : fallback
-    },
-    [choices],
-  )
+  return useCallback((category) => choices(category), [choices])
 }

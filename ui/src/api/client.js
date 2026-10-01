@@ -433,6 +433,20 @@ export const dashboardApi = {
   stats: () => get('/api/dashboard/summary/'),
 }
 
+export const dashboardApi = {
+  stats: () => get('/api/dashboard/summary/'),
+  widgets: () => get('/api/dashboard/widgets/'),
+  createWidget: (data) => post('/api/dashboard/widgets/', data),
+  updateWidget: (id, data) => put(`/api/dashboard/widgets/${id}/`, data),
+  deleteWidget: (id) => del(`/api/dashboard/widgets/${id}/`),
+  reorderWidgets: (order) => post('/api/dashboard/widgets/reorder/', { order }),
+  metric: (name, filters) => {
+    const p = new URLSearchParams(filters)
+    const q = p.toString()
+    return get(`/api/dashboard/metrics/${name}/${q ? `?${q}` : ''}`)
+  },
+}
+
 export const customersApi = {
   list: (opts = {}) => {
     const p = new URLSearchParams()
@@ -469,6 +483,7 @@ export const customersApi = {
 
 export const salesApi = {
   list: (params = '') => get(`/api/sales/${params ? `?${params}` : ''}`),
+  finishOptions: () => get('/api/sales/finish-options/'),
   get: (id) => get(`/api/sales/${id}/`),
   exportExcel: async (id) => {
     const response = await fetch(`/api/sales/${id}/export-excel/`, {
@@ -788,9 +803,13 @@ function createAccountingApi(basePath) {
       const q = p.toString()
       return get(`${basePath}/subsidiaries/${q ? `?${q}` : ''}`)
     },
+    createGeneral: (data) => post(`${basePath}/accounts/`, data),
     createSubsidiary: (data) => post(`${basePath}/subsidiaries/`, data),
     updateSubsidiary: (id, data) => put(`${basePath}/subsidiaries/${id}/`, data),
     updateGeneralAccount: (id, data) => put(`${basePath}/accounts/${id}/`, data),
+    deleteGeneralAccount: (id) => del(`${basePath}/accounts/${id}/`),
+    deleteSubsidiary: (id) => del(`${basePath}/subsidiaries/${id}/`),
+    deleteDetailed: (id) => del(`${basePath}/details/${id}/`),
     details: (opts = {}) => {
       const p = new URLSearchParams()
       if (opts.subsidiaryId) p.set('subsidiary_id', opts.subsidiaryId)
@@ -990,4 +1009,39 @@ export const smsApi = {
   deleteReminder: (id) => del(`/api/sms/reminders/${id}/`),
   reminderPreview: (auto = false) => get(`/api/sms/reminders/preview/${auto ? '?auto=1' : ''}`),
   sendReminder: (id, force = false) => post(`/api/sms/reminders/${id}/send/`, force ? { force: true } : {}),
+}
+
+export const activitiesApi = {
+  list: (opts = {}) => {
+    const p = new URLSearchParams()
+    if (opts.user) p.set('user', opts.user)
+    if (opts.customer) p.set('customer', opts.customer)
+    if (opts.type) p.set('type', opts.type)
+    if (opts.date_range) p.set('date_range', opts.date_range)
+    if (opts.offset != null) p.set('offset', opts.offset)
+    if (opts.limit) p.set('limit', opts.limit)
+    const q = p.toString()
+    return get(`/api/activities/${q ? `?${q}` : ''}`)
+  },
+  create: (data) => post('/api/activities/', data),
+}
+
+export const tasksApi = {
+  list: (opts = {}) => {
+    const p = new URLSearchParams()
+    if (opts.assigned_to) p.set('assigned_to', opts.assigned_to)
+    if (opts.status) p.set('status', opts.status)
+    if (opts.priority) p.set('priority', opts.priority)
+    if (opts.customer) p.set('customer', opts.customer)
+    if (opts.pinned != null) p.set('pinned', opts.pinned)
+    if (opts.offset != null) p.set('offset', opts.offset)
+    if (opts.limit) p.set('limit', opts.limit)
+    const q = p.toString()
+    return get(`/api/tasks/${q ? `?${q}` : ''}`)
+  },
+  create: (data) => post('/api/tasks/', data),
+  update: (id, data) => put(`/api/tasks/${id}/`, data),
+  delete: (id) => del(`/api/tasks/${id}/`),
+  complete: (id) => post(`/api/tasks/${id}/complete/`, {}),
+  pin: (id, pinned) => post(`/api/tasks/${id}/pin/`, { pinned }),
 }

@@ -7,7 +7,7 @@ import { Badge, Button, Card, Field, FilterBar, Modal, StatCard } from '../compo
 import PortalModuleMatrix from '../components/PortalModuleMatrix'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmContext'
-import { useIsCompactTablet } from '../hooks/breakpoints'
+import { useIsPhone } from '../hooks/breakpoints'
 import {
   collectPortalPermissionCodes,
   toggleExtraOnlyPermissions,
@@ -101,7 +101,7 @@ function UserBoardCard({ user, currentUserId, onEdit, onDeactivate }) {
 export default function Users() {
   const { user: currentUser } = useAuth()
   const confirm = useConfirm()
-  const isMobile = useIsCompactTablet()
+  const isMobile = useIsPhone()
   const [users, setUsers] = useState([])
   const [stats, setStats] = useState({ total: 0, active: 0, pending: 0, departments: {} })
   const [roles, setRoles] = useState([])
@@ -280,10 +280,7 @@ export default function Users() {
     setResetting(true)
     try {
       await authApi.resetBusinessData(resetConfirm)
-      showFlash('success', 'همه داده‌ها به‌صورت دائمی حذف شدند. فقط مدیر سیستم باقی ماند.')
-      setResetOpen(false)
-      setResetConfirm('')
-      loadUsers()
+      window.location.reload()
     } catch (err) {
       showFlash('error', err.message)
     } finally {
@@ -604,14 +601,15 @@ export default function Users() {
       {isSystemAdmin && (
         <Card title="منطقه خطر">
           <div className={fromLegacy('danger-zone')}>
-            <h3>پاک‌سازی کامل داده‌ها</h3>
+            <h3>پاکسازی کل سیستم</h3>
             <p>
-              همه اطلاعات سیستم (مشتریان، فروش‌ها، حسابداری، پیامک‌ها، حضور و غیاب، محصولات،
-              سطوح باشگاه، فروشندگان و کاربران) به‌صورت دائمی و فیزیکی حذف می‌شوند.
+              همه داده‌های موجود (مشتریان، فروش و سفارش‌ها، حسابداری و کدینگ، موجودی،
+              کارگاه‌ها، فرم‌ها، پیامک‌ها، اعلان‌ها، حضور و غیاب، محصولات و کاربران)
+              به‌صورت دائمی و فیزیکی حذف می‌شوند.
               فقط حساب مدیر سیستم باقی می‌ماند. بازیابی ممکن نیست.
             </p>
             <Button type="button" variant="danger" onClick={() => setResetOpen(true)}>
-              پاک‌سازی همه داده‌ها
+              پاکسازی کل سیستم
             </Button>
           </div>
         </Card>
@@ -619,7 +617,7 @@ export default function Users() {
 
       <Modal
         open={resetOpen}
-        title="تأیید پاک‌سازی داده‌ها"
+        title="تأیید پاکسازی کل سیستم"
         onClose={() => { if (!resetting) { setResetOpen(false); setResetConfirm('') } }}
       >
         <form onSubmit={handleResetData}>

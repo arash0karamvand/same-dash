@@ -227,12 +227,13 @@
 
 .acct-ledger-workspace {
   align-items: stretch;
+  align-content: start;
 }
 
 .acct-ledger-workspace.is-fullscreen {
   position: fixed;
   inset: 0;
-  z-index: 500;
+  z-index: 800;
   min-height: 0 !important;
   padding: 12px;
   background: var(--bg);
@@ -261,13 +262,13 @@
 }
 
 .acct-ledger-workspace.is-fullscreen > .acct-glass-panel {
-  height: calc(100dvh - 24px);
+  height: 100%;
   max-height: none !important;
   border-radius: 16px;
 }
 
 .acct-ledger-workspace.is-fullscreen > aside {
-  height: calc(100dvh - 24px) !important;
+  height: 100% !important;
 }
 
 .acct-ledger-account-group + .acct-ledger-account-group {
@@ -555,6 +556,25 @@
 
 .acct-line-card .acct-number { text-align: left; }
 
+.acct-line-card > [data-label="بدهکار"],
+.acct-line-card > [data-label="بستانکار"],
+.acct-line-card > [data-label="مانده"] {
+  text-align: left;
+}
+
+.acct-line-balance {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 0;
+}
+
+.acct-line-balance small {
+  display: block;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+}
+
 .acct-strip {
   display: grid;
   grid-template-columns: 88px minmax(0, 1fr) 120px repeat(3, minmax(110px, 1fr)) 56px;
@@ -685,52 +705,56 @@
 
 /* ── Hierarchy map ── */
 .acct-hmap {
-  perspective: 1600px;
-  transform-style: preserve-3d;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
-.acct-hmap-group { margin-bottom: 18px; }
+.acct-hmap-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--acct-glass-border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--layer-2) 55%, transparent);
+}
 
 .acct-hmap-group-title {
-  margin: 0 0 10px;
-  padding: 8px 12px;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--layer-3) 55%, transparent);
-  border: 1px solid var(--acct-glass-border);
-  font-size: 0.72rem;
+  margin: 0;
+  padding: 0 4px 4px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 0.75rem;
   font-weight: 800;
-  letter-spacing: 0.04em;
+  letter-spacing: 0;
 }
 
 .acct-hmap-node {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 10px;
-  min-height: 44px;
-  padding: 8px 12px;
-  margin-bottom: 8px;
-  border-radius: 16px;
-  background: var(--acct-glass-bg);
-  backdrop-filter: blur(16px) saturate(170%);
-  -webkit-backdrop-filter: blur(16px) saturate(170%);
+  flex-wrap: wrap;
+  gap: 10px 12px;
+  min-height: 52px;
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--layer-1);
   border: 1px solid var(--acct-glass-border);
-  box-shadow:
-    0 10px 24px rgba(0, 0, 0, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.32);
+  box-shadow: none;
   cursor: pointer;
-  transform: translateZ(18px);
-  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 220ms ease;
+  transition: border-color 160ms ease, background 160ms ease;
 }
 
 .acct-hmap-node--l2 {
-  transform: translateZ(8px);
   min-height: 40px;
   border-radius: 14px;
 }
 
 .acct-hmap-node--l3 {
-  transform: translateZ(2px);
   min-height: 36px;
   border-radius: 12px;
   background: color-mix(in srgb, var(--acct-glass-bg) 80%, transparent);
@@ -738,26 +762,232 @@
 
 .acct-hmap-node:hover,
 .acct-hmap-node:focus-visible {
-  transform: translateZ(28px) translateY(-2px);
   outline: none;
+  border-color: color-mix(in srgb, var(--acct-focus-color) 55%, var(--acct-glass-border));
 }
 
 .acct-hmap-node.is-selected {
   border-color: var(--acct-focus-color);
-  box-shadow:
-    0 12px 28px rgba(0, 0, 0, 0.16),
-    0 0 0 2px color-mix(in srgb, var(--acct-focus-color) 40%, transparent);
+  box-shadow: inset 0 0 0 1px var(--acct-focus-color);
+}
+
+.acct-hmap-lead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 240px;
+  min-width: 0;
 }
 
 .acct-hmap-code {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--layer-3) 75%, transparent);
   font-family: var(--font-mono-numbers);
-  font-size: 0.78rem;
-  font-weight: 600;
+  font-size: 0.75rem;
+  font-weight: 700;
   color: var(--text-secondary);
-  min-width: 72px;
 }
 
-.acct-hmap-name { flex: 1; min-width: 0; font-weight: 600; font-size: 0.86rem; }
+.acct-hmap-name {
+  flex: 1;
+  min-width: 0;
+  font-weight: 700;
+  font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acct-hmap-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-inline-start: auto;
+}
+
+.acct-hmap-actions {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.acct-hmap-actions .acct-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.acct-hmap-count {
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--layer-3) 70%, transparent);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.acct-hmap-records-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--acct-glass-border);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.acct-hmap-records-toggle.is-open {
+  color: var(--text);
+  border-color: color-mix(in srgb, var(--acct-focus-color) 55%, var(--acct-glass-border));
+}
+
+.acct-hmap-detail {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px 16px;
+  margin: 0 0 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--layer-2) 88%, transparent);
+  border: 1px solid var(--acct-glass-border);
+}
+
+.acct-hmap-detail div { display: flex; flex-direction: column; gap: 2px; }
+.acct-hmap-detail dt { margin: 0; color: var(--text-secondary); font-size: 0.72rem; }
+.acct-hmap-detail dd { margin: 0; font-weight: 700; }
+
+.acct-hmap-empty {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--layer-2) 70%, transparent);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+.acct-hmap-records {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--acct-glass-border);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--layer-2) 72%, transparent);
+}
+
+.acct-hmap-records-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  margin: 0 0 4px;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.acct-hmap-records-title span {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.acct-hmap-record {
+  display: grid;
+  grid-template-columns: 92px 72px minmax(0, 1fr) minmax(88px, 120px) minmax(88px, 120px) minmax(100px, 130px) auto;
+  gap: 8px 12px;
+  align-items: center;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--layer-1);
+  border: 1px solid var(--acct-glass-border);
+  font-size: 0.78rem;
+}
+
+.acct-hmap-record-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 12px;
+  border-radius: 10px;
+  background: var(--layer-1);
+  border: 1px solid var(--acct-glass-border);
+}
+
+.acct-hmap-record-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.acct-hmap-record-form .acct-hmap-record-note {
+  grid-column: 1 / -1;
+}
+
+.acct-hmap-record-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  align-self: end;
+}
+
+.acct-hmap-record-error {
+  margin: 0;
+  color: #b42318;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.acct-hmap-record-note {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+}
+
+.acct-hmap-record-head {
+  background: transparent;
+  border-color: transparent;
+  padding-bottom: 0;
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.acct-chart-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.acct-chart-search .search-input {
+  width: 100%;
+  max-width: none;
+  min-height: 40px;
+}
+
+.acct-chart-count {
+  flex: none;
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
 
 .acct-hmap-balance {
   font-family: var(--font-mono-numbers);
@@ -766,22 +996,60 @@
   text-align: left;
 }
 
+.acct-hmap-branch.is-open {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.acct-hmap-branch.is-open:not(:last-child)::after {
+  content: '';
+  display: block;
+  height: 2px;
+  margin-top: 8px;
+  border-radius: 2px;
+  background: #64748b;
+}
+
+.acct-hmap-branch.is-open:has(> .acct-hmap-node--l1):not(:last-child)::after {
+  background: #2563eb;
+}
+
+.acct-hmap-branch.is-open:has(> .acct-hmap-node--l2):not(:last-child)::after {
+  background: #059669;
+}
+
+.acct-hmap-branch.is-open:has(> .acct-hmap-node--l3):not(:last-child)::after {
+  background: #d97706;
+}
+
 .acct-hmap-children {
   position: relative;
-  margin: 0 18px 10px 0;
-  padding: 4px 0 2px 0;
-  transform-origin: top;
-  animation: acct-hmap-open 240ms ease;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  margin-inline-start: 8px;
+  padding: 4px 0 2px;
+  padding-inline-start: 14px;
+  border-inline-start: 3px solid #64748b;
+  animation: acct-hmap-open 180ms ease;
+}
+
+.acct-hmap-branch:has(> .acct-hmap-node--l1) > .acct-hmap-children {
+  border-inline-start-color: #2563eb;
+}
+
+.acct-hmap-branch:has(> .acct-hmap-node--l2) > .acct-hmap-children {
+  border-inline-start-color: #059669;
+}
+
+.acct-hmap-branch:has(> .acct-hmap-node--l3) > .acct-hmap-children {
+  border-inline-start-color: #d97706;
 }
 
 .acct-hmap-children::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 10px;
-  right: -11px;
-  width: 2px;
-  background: linear-gradient(180deg, var(--acct-glass-border), transparent);
+  content: none;
 }
 
 @keyframes acct-hmap-open {
@@ -990,12 +1258,48 @@ kbd.acct-kbd {
     display: none;
   }
 
+  .acct-line-card > [data-label] {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .acct-line-card > [data-label]::before {
+    content: attr(data-label);
+    flex: 0 0 auto;
+    color: var(--text-secondary);
+    font-size: 0.72rem;
+    font-weight: 700;
+  }
+
+  .acct-line-card > [data-label] .acct-number,
+  .acct-line-card > [data-label] small {
+    text-align: end;
+  }
+
+  .acct-line-balance {
+    flex-direction: row;
+    align-items: baseline;
+    gap: 6px;
+  }
+
+  .acct-line-balance small {
+    display: inline;
+  }
+
+  .acct-ledger-mobile-bar {
+    align-self: start;
+    width: 100%;
+  }
+
   .acct-ledger-workspace.is-fullscreen {
     padding: 6px;
   }
 
   .acct-ledger-workspace.is-fullscreen > .acct-glass-panel {
-    height: calc(100dvh - 12px);
+    height: 100%;
   }
 }
 
@@ -1172,5 +1476,204 @@ kbd.acct-kbd {
   .acct-control-reference-list > div {
     grid-template-columns: 1fr;
     gap: 3px;
+  }
+}
+
+/* حساب‌ها و پوسته حسابداری — تبلت و موبایل */
+@media (max-width: 760px) {
+  .acct-hmap-name {
+    white-space: normal;
+  }
+
+  .acct-hmap-tools,
+  .acct-hmap-lead {
+    flex: 1 1 100%;
+  }
+
+  .acct-hmap-tools {
+    margin-inline-start: 0;
+    padding-top: 8px;
+    border-top: 1px solid var(--border-subtle);
+    justify-content: space-between;
+  }
+}
+
+@media (max-width: 1024px) {
+  .accounting-page--v2 .acct-v2-mobile-nav {
+    display: flex;
+    margin: 0;
+    padding: 8px;
+  }
+
+  .accounting-page--v2 .acct-v2-header {
+    align-items: stretch;
+  }
+
+  .acct-erp-page-head {
+    align-items: stretch;
+  }
+
+  .acct-erp-page-actions {
+    width: auto;
+  }
+}
+
+@media (max-width: 860px) {
+  .acct-hmap-record-head {
+    display: none;
+  }
+
+  .acct-hmap-record:not(.acct-hmap-record-head) {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px 12px;
+    padding: 12px;
+  }
+
+  .acct-hmap-record:not(.acct-hmap-record-head) > span,
+  .acct-hmap-record:not(.acct-hmap-record-head) > strong {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .acct-hmap-record:not(.acct-hmap-record-head) > [data-label]::before {
+    content: attr(data-label);
+    color: var(--text-secondary);
+    font-size: 0.68rem;
+    font-weight: 700;
+  }
+
+  .acct-hmap-record-desc {
+    grid-column: 1 / -1;
+  }
+
+  .acct-hmap-record-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+
+  .acct-hmap-record-actions::before {
+    content: none;
+  }
+
+  .acct-hmap-children {
+    margin-inline-start: 8px;
+    padding-inline-start: 10px;
+  }
+
+  .acct-hmap-group,
+  .acct-erp-panel-body {
+    padding: 12px;
+  }
+}
+
+@media (max-width: 767px) {
+  .accounting-page--v2 .acct-v2-header {
+    flex-direction: column;
+    gap: 6px;
+    padding: 10px 12px;
+  }
+
+  .accounting-page--v2 .acct-v2-title {
+    font-size: 1.05rem;
+  }
+
+  .accounting-page--v2 .acct-v2-ledger-badge,
+  .accounting-page--v2 .acct-v2-section-label {
+    display: inline-flex;
+  }
+
+  .accounting-page--v2 .acct-v2-section-label {
+    display: block;
+    margin: 0;
+  }
+
+  .acct-erp-page-head,
+  .acct-erp-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .acct-erp-page-actions,
+  .acct-erp-page-actions .btn,
+  .acct-erp-page-actions button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .acct-chart-search {
+    width: 100%;
+  }
+
+  .acct-chart-count {
+    align-self: flex-start;
+  }
+
+  .acct-hmap-action-label {
+    display: none;
+  }
+
+  .acct-hmap-actions .acct-btn {
+    min-width: 40px;
+    min-height: 40px;
+    justify-content: center;
+    padding: 6px;
+  }
+
+  .acct-hmap-records-title {
+    align-items: stretch;
+  }
+
+  .acct-hmap-records-title .acct-btn {
+    width: 100%;
+    min-height: 42px;
+    justify-content: center;
+  }
+
+  .acct-hmap-record-form {
+    grid-template-columns: 1fr;
+  }
+
+  .acct-hmap-record-form .acct-hmap-record-actions {
+    width: 100%;
+  }
+
+  .acct-hmap-record-form .acct-btn {
+    flex: 1;
+    min-height: 42px;
+    justify-content: center;
+  }
+
+  .acct-hmap-record-form input,
+  .acct-hmap-record-form select {
+    min-height: 42px;
+    width: 100%;
+  }
+
+  .accounting-page--v2 .acct-erp-summary {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .accounting-page--v2 .acct-v2-subnav {
+    flex-wrap: nowrap;
+  }
+}
+
+@media (max-width: 420px) {
+  .acct-hmap-record:not(.acct-hmap-record-head) {
+    grid-template-columns: 1fr;
+  }
+
+  .accounting-page--v2 .acct-erp-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .acct-v2-mobile-pill span {
+    max-width: 9rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }

@@ -20,7 +20,11 @@ from backend.models import (
     FabricCatalogNode,
     WorkshopRecipe,
 )
-from logic.materials import committed_material_demand, compute_factory_order_material_requirements
+from logic.materials import (
+    committed_material_demand,
+    compute_factory_order_material_requirements,
+    factory_order_materials_summary,
+)
 from logic.production_line import spawn_workshop_jobs_for_sale
 from logic.products import product_to_dict, resolve_line_item_from_catalog
 from logic.sale_workflow import receive_factory_order
@@ -108,6 +112,20 @@ class WorkshopLineTests(TestCase):
         resolved = resolve_line_item_from_catalog({"product_id": self.product.id, "quantity": 2})
         self.assertEqual(resolved["workset_config"]["paint"]["name"], "گردویی")
         self.assertEqual(len(resolved["workset_config"]["paint"]["materials"]), 1)
+
+    def test_factory_summary_reports_selected_recipe_stock_shortage(self):
+        self.recipe.current_stock = Decimal("1")
+        self.recipe.save(update_fields=["current_stock"])
+        sale = self._sale(stage=Sale.WORKFLOW_STAGE_ACCOUNTING_APPROVED, quantity=2)
+
+        summary = factory_order_materials_summary(sale)
+        row = next(item for item in summary["recipe_requirements"] if item["recipe_id"] == self.recipe.id)
+
+        self.assertEqual(row["required_quantity"], 2)
+        self.assertEqual(row["available_stock"], 1)
+        self.assertEqual(row["shortage"], 1)
+        self.assertFalse(row["sufficient"])
+        self.assertTrue(summary["has_recipe_shortage"])
 
     def test_cross_order_shortage_uses_queue_not_raw_stock(self):
         first = self._sale(stage=Sale.WORKFLOW_STAGE_IN_PRODUCTION, quantity=1)

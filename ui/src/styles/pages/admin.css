@@ -284,6 +284,18 @@
   align-items: stretch;
 }
 
+@media (max-width: 1440px) {
+  .dept-board {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .dept-board {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .dept-board-none {
   grid-template-columns: minmax(0, 1fr);
   margin-top: 14px;
@@ -373,10 +385,8 @@
   margin: 12px 0;
 }
 
-@media (max-width: 900px) {
-  .dept-board,
+@media (max-width: 767px) {
   .dept-board-none {
-    grid-template-columns: minmax(0, 1fr);
     margin-top: 0;
   }
 }

@@ -58,9 +58,14 @@ def inventory_value(material):
 
 
 def set_valuation_method(material, method):
-    method = (method or Material.VALUATION_WEIGHTED).strip()
-    if method not in {Material.VALUATION_WEIGHTED, Material.VALUATION_FIFO}:
-        raise ValueError("روش ارزیابی نامعتبر است.")
+    from logic.lookups import require_active_code
+
+    method = require_active_code(
+        "material_valuation_method",
+        method,
+        "روش ارزیابی نامعتبر است.",
+        default=Material.VALUATION_WEIGHTED,
+    )
     if material.valuation_method == method:
         return material
     if method == Material.VALUATION_FIFO:
@@ -144,9 +149,14 @@ def receive_stock(
     freight = _rial(freight_amount)
     if freight < 0 or cost < 0:
         raise ValueError("بهای رسید نامعتبر است.")
-    treatment = (freight_treatment or "capitalize").strip()
-    if treatment not in {"capitalize", "period_expense"}:
-        raise ValueError("نحوه ثبت حمل نامعتبر است.")
+    from logic.lookups import require_active_code
+
+    treatment = require_active_code(
+        "material_freight_treatment",
+        freight_treatment,
+        "نحوه ثبت حمل نامعتبر است.",
+        default="capitalize",
+    )
     goods = qty * cost
     if treatment == "capitalize":
         inbound_value = goods + freight

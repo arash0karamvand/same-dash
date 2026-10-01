@@ -79,13 +79,20 @@ export default function Factory({ portal }) {
                   ? `${item.material.name} (${item.material.color_name})`
                   : item.material?.name
                 const others = item.committed_by_others > 0 ? ` / در جریان ${item.committed_by_others} می‌خواهند` : ''
-                return `${name}: نیاز ${item.required_quantity}، موجود ${item.available_stock}${others}`
+                return `متریال ${name}: نیاز ${item.required_quantity} ${item.unit || ''}، موجود ${item.available_stock}${others}`
               })
+            const recipeShortages = (o.recipe_requirements || [])
+              .filter((item) => item.sufficient === false)
+              .map((item) => {
+                const name = item.color_name ? `${item.name} (${item.color_name})` : item.name
+                return `${item.kind_label} ${name}: نیاز ${item.required_quantity} ${item.unit || ''}، موجود ${item.available_stock}`
+              })
+            const allShortages = [...shortages, ...recipeShortages]
             const message = [
-              workset ? `دست کار: ${workset}` : 'این سفارش دست کار تعریف‌شده ندارد.',
-              shortages.length
-                ? `نسبت به صف در جریان کمبود دارد (دریافت مسدود نمی‌شود):\n${shortages.join('\n')}`
-                : 'نسبت به صف در جریان کمبود متریال دیده نشد.',
+              workset ? `سرویس: ${workset}` : 'این سفارش سرویس تعریف‌شده ندارد.',
+              allShortages.length
+                ? `کمبود اقلام ساخت (دریافت مسدود نمی‌شود):\n${allShortages.join('\n')}`
+                : 'کمبود موجودی برای اقلام ساخت دیده نشد.',
               'سفارش دریافت شود و کارهای کارگاه ساخته شوند؟',
             ].join('\n\n')
             return { title: 'دریافت سفارش کارخانه', message, confirmText: 'دریافت' }

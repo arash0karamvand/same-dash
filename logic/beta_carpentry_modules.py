@@ -16,7 +16,10 @@ from backend.models import (
 )
 from logic import beta_workshops as base
 
-TOOL_STATUS_LABELS = dict(BetaCarpentryTool.STATUS_CHOICES)
+def _tool_status_label(code):
+    from logic.lookups import stored_label
+
+    return stored_label("carpentry_tool_status", code)
 
 
 def _workshop_qs(workshop_id=None, workshop_kind=None):
@@ -98,7 +101,7 @@ def tool_to_dict(item):
         "workshop_id": workshop.id if workshop else None,
         "workshop_name": workshop.name if workshop else "",
         "status": item.status,
-        "status_display": TOOL_STATUS_LABELS.get(item.status, item.status),
+        "status_display": _tool_status_label(item.status),
         "quantity": item.quantity,
         "purchase_date": item.purchase_date.isoformat() if item.purchase_date else None,
         "value": int(item.value or 0),
@@ -145,11 +148,13 @@ def _apply_tool_fields(tool, data, *, creating):
         wid = base._optional_int(data.get("workshop_id"))
         tool.workshop = BetaCarpentryWorkshop.objects.filter(pk=wid).first() if wid else None
     if "status" in data:
-        tool.status = base._choice(
+        from logic.lookups import require_active_code
+
+        tool.status = require_active_code(
+            "carpentry_tool_status",
             data.get("status"),
-            {k for k, _ in BetaCarpentryTool.STATUS_CHOICES},
-            "وضعیت",
-            BetaCarpentryTool.STATUS_ACTIVE,
+            "وضعیت ابزار نامعتبر است.",
+            default=BetaCarpentryTool.STATUS_ACTIVE,
         )
     if "quantity" in data or creating:
         tool.quantity = base._positive_int(data.get("quantity"), default=1)

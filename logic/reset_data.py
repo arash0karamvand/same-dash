@@ -1,45 +1,55 @@
 """پاک‌سازی کامل داده‌ها — حذف فیزیکی (hard delete)؛ فقط مدیر سیستم حفظ می‌شود."""
 
+from django.apps import apps
 from django.contrib.auth import get_user_model
 from django.contrib.sessions.models import Session
-from django.db import transaction
+from django.db import connection, transaction
 
 from auth import roles
 from auth.roles import ADMIN
 from backend.models import (
-    AccountingEntry,
-    AuditLog,
-    BirthdaySmsExclusion,
     BirthdaySmsSettings,
-    Customer,
-    CustomerLevelHistory,
-    FactoryAccountingEntry,
-    FactoryDetailedAccount,
-    FactoryOrder,
-    FactoryOrderLineItem,
-    FactorySubsidiaryAccount,
-    LoyaltyLevel,
-    OfficeOrder,
-    OfficeOrderInstallment,
-    OfficeOrderLineItem,
-    OrgRank,
-    Product,
-    ProductCategory,
-    ProductVariant,
-    ReminderCampaign,
-    ReminderSendLog,
-    SMSLog,
-    Sale,
-    SaleInstallment,
-    SaleLineItem,
-    Seller,
     SmsClubSettings,
-    StaffAttendance,
     StaffProfile,
-    WalletTransaction,
+    UserAccessProfile,
+    UserPermission,
 )
+from logic.ledger import ensure_ledgers
 
 User = get_user_model()
+
+# پیکربندی لازم برای بالا آمدن پنل. داده‌های عملیاتی این‌جا نیستند.
+STRUCTURAL_LABELS = frozenset(
+    {
+        "contenttypes.ContentType",
+        "auth.Permission",
+        "auth.Group",
+        "backend.Branch",
+        "backend.LookupOption",
+        "backend.PaymentMethod",
+        "backend.PaymentStatus",
+        "backend.OrderKind",
+        "backend.OrderStatus",
+        "backend.AccountingMode",
+        "backend.InstallmentStatus",
+        "backend.AttendanceStatus",
+        "backend.ApprovalStatus",
+        "backend.MaterialStatus",
+        "backend.SmsStatus",
+        "backend.SmsType",
+        "backend.JournalEntryType",
+        "backend.JournalEntryStatus",
+        "backend.Permission",
+        "backend.RoleDefinition",
+        "backend.RolePermission",
+        "backend.RoleClosure",
+        "backend.MenuSection",
+        "backend.MenuPermission",
+        "backend.SectionPermission",
+        "backend.WorkflowStage",
+        "backend.AuditEntityType",
+    }
+)
 
 
 def admin_user_ids():
@@ -51,67 +61,227 @@ def admin_user_ids():
     return ids
 
 
-def _hard_delete(qs):
-    """حذف فیزیکی همه ردیف‌ها — بدون soft delete."""
-    return qs.delete()[0]
+def _quote(name):
+    return connection.ops.quote_name(name)
 
 
-def reset_business_data():
+def _concrete_models():
+    for model in apps.get_models(include_auto_created=False):
+        opts = model._meta
+        if opts.proxy or not opts.managed:
+            continue
+        yield model
+
+
+def _auto_m2m_tables(model):
+    tables = []
+    for field in model._meta.local_many_to_many:
+        through = field.remote_field.through
+        if through._meta.auto_created:
+            tables.append(through._meta.db_table)
+    return tables
+
+
+def _user_column(through_model):
+    for field in through_model._meta.concrete_fields:
+        remote = getattr(getattr(field, "remote_field", None), "model", None)
+        if remote is User:
+            return field.column
+    return None
+
+
+def _nullable_user_or_wiped_fks(model):
+    for field in model._meta.concrete_fields:
+        remote = getattr(getattr(field, "remote_field", None), "model", None)
+        if remote is not None and field.many_to_one and field.null:
+            yield field, remote
+
+
+def _delete_all(cursor, table):
+    cursor.execute(f"DELETE FROM {_quote(table)}")
+    return max(cursor.rowcount, 0)
+
+
+def _delete_except(cursor, table, column, keep_ids):
+    marks = ", ".join(["%s"] * len(keep_ids))
+    cursor.execute(
+        f"DELETE FROM {_quote(table)} WHERE {_quote(column)} NOT IN ({marks})",
+        list(keep_ids),
+    )
+    return max(cursor.rowcount, 0)
+
+
+def _trigger_statements(cursor):
+    """تعریف تریگرهای فعلی تا بعد از حذف فیزیکی دوباره ساخته شوند."""
+    cursor.execute(
+        "SELECT TRIGGER_NAME FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = DATABASE()"
+    )
+    names = [row[0] for row in cursor.fetchall()]
+    statements = []
+    for name in names:
+        cursor.execute(f"SHOW CREATE TRIGGER {_quote(name)}")
+        description = cursor.description or []
+        columns = [col[0] for col in description]
+        row = cursor.fetchone()
+        payload = dict(zip(columns, row))
+        create_sql = payload.get("SQL Original Statement") or payload.get("Create Trigger")
+        if not create_sql:
+            raise RuntimeError(f"تعریف تریگر {name} خوانده نشد.")
+        statements.append((name, payload.get("sql_mode") or "", create_sql))
+    return statements
+
+
+def _drop_triggers(cursor, statements):
+    for name, _mode, _sql in statements:
+        cursor.execute(f"DROP TRIGGER IF EXISTS {_quote(name)}")
+
+
+def _restore_triggers(cursor, statements):
+    if not statements:
+        return
+    cursor.execute("SELECT @@SESSION.sql_mode")
+    previous_mode = cursor.fetchone()[0]
+    try:
+        for _name, sql_mode, create_sql in statements:
+            if sql_mode:
+                cursor.execute("SET SESSION sql_mode=%s", [sql_mode])
+            cursor.execute(create_sql)
+    finally:
+        cursor.execute("SET SESSION sql_mode=%s", [previous_mode])
+
+
+def _disable_fk_checks(cursor):
+    if connection.vendor != "mysql":
+        raise RuntimeError("پاکسازی سخت فقط روی MySQL پشتیبانی می‌شود.")
+    cursor.execute("SET FOREIGN_KEY_CHECKS=0")
+
+
+def _enable_fk_checks(cursor):
+    if connection.vendor == "mysql":
+        cursor.execute("SET FOREIGN_KEY_CHECKS=1")
+
+
+def reset_business_data(*, keep_session_key=None, extra_keep_ids=()):
     """
     حذف فیزیکی همه داده‌های عملیاتی.
-    فقط کاربران مدیر سیستم (و superuser) حفظ می‌شوند.
-    تعاریف نقش، شعب، منو و lookupها حفظ می‌شوند.
+
+    کاربران مدیر سیستم (و superuser) حفظ می‌شوند.
+    تعاریف نقش، شعب، منو، مراحل گردش و lookupها حفظ می‌شوند تا پنل قابل استفاده بماند.
+    دفترهای خالی اداری و کارخانه دوباره ساخته می‌شوند؛ کدینگ و اسناد حذف می‌شوند.
     """
     keep_ids = admin_user_ids()
-    counts = {}
+    keep_ids.update(int(pk) for pk in extra_keep_ids if pk)
+    if not keep_ids:
+        raise RuntimeError("هیچ حساب مدیر سیستمی برای حفظ کردن پیدا نشد.")
 
-    with transaction.atomic():
-        # وابستگی‌های فروش و مالی — حذف فیزیکی حتی رکوردهای soft-deleted
-        counts["reminder_send_logs"] = _hard_delete(ReminderSendLog.objects.all())
-        counts["wallet_transactions"] = _hard_delete(WalletTransaction.objects.all())
-        counts["factory_order_line_items"] = _hard_delete(FactoryOrderLineItem.objects.all())
-        counts["factory_accounting_entries"] = _hard_delete(FactoryAccountingEntry.objects.all())
-        counts["factory_orders"] = _hard_delete(FactoryOrder.all_objects.all())
-        counts["office_order_installments"] = _hard_delete(OfficeOrderInstallment.all_objects.all())
-        counts["office_order_line_items"] = _hard_delete(OfficeOrderLineItem.objects.all())
-        counts["office_orders"] = _hard_delete(OfficeOrder.all_objects.all())
-        counts["sale_line_items"] = _hard_delete(SaleLineItem.objects.all())
-        counts["sale_installments"] = _hard_delete(SaleInstallment.all_objects.all())
-        counts["accounting_entries"] = _hard_delete(AccountingEntry.objects.all())
-        counts["factory_detailed_accounts"] = _hard_delete(FactoryDetailedAccount.objects.all())
-        counts["factory_subsidiary_accounts"] = _hard_delete(FactorySubsidiaryAccount.objects.all())
-        counts["sales"] = _hard_delete(Sale.all_objects.all())
+    partial_labels = {
+        User._meta.label,
+        StaffProfile._meta.label,
+        UserAccessProfile._meta.label,
+        UserPermission._meta.label,
+        Session._meta.label,
+    }
+    wipe_tables = []
+    kept_models = []
+    seen = set()
 
-        counts["customer_level_history"] = _hard_delete(CustomerLevelHistory.objects.all())
-        counts["birthday_sms_exclusions"] = _hard_delete(BirthdaySmsExclusion.objects.all())
-        counts["customers"] = _hard_delete(Customer.all_objects.all())
+    def add_table(table):
+        if table not in seen:
+            seen.add(table)
+            wipe_tables.append(table)
 
-        counts["sms_logs"] = _hard_delete(SMSLog.objects.all())
-        counts["audit_logs"] = _hard_delete(AuditLog.objects.all())
-        counts["staff_attendance"] = _hard_delete(StaffAttendance.all_objects.all())
-        counts["sellers"] = _hard_delete(Seller.all_objects.all())
+    for model in _concrete_models():
+        label = model._meta.label
+        if label in STRUCTURAL_LABELS or label in partial_labels:
+            kept_models.append(model)
+            continue
+        add_table(model._meta.db_table)
+        for table in _auto_m2m_tables(model):
+            add_table(table)
 
-        counts["product_variants"] = _hard_delete(ProductVariant.objects.all())
-        counts["products"] = _hard_delete(Product.all_objects.all())
-        counts["product_categories"] = _hard_delete(ProductCategory.all_objects.all())
-        counts["loyalty_levels"] = _hard_delete(LoyaltyLevel.all_objects.all())
-        counts["reminder_campaigns"] = _hard_delete(ReminderCampaign.objects.all())
-        counts["org_ranks"] = _hard_delete(OrgRank.objects.all())
+    counts = {
+        "tables_cleared": len(wipe_tables),
+        "rows_deleted": 0,
+        "users_deleted": 0,
+        "admin_users_kept": len(keep_ids),
+        "sessions_cleared": 0,
+    }
+    marks = ", ".join(["%s"] * len(keep_ids))
+    keep_params = list(keep_ids)
 
-        # پروفایل پرسنل کاربران غیرمدیر
-        counts["staff_profiles"] = _hard_delete(StaffProfile.objects.exclude(user_id__in=keep_ids))
+    # DROP/CREATE TRIGGER در MySQL کامیت ضمنی دارد؛ حذف فیزیکی باید بیرون از savepoint بماند.
+    with connection.cursor() as cursor:
+        trigger_sql = _trigger_statements(cursor)
+        _drop_triggers(cursor, trigger_sql)
+        _disable_fk_checks(cursor)
+        try:
+            with transaction.atomic():
+                for table in wipe_tables:
+                    counts["rows_deleted"] += _delete_all(cursor, table)
 
-        # تنظیمات پیامک به حالت اولیه
-        BirthdaySmsSettings.objects.all().delete()
-        BirthdaySmsSettings.get_solo()
-        SmsClubSettings.objects.all().delete()
-        SmsClubSettings.get_solo()
+                counts["staff_profiles"] = _delete_except(
+                    cursor, StaffProfile._meta.db_table, StaffProfile._meta.get_field("user").column, keep_ids
+                )
+                profile_table = UserAccessProfile._meta.db_table
+                perm_table = UserPermission._meta.db_table
+                perm_col = UserPermission._meta.get_field("access_profile").column
+                profile_pk = UserAccessProfile._meta.pk.column
+                cursor.execute(
+                    f"DELETE FROM {_quote(perm_table)} "
+                    f"WHERE {_quote(perm_col)} NOT IN ("
+                    f"SELECT {_quote(profile_pk)} FROM {_quote(profile_table)} "
+                    f"WHERE {_quote('user_id')} IN ({marks}))",
+                    keep_params,
+                )
+                counts["user_permissions"] = max(cursor.rowcount, 0)
+                counts["access_profiles"] = _delete_except(
+                    cursor, profile_table, UserAccessProfile._meta.get_field("user").column, keep_ids
+                )
 
-        # کاربران غیرمدیر — حذف فیزیکی
-        counts["users_deleted"] = _hard_delete(User.objects.exclude(pk__in=keep_ids))
-        counts["admin_users_kept"] = len(keep_ids)
+                for through in (User.groups.through, User.user_permissions.through):
+                    column = _user_column(through)
+                    if column:
+                        _delete_except(cursor, through._meta.db_table, column, keep_ids)
 
-        # نشست‌های کاربران حذف‌شده
-        counts["sessions_cleared"] = _hard_delete(Session.objects.all())
+                counts["users_deleted"] = _delete_except(
+                    cursor, User._meta.db_table, User._meta.pk.column, keep_ids
+                )
+                counts["rows_deleted"] += counts["users_deleted"]
+
+                wiped = set(wipe_tables)
+                for model in kept_models:
+                    table = model._meta.db_table
+                    for field, remote in _nullable_user_or_wiped_fks(model):
+                        column = field.column
+                        if remote._meta.db_table in wiped:
+                            cursor.execute(
+                                f"UPDATE {_quote(table)} SET {_quote(column)} = NULL "
+                                f"WHERE {_quote(column)} IS NOT NULL"
+                            )
+                        elif remote is User:
+                            cursor.execute(
+                                f"UPDATE {_quote(table)} SET {_quote(column)} = NULL "
+                                f"WHERE {_quote(column)} IS NOT NULL "
+                                f"AND {_quote(column)} NOT IN ({marks})",
+                                keep_params,
+                            )
+
+                session_table = Session._meta.db_table
+                session_pk = Session._meta.pk.column
+                if keep_session_key:
+                    cursor.execute(
+                        f"DELETE FROM {_quote(session_table)} WHERE {_quote(session_pk)} <> %s",
+                        [keep_session_key],
+                    )
+                else:
+                    cursor.execute(f"DELETE FROM {_quote(session_table)}")
+                counts["sessions_cleared"] = max(cursor.rowcount, 0)
+        finally:
+            _enable_fk_checks(cursor)
+            _restore_triggers(cursor, trigger_sql)
+
+    BirthdaySmsSettings.get_solo()
+    SmsClubSettings.get_solo()
+    ensure_ledgers()
 
     return counts

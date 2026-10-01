@@ -134,7 +134,7 @@ export default function ExcelUploader({ api }) {
       <AccountingDataPanel
         title="انتخاب فایل"
         subtitle="فایل خروجی نرم‌افزار حسابداری — فرمت xlsx"
-        className={fromLegacy('excel-uploader-panel')}
+        className={fromLegacy('excel-uploader-panel min-w-0')}
       >
         <div
           className={fromLegacy(`excel-dropzone${dragOver ? ' is-dragover' : ''}${file ? ' has-file' : ''}`)}
@@ -229,19 +229,19 @@ export default function ExcelUploader({ api }) {
       <AccountingDataPanel
         title="راهنمای فرمت"
         subtitle="ساختار مورد انتظار فایل اکسل"
-        className={fromLegacy('excel-guide-panel')}
+        className={fromLegacy('excel-guide-panel min-w-0')}
       >
         <ul className={fromLegacy('excel-guide-list')}>
           <li><strong>تراز کل</strong> — کد 1120، 1210، … + افتتاحیه / گردش / مانده</li>
           <li><strong>تراز معین</strong> — کد 1210/1، 1310/2، …</li>
           <li><strong>تراز تفصیلی</strong> — کد 1210/1/6، 1130/1/1، …</li>
-          <li><strong>ریز نمونه</strong> — گردش یک حساب (اختیاری؛ فقط نمایشی)</li>
+          <li><strong>ریز نمونه</strong> — گردش یک حساب؛ برای کنترل است و جدا از رکوردهای تراز ثبت نمی‌شود</li>
         </ul>
         <p className={fromLegacy('excel-guide-note')}>
           فرمت استاندارد خروجی «گزارشات مالی» — ۴ شیت: تراز کل، تراز معین، تراز تفصیلی، ریز نمونه.
-          ثبت نهایی، درخت حساب‌ها را می‌سازد و مانده افتتاحیه و گردش دوره هر حساب را
-          به‌صورت سند افتتاحیه و سند گردش ثبت می‌کند؛ اختلاف تراز فایل به حساب موجود
-          «سود و زیان انباشته» افزوده می‌شود.
+          ثبت نهایی حساب جدید را به کدینگ اضافه می‌کند و برای هر حساب رکورد افتتاحیه و رکورد گردش را می‌نویسد.
+          مانده از جمع همین رکوردها محاسبه می‌شود؛ ستون مانده فایل نتیجه است و وارد دفتر نمی‌شود.
+          اگر جمع بدهکار و بستانکار فایل برابر نباشد، اختلاف در حساب «سود و زیان انباشته» ثبت می‌شود.
         </p>
       </AccountingDataPanel>
 

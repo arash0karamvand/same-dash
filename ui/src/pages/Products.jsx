@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { configApi, furnitureWorksetsApi, materialsApi, productsApi, workshopRecipesApi } from '../api/client'
 import MoneyInput from '../components/MoneyInput'
 import Select from '../components/Select'
-import { Badge, Button, Card, EmptyState, Field, FilterBar, LoadMoreButton, Modal } from '../components/ui'
+import { Badge, Button, Card, EmptyState, Field, FilterBar, FormFooter, FormSection, LoadMoreButton, Modal } from '../components/ui'
 import { PAGE_SIZE, PICKER_LIMIT } from '../config/pagination'
 import { useAuth } from '../context/AuthContext'
 import { useConfig } from '../context/ConfigContext'
@@ -266,7 +266,7 @@ export default function Products() {
   )
 
   const worksetOptions = useMemo(
-    () => [{ value: '', label: 'بدون دست' }, ...worksetCatalog.map((w) => ({ value: String(w.id), label: w.name }))],
+    () => [{ value: '', label: 'بدون سرویس' }, ...worksetCatalog.map((w) => ({ value: String(w.id), label: w.name }))],
     [worksetCatalog],
   )
 
@@ -777,7 +777,7 @@ export default function Products() {
                   )}
                   <span className={fromLegacy("muted")}>{p.variants?.length || 0} رنگ</span>
                   {p.furniture_workset?.name && (
-                    <span className={fromLegacy("muted small")}>دست: {p.furniture_workset.name}</span>
+                    <span className={fromLegacy("muted small")}>سرویس: {p.furniture_workset.name}</span>
                   )}
                   {(p.suite_config || []).length > 0 && (
                     <span className={fromLegacy("muted small")}>
@@ -873,7 +873,8 @@ export default function Products() {
         onClose={() => !saving && setProductModal(false)}
         wide
       >
-        <form onSubmit={saveProduct} className={fromLegacy("form product-form")}>
+        <form onSubmit={saveProduct} className={fromLegacy("form factory-form product-form")}>
+          <FormSection title="شناسنامه محصول" hint="اطلاعات پایه و کدهای قابل جستجوی محصول را وارد کنید.">
           <div className={fromLegacy("form-grid-2")}>
             <Field label="نام محصول">
               <input value={productForm.name} onChange={(e) => setProductForm({ ...productForm, name: e.target.value })} required />
@@ -913,6 +914,7 @@ export default function Products() {
           <Field label="توضیحات">
             <textarea rows={2} value={productForm.description} onChange={(e) => setProductForm({ ...productForm, description: e.target.value })} />
           </Field>
+          </FormSection>
 
           {(showCosts || canEditMaterials) && (
             <div className={fromLegacy("product-variants-section")}>
@@ -974,11 +976,11 @@ export default function Products() {
 
           <div className={fromLegacy("product-variants-section")}>
             <div className={fromLegacy("section-head")}>
-              <h4>دست و رنگ/پارچه قطعات</h4>
+              <h4>سرویس و رنگ/پارچه قطعات</h4>
               <Button type="button" variant="ghost" onClick={addVariant}>+ رنگ</Button>
             </div>
             {(isFactory || canEditMaterials) && (
-              <Field label="دست">
+              <Field label="سرویس">
                 <Select
                   value={productForm.workset_id}
                   onChange={onWorksetChange}
@@ -1038,16 +1040,16 @@ export default function Products() {
               </div>
             ))}
             {(isFactory || canEditMaterials) && !productForm.workset_id && (
-              <p className={fromLegacy('muted small')}>اول دست را از تولید کلاف انتخاب کنید؛ بعد برای هر قطعه رنگ و پارچه بگذارید.</p>
+              <p className={fromLegacy('muted small')}>اول سرویس را از تولید کلاف انتخاب کنید؛ بعد برای هر قطعه رنگ و پارچه بگذارید.</p>
             )}
             {productForm.workset_id && productForm.suite_pieces.length === 0 && (
-              <p className={fromLegacy('muted small')}>این دست قطعه‌ای ندارد. اول در تولید کلاف تعداد قطعات را بگذارید.</p>
+              <p className={fromLegacy('muted small')}>این سرویس قطعه‌ای ندارد. اول در تولید کلاف تعداد قطعات را بگذارید.</p>
             )}
             {productForm.suite_pieces.map((piece, idx) => (
               <div key={`${piece.piece_kind}-${piece.arm_style}-${idx}`} className={fromLegacy('frame-model-block')}>
                 <div className={fromLegacy('section-head')}>
                   <strong>{piece.piece_label}</strong>
-                  <span className={fromLegacy('muted small')}>تعداد از دست: {piece.quantity}</span>
+                  <span className={fromLegacy('muted small')}>تعداد از سرویس: {piece.quantity}</span>
                 </div>
                 <div className={fromLegacy('form-grid-2')}>
                   <label className={fromLegacy('checkbox-row')}>
@@ -1122,7 +1124,7 @@ export default function Products() {
               </div>
             ))}
             {productForm.suite_pieces.length > 0 && (canManageSales || canEditMaterials) && (
-              <p className={fromLegacy('muted')}>جمع قیمت دست: {formatMoney(suiteTotal(productForm.suite_pieces))}</p>
+              <p className={fromLegacy('muted')}>جمع قیمت سرویس: {formatMoney(suiteTotal(productForm.suite_pieces))}</p>
             )}
           </div>
 
@@ -1131,15 +1133,16 @@ export default function Products() {
             فعال
           </label>
 
-          <div className={fromLegacy("form-actions")}>
+          <FormFooter>
             <Button type="button" variant="ghost" onClick={() => setProductModal(false)} disabled={saving}>انصراف</Button>
             <Button type="submit" disabled={saving}>{saving ? 'در حال ذخیره…' : 'ذخیره محصول'}</Button>
-          </div>
+          </FormFooter>
         </form>
       </Modal>
 
       <Modal title={editingCategory ? 'ویرایش دسته' : 'دسته جدید'} open={categoryModal} onClose={() => !saving && setCategoryModal(false)}>
-        <form onSubmit={saveCategory} className={fromLegacy("form")}>
+        <form onSubmit={saveCategory} className={fromLegacy("form factory-form")}>
+          <FormSection title="مشخصات دسته">
           <Field label="نام دسته">
             <input value={categoryForm.name} onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })} required />
           </Field>
@@ -1159,7 +1162,8 @@ export default function Products() {
             <input type="checkbox" checked={categoryForm.is_active} onChange={(e) => setCategoryForm({ ...categoryForm, is_active: e.target.checked })} />
             فعال
           </label>
-          <Button type="submit" disabled={saving}>{saving ? 'در حال ذخیره…' : 'ذخیره دسته'}</Button>
+          </FormSection>
+          <FormFooter><Button type="button" variant="ghost" onClick={() => setCategoryModal(false)}>انصراف</Button><Button type="submit" disabled={saving}>{saving ? 'در حال ذخیره…' : 'ذخیره دسته'}</Button></FormFooter>
         </form>
       </Modal>
 

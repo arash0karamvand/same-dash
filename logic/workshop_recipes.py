@@ -837,7 +837,7 @@ def resolve_recipe(recipe_id, *, kind=None):
         qs = qs.filter(kind=kind)
     recipe = qs.first()
     if not recipe:
-        raise ValueError("دستور دست‌کار یافت نشد.")
+        raise ValueError("دستور سرویس یافت نشد.")
     return recipe
 
 
@@ -860,7 +860,130 @@ def snapshot_recipe(recipe):
         "kind": recipe.kind,
         "name": recipe.name,
         "color_name": recipe.color_name or "",
+        "unit_cost": _as_number(recipe.unit_cost),
         "materials": materials,
+    }
+
+
+def fabric_consumption_meters(block):
+    """متراژ مصرف قطعه‌کار. موجودی طاقه اینجا حساب نمی‌شود."""
+    total = Decimal(0)
+    for row in (block or {}).get("materials") or []:
+        try:
+            total += Decimal(str(row.get("quantity") or 0))
+        except (InvalidOperation, TypeError, ValueError):
+            continue
+    return total
+
+
+def _sale_choice_id(item, key):
+    if not isinstance(item, dict):
+        return None
+    if item.get(key) not in (None, ""):
+        return item.get(key)
+    config = item.get("workset_config") if isinstance(item.get("workset_config"), dict) else {}
+    choices = config.get("sale_choices") if isinstance(config.get("sale_choices"), dict) else {}
+    return choices.get(key)
+
+
+def _chosen_fabric_snapshot(original, fabric, meters):
+    snap = snapshot_recipe(fabric) or {}
+    snap["materials"] = list((original or {}).get("materials") or [])
+    snap["unit_cost"] = int(Decimal(fabric.unit_cost or 0))
+    snap["consumption_meters"] = float(meters)
+    return snap
+
+
+def sale_finish_quote(product, item):
+    """قیمت سرویس = متراژ قفل‌شده × نرخ پارچهٔ انتخاب‌شده. اسفنج و متراژ از کار می‌مانند."""
+    fabric_id = _optional_int(_sale_choice_id(item, "fabric_recipe_id"))
+    paint_id = _optional_int(_sale_choice_id(item, "paint_recipe_id"))
+    if not fabric_id and not paint_id:
+        return None
+
+    base = build_workset_from_product(product)
+    pieces = list(base.get("pieces") or [])
+    if not pieces:
+        raise ValueError("این محصول قطعهٔ کار ندارد؛ قیمت از متراژ پارچه حساب نمی‌شود.")
+    if not fabric_id:
+        raise ValueError("پارچه را انتخاب کنید.")
+
+    needs_paint = any(piece.get("needs_paint", True) is not False for piece in pieces)
+    if needs_paint and not paint_id:
+        raise ValueError("رنگ بدنه را انتخاب کنید.")
+
+    fabric = resolve_recipe(fabric_id, kind=WorkshopRecipe.KIND_FABRIC)
+    paint = resolve_recipe(paint_id, kind=WorkshopRecipe.KIND_PAINT) if needs_paint else None
+    rate = Decimal(fabric.unit_cost or 0)
+    if rate <= 0:
+        raise ValueError("نرخ هر متر پارچهٔ انتخاب‌شده ثبت نشده است.")
+
+    total_meters = Decimal(0)
+    missing = []
+    next_pieces = []
+    for piece in pieces:
+        meters = fabric_consumption_meters(piece.get("fabric"))
+        qty = Decimal(int(piece.get("quantity") or 1))
+        if meters <= 0:
+            missing.append(piece.get("piece_label") or "قطعه")
+        total_meters += meters * qty
+        updated = dict(piece)
+        updated["fabric"] = _chosen_fabric_snapshot(piece.get("fabric"), fabric, meters)
+        updated["fabric_recipe_id"] = fabric.id
+        if piece.get("needs_paint", True) is not False and paint:
+            updated["paint"] = snapshot_recipe(paint)
+            updated["paint_recipe_id"] = paint.id
+        next_pieces.append(updated)
+    if missing:
+        raise ValueError("متراژ مصرف در تعریف کار نیست: " + "، ".join(missing))
+
+    unit_price = (total_meters * rate).quantize(Decimal("1"))
+    config = dict(base)
+    config["pieces"] = next_pieces
+    config["fabric"] = _chosen_fabric_snapshot(None, fabric, total_meters)
+    if paint:
+        config["paint"] = snapshot_recipe(paint)
+    config["sale_choices"] = {
+        "fabric_recipe_id": fabric.id,
+        "paint_recipe_id": paint.id if paint else None,
+        "meters": float(total_meters),
+        "price_per_meter": int(rate),
+        "unit_price": int(unit_price),
+    }
+    fabric_label = fabric.name
+    if fabric.color_name and fabric.color_name != fabric.name:
+        fabric_label = f"{fabric.name} ({fabric.color_name})"
+    return {
+        "workset_config": config,
+        "unit_price": unit_price,
+        "fabric_label": fabric_label,
+        "paint_label": (paint.color_name or paint.name) if paint else "",
+        "meters": total_meters,
+        "price_per_meter": rate,
+    }
+
+
+def sale_finish_catalog():
+    paints = WorkshopRecipe.objects.filter(
+        kind=WorkshopRecipe.KIND_PAINT, is_deleted=False, is_active=True
+    ).order_by("name", "id")
+    fabrics = WorkshopRecipe.objects.filter(
+        kind=WorkshopRecipe.KIND_FABRIC, is_deleted=False, is_active=True
+    ).order_by("name", "id")
+    return {
+        "paints": [
+            {"id": row.id, "name": row.name, "color_name": row.color_name or ""}
+            for row in paints
+        ],
+        "fabrics": [
+            {
+                "id": row.id,
+                "name": row.name,
+                "color_name": row.color_name or "",
+                "unit_cost": int(Decimal(row.unit_cost or 0)),
+            }
+            for row in fabrics
+        ],
     }
 
 
@@ -1029,6 +1152,64 @@ def compute_workset_line_requirements(line_item):
                     "source_labels": [label],
                 }
             )
+    return results
+
+
+def compute_workset_recipe_requirements(line_items):
+    """موجودی خود اقلام انتخاب‌شدهٔ سرویس را برای سفارش کنترل می‌کند."""
+    totals = {}
+    for line in line_items:
+        config = getattr(line, "workset_config", None) or {}
+        if not config and getattr(line, "product", None):
+            config = build_workset_from_product(line.product)
+        line_qty = Decimal(line.quantity or 0)
+        if line_qty <= 0:
+            continue
+
+        pieces = config.get("pieces") or []
+        units = pieces if pieces else [config]
+        for unit in units:
+            factor = line_qty * Decimal(int(unit.get("quantity") or 1) if pieces else 1)
+            for kind in RECIPE_KINDS:
+                if kind == WorkshopRecipe.KIND_PAINT and unit.get("needs_paint", config.get("needs_paint", True)) is False:
+                    continue
+                block = unit.get(kind) or {}
+                recipe_id = _optional_int(block.get("id"))
+                if not recipe_id:
+                    continue
+                per_unit = sum(
+                    (Decimal(str(row.get("quantity") or 0)) for row in block.get("materials") or []),
+                    Decimal(0),
+                )
+                # دستورهای بدون ریزمواد نیز یک قلم انتخاب‌شده برای هر واحد محصول هستند.
+                required = (per_unit if per_unit > 0 else Decimal(1)) * factor
+                key = (recipe_id, kind)
+                totals[key] = totals.get(key, Decimal(0)) + required
+
+    recipes = {
+        recipe.id: recipe
+        for recipe in WorkshopRecipe.objects.filter(pk__in={key[0] for key in totals})
+    }
+    results = []
+    for (recipe_id, kind), required in totals.items():
+        recipe = recipes.get(recipe_id)
+        if not recipe:
+            continue
+        stock = Decimal(recipe.current_stock or 0)
+        results.append(
+            {
+                "recipe_id": recipe.id,
+                "kind": kind,
+                "kind_label": RECIPE_KINDS.get(kind, kind),
+                "name": recipe.name,
+                "color_name": recipe.color_name or "",
+                "required_quantity": _as_number(required),
+                "available_stock": _as_number(stock),
+                "shortage": _as_number(max(Decimal(0), required - stock)),
+                "sufficient": stock >= required,
+                "unit": recipe.stock_unit or "واحد",
+            }
+        )
     return results
 
 

@@ -7,9 +7,9 @@ from .base import QUANTITY_KWARGS
 
 
 class FurnitureWorkset(SoftDeleteModel):
-    """دست مبلمان — ترکیب قطعات با تعداد."""
+    """سرویس مبلمان — ترکیب قطعات با تعداد."""
 
-    name = models.CharField("نام دست", max_length=150)
+    name = models.CharField("نام سرویس", max_length=150)
     design_style = models.CharField("سبک طراحی", max_length=32, blank=True, default="")
     seat_count = models.PositiveIntegerField("تعداد نفر", null=True, blank=True)
     is_active = models.BooleanField("فعال", default=True)

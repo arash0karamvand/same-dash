@@ -45,7 +45,7 @@ const GROUPS = [
       { id: 'capacity', label: 'ظرفیت ساخت', hint: 'اگر فقط همان محصول ساخته شود چند عدد درمی‌آید. چوب کلاف در این عدد نیست.' },
       { id: 'coverage', label: 'پوشش روز', hint: 'موجودی فعلی، با مصرف ۳۰ روز اخیر، چند روز دوام می‌آورد.' },
       { id: 'consumption', label: 'مصرف', hint: 'مصرف تولید منهای برگشت. تاریخ خالی یعنی ۳۰ روز اخیر.' },
-      { id: 'where_used', label: 'محل مصرف', hint: 'هر متریال برای یک عدد از کدام محصول یا دستور دست‌کار مصرف می‌شود.' },
+      { id: 'where_used', label: 'محل مصرف', hint: 'هر متریال برای یک عدد از کدام محصول یا دستور سرویس مصرف می‌شود.' },
     ],
   },
   {
@@ -448,7 +448,7 @@ function IdleReport({ data }) {
 
       <Card title="موجودی بدون استفاده در دستور ساخت">
         {unused.length === 0 ? (
-          <EmptyState text="همه موجودی‌ها در محصول یا دستور دست‌کار استفاده شده‌اند." />
+          <EmptyState text="همه موجودی‌ها در محصول یا دستور سرویس استفاده شده‌اند." />
         ) : (
           <DataTable headers={['متریال', 'نوع', 'موجودی', 'ارزش']}>
             {unused.map((row) => (
@@ -520,7 +520,7 @@ function WhereUsedReport({ data }) {
   const rows = data.rows || []
   if (!rows.length) return <EmptyState text="محل مصرفی برای این فیلتر نیست." />
   return (
-    <Card title="محصول و دستور دست‌کار">
+    <Card title="محصول و دستور سرویس">
       <DataTable headers={['متریال', 'محل', 'مسیر', 'مقدار برای یک عدد']}>
         {rows.flatMap((row) => {
           const usages = row.usages || []

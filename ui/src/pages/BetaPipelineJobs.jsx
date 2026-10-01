@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { betaAssemblyApi, betaClearanceApi, betaCushionApi, betaFoamApi } from '../api/client'
 import Select from '../components/Select'
-import { Badge, Button, Card, EmptyState, Field, FilterBar, Modal, StatCard } from '../components/ui'
+import { Badge, Button, Card, EmptyState, Field, FilterBar, FormFooter, FormGrid, FormSection, Modal, StatCard } from '../components/ui'
 import { PAGE_GUIDE_DEFAULTS } from '../config/pageGuideDefaults'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmContext'
@@ -48,9 +48,9 @@ const PIPELINES = {
 
 const EMPTY = { sale_id: '', product_name: '', name: '', stage: '', progress: '0', note: '' }
 
-export default function BetaPipelineJobs() {
+export default function BetaPipelineJobs({ embedded = false, pipelineKey = '' }) {
   const { page } = parseRoute()
-  const meta = PIPELINES[page] || PIPELINES['factory-foam']
+  const meta = PIPELINES[pipelineKey || page] || PIPELINES['factory-foam']
   const { user } = useAuth()
   const confirm = useConfirm()
   const { saleOptions, applySale } = useBetaSaleSources()
@@ -166,14 +166,15 @@ export default function BetaPipelineJobs() {
   }
 
   return (
-    <div className={fromLegacy('page')}>
-      <div className={fromLegacy('page-head')}>
+    <div className={embedded ? '' : fromLegacy('page')}>
+      {!embedded && <div className={fromLegacy('page-head')}>
         <div>
           <h1>{meta.title}</h1>
-          <p className={fromLegacy('muted')}>کارهای ساخته‌شده از دست کار محصول هنگام دریافت سفارش کارخانه</p>
+          <p className={fromLegacy('muted')}>کارهای ساخته‌شده از سرویس محصول هنگام دریافت سفارش کارخانه</p>
         </div>
         {canManage && <Button onClick={openCreate}>{meta.createLabel}</Button>}
-      </div>
+      </div>}
+      {embedded && canManage && <Button onClick={openCreate}>{meta.createLabel}</Button>}
 
       {error && <div className={fromLegacy('alert error')}>{error}</div>}
 
@@ -230,6 +231,9 @@ export default function BetaPipelineJobs() {
       )}
 
       <Modal title={editing ? `ویرایش ${editing.code}` : meta.createLabel} open={modalOpen} onClose={() => setModalOpen(false)}>
+        <div className={fromLegacy('form')}>
+        <FormSection title="مشخصات کار" hint="سفارش کارخانه و دستور این ایستگاه را مشخص کنید.">
+        <FormGrid>
         <Field label="سفارش کارخانه">
           <Select value={form.sale_id} onChange={(v) => setForm(applySale(v, form))} options={saleOptions} />
         </Field>
@@ -245,10 +249,13 @@ export default function BetaPipelineJobs() {
         <Field label="پیشرفت (٪)">
           <input className={fromLegacy('ltr')} type="number" min="0" max="100" value={form.progress} onChange={(e) => setForm({ ...form, progress: e.target.value })} />
         </Field>
+        </FormGrid>
         <Field label="یادداشت">
           <textarea rows={2} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
         </Field>
-        <Button disabled={saving} onClick={save}>{saving ? 'در حال ذخیره…' : 'ذخیره'}</Button>
+        </FormSection>
+        <FormFooter><Button variant="ghost" onClick={() => setModalOpen(false)}>انصراف</Button><Button disabled={saving} onClick={save}>{saving ? 'در حال ذخیره…' : 'ذخیره'}</Button></FormFooter>
+        </div>
       </Modal>
     </div>
   )

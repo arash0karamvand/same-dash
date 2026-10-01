@@ -6,6 +6,7 @@ from django.db import transaction
 from django.db.models import Q
 
 from backend.models import InventoryTransaction, Material, Product, ProductMaterial
+from logic.lookups import require_active_code, stored_label
 
 MATERIAL_APPROVAL_LABELS = {
     Material.APPROVAL_PENDING: "در انتظار تایید اداری",
@@ -29,9 +30,9 @@ def material_to_dict(m):
         "id": m.id,
         "name": m.name,
         "usage_kind": getattr(m, "usage_kind", Material.USAGE_OTHER) or Material.USAGE_OTHER,
-        "usage_kind_display": dict(Material.USAGE_KIND_CHOICES).get(
+        "usage_kind_display": stored_label(
+            "material_usage_kind",
             getattr(m, "usage_kind", Material.USAGE_OTHER) or Material.USAGE_OTHER,
-            "سایر",
         ),
         "color_name": m.color_name or "",
         "color_hex": m.color_hex,
@@ -90,15 +91,16 @@ def compute_product_material_cost(product):
 
 
 def _parse_usage_kind(value, *, required=False):
-    kind = (value or "").strip()
-    if not kind:
+    if not (value or "").strip():
         if required:
             raise ValueError("نوع مصرف متریال را انتخاب کنید.")
-        return Material.USAGE_OTHER
-    allowed = {code for code, _ in Material.USAGE_KIND_CHOICES}
-    if kind not in allowed:
-        raise ValueError("نوع مصرف متریال نامعتبر است.")
-    return kind
+        return require_active_code(
+            "material_usage_kind",
+            Material.USAGE_OTHER,
+            "نوع مصرف متریال نامعتبر است.",
+            default=Material.USAGE_OTHER,
+        )
+    return require_active_code("material_usage_kind", value, "نوع مصرف متریال نامعتبر است.")
 
 
 def filter_materials(
@@ -154,7 +156,12 @@ def create_material(data, *, user=None, auto_approve=False):
         sku=(data.get("sku") or "").strip(),
         unit=(data.get("unit") or "متر").strip() or "متر",
         unit_cost=unit_cost,
-        valuation_method=(data.get("valuation_method") or Material.VALUATION_WEIGHTED),
+        valuation_method=require_active_code(
+            "material_valuation_method",
+            data.get("valuation_method"),
+            "روش ارزیابی نامعتبر است.",
+            default=Material.VALUATION_WEIGHTED,
+        ),
         reorder_point=_parse_reorder(data.get("reorder_point")),
         description=(data.get("description") or "").strip(),
         is_active=is_active,
@@ -171,7 +178,12 @@ def create_material(data, *, user=None, auto_approve=False):
             stock,
             unit_cost,
             freight_amount=data.get("freight_amount") or 0,
-            freight_treatment=data.get("freight_treatment") or "capitalize",
+            freight_treatment=require_active_code(
+                "material_freight_treatment",
+                data.get("freight_treatment"),
+                "نحوه ثبت حمل نامعتبر است.",
+                default="capitalize",
+            ),
             previous_unit_cost=0,
             reason="initial_stock",
             reference=f"material:{material.pk}",
@@ -229,7 +241,12 @@ def update_material(material, data):
             new_stock,
             receipt_unit_cost=data.get("receipt_unit_cost", incoming_cost if incoming_cost is not None else previous_cost),
             freight_amount=data.get("freight_amount") or 0,
-            freight_treatment=data.get("freight_treatment") or "capitalize",
+            freight_treatment=require_active_code(
+                "material_freight_treatment",
+                data.get("freight_treatment"),
+                "نحوه ثبت حمل نامعتبر است.",
+                default="capitalize",
+            ),
             previous_unit_cost=previous_cost,
             user=None,
         )
@@ -544,13 +561,20 @@ def compute_factory_order_material_requirements(factory_order, *, queue_aware=Tr
 
 
 def factory_order_materials_summary(factory_order):
-    from logic.workshop_recipes import workset_summary_from_lines
+    from logic.workshop_recipes import (
+        compute_workset_recipe_requirements,
+        workset_summary_from_lines,
+    )
 
     requirements = compute_factory_order_material_requirements(factory_order)
+    recipe_requirements = compute_workset_recipe_requirements(
+        list(factory_order.line_items.select_related("product").all())
+    )
     tracked = [item for item in requirements if item["available_stock"] is not None]
     material_cost_total = sum(int(item.get("line_cost") or 0) for item in requirements)
     return {
         "material_requirements": requirements,
+        "recipe_requirements": recipe_requirements,
         "material_cost_total": material_cost_total,
         "workset_summary": workset_summary_from_lines(list(factory_order.line_items.all())),
         "materials_deducted": bool(getattr(factory_order, "materials_deducted_at", None)),
@@ -561,6 +585,7 @@ def factory_order_materials_summary(factory_order):
         ),
         "materials_all_sufficient": all(item["sufficient"] for item in tracked) if tracked else True,
         "has_material_shortage": any(not item["sufficient"] for item in tracked),
+        "has_recipe_shortage": any(not item["sufficient"] for item in recipe_requirements),
     }
 
 

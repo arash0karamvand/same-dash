@@ -123,11 +123,6 @@ export function Modal({ title, open, onClose, children, wide = false, className 
     <div 
       className={cn(tw.modalOverlay, overlayClassName)} 
       onClick={onClose}
-      style={{
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
-        background: 'rgba(0, 0, 0, 0.4)'
-      }}
     >
       <div
         className={cn('acct-glass-modal', tw.modal, wide && tw.modalWide, isMobile && tw.modalSheet, className)}
@@ -138,32 +133,12 @@ export function Modal({ title, open, onClose, children, wide = false, className 
       >
         {isMobile && <div className={tw.modalSheetHandle} aria-hidden />}
         <div className={tw.modalHead}>
-          <h3 style={{ 
-            fontSize: '18px',
-            fontWeight: '700',
-            color: '#111827'
-          }}>
-            {title}
-          </h3>
+          <h3 className="m-0 font-display text-lg font-bold text-text">{title}</h3>
           <button 
             type="button" 
             className={tw.modalClose} 
             onClick={onClose} 
             aria-label="بستن"
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: '36px',
-              height: '36px',
-              borderRadius: '6px',
-              border: 'none',
-              background: 'transparent',
-              cursor: 'pointer',
-              transition: 'background var(--transition-fast)'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.background = '#F3F4F6'}
-            onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
           >
             <Icon name="x" size={20} />
           </button>
@@ -182,6 +157,31 @@ export function Field({ label, children, caps = false }) {
       {children}
     </label>
   )
+}
+
+export function FormSection({ title, hint, actions, children, plain = false, className = '' }) {
+  return (
+    <section className={cn(plain ? tw.formSectionPlain : tw.formSection, className)}>
+      {(title || hint || actions) && (
+        <div className={tw.formSectionHead}>
+          <div>
+            {title && <h4>{title}</h4>}
+            {hint && <p className={tw.formSectionHint}>{hint}</p>}
+          </div>
+          {actions}
+        </div>
+      )}
+      {children}
+    </section>
+  )
+}
+
+export function FormGrid({ children, className = '' }) {
+  return <div className={cn(tw.formGrid2, className)}>{children}</div>
+}
+
+export function FormFooter({ children, className = '' }) {
+  return <div className={cn(tw.formFooter, className)}>{children}</div>
 }
 
 export function FilterBar({ children, className = '' }) {

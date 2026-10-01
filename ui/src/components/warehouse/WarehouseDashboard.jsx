@@ -128,7 +128,7 @@ export function WarehouseDashboard({ summaryData, shortageData, coverageData, id
       </div>
 
       {/* نمودارها - Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: '24px', marginBottom: '24px' }}>
+      <div className="mb-6 grid grid-cols-1 gap-6 min-[1025px]:grid-cols-2">
         {/* نمودار موجودی به تفکیک نوع */}
         {summaryData?.by_usage_kind && summaryData.by_usage_kind.length > 0 && (
           <Card title="موجودی به تفکیک نوع مصرف">

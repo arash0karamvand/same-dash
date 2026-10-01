@@ -197,12 +197,13 @@ export default function WorkflowOrdersPage({
       summary.pipeline_end === 'assembly' && 'مونتاژ',
     ].filter(Boolean)
     if (!parts.length) return null
-    return <div className={fromLegacy('muted small')}>دست کار: {parts.join(' • ')}</div>
+    return <div className={fromLegacy('muted small')}>سرویس: {parts.join(' • ')}</div>
   }
 
   const renderMaterialRequirements = (o) => {
     const items = o.material_requirements || []
-    if (!items.length) {
+    const recipeItems = o.recipe_requirements || []
+    if (!items.length && !recipeItems.length) {
       return <span className={fromLegacy("muted")}>—</span>
     }
     return (
@@ -242,6 +243,24 @@ export default function WorkflowOrdersPage({
                 بهای ردیف: <strong>{formatMoney(item.line_cost)}</strong>
               </span>
             )}
+            {item.sufficient === false && (
+              <Badge color="var(--danger)">کمبود {item.shortage}</Badge>
+            )}
+          </div>
+        ))}
+        {recipeItems.map((item) => (
+          <div
+            key={`recipe-${item.recipe_id}`}
+            className={fromLegacy(`order-material-row${item.sufficient === false ? ' shortage' : ''}`)}
+          >
+            <span className={fromLegacy("order-material-name")}>
+              {item.kind_label} — {item.name}
+              {item.color_name ? ` (${item.color_name})` : ''}
+            </span>
+            <span className={fromLegacy("order-material-qty")}>
+              نیاز: <strong>{item.required_quantity}</strong> {item.unit}
+              {' — '}موجود: <strong>{item.available_stock}</strong>
+            </span>
             {item.sufficient === false && (
               <Badge color="var(--danger)">کمبود {item.shortage}</Badge>
             )}
@@ -424,7 +443,7 @@ export default function WorkflowOrdersPage({
                     {showMaterials && renderWorksetSummary(o)}
                   </div>
                 )}
-                {showMaterials && (o.material_requirements || []).length > 0 && (
+                {showMaterials && ((o.material_requirements || []).length > 0 || (o.recipe_requirements || []).length > 0) && (
                   <div className={fromLegacy("order-materials-mobile")} style={{ marginTop: 8 }}>
                     <div className={fromLegacy("muted small")} style={{ marginBottom: 4 }}>متریال</div>
                     {renderMaterialRequirements(o)}

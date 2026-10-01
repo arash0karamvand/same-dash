@@ -62,6 +62,7 @@ export default function SaleDiscountFields({
   customerSelected = false,
   customerId = null,
   excludeSaleId = null,
+  discountTypes = DISCOUNT_TYPES,
 }) {
   const [quote, setQuote] = useState(null)
   const autoKeyRef = useRef('')
@@ -130,7 +131,7 @@ export default function SaleDiscountFields({
     <div className={fromLegacy("sale-discount-block")}>
       <Field label="نوع تخفیف">
         <div className={fromLegacy("discount-type-picker")} role="group" aria-label="نوع تخفیف">
-          {DISCOUNT_TYPES.map((opt) => {
+          {(discountTypes.length ? discountTypes : DISCOUNT_TYPES).map((opt) => {
             const disabled = (opt.value === 'wallet' && walletDisabled)
               || (opt.value === 'cashback' && cashbackDisabled)
             let title

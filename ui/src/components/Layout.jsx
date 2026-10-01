@@ -115,10 +115,8 @@ export default function Layout({ portal, page, onNavigate, children }) {
   const showTabletMenu = isCompactNav && !isMobile
   const drawerOpen = menuOpen && !isMobile
 
-  const shellMenuOpen = isMobile ? mobileMenuOpen : menuOpen
-
   return (
-    <div className={cn('layout', tw.layout, isMobile && 'layout--mobile', shellMenuOpen && 'layout--menu-open', !isMobile && menuOpen && 'menu-open')}>
+    <div className={tw.layout}>
       <button
         type="button"
         className={cn(tw.sidebarBackdrop, drawerOpen ? tw.sidebarBackdropOpen : tw.sidebarBackdropClosed)}
@@ -200,7 +198,7 @@ export default function Layout({ portal, page, onNavigate, children }) {
 
       <div className={tw.main}>
         <div className={tw.mainChrome}>
-          <header className={cn('topbar', tw.topbar, topbarScrolled && tw.topbarScrolled, isMobile && tw.topbarMobile)}>
+          <header className={cn(tw.topbar, topbarScrolled && tw.topbarScrolled, isMobile && tw.topbarMobile)}>
             <div className={tw.topbarStart}>
               {isCompactNav && (
                 <button
@@ -261,7 +259,7 @@ export default function Layout({ portal, page, onNavigate, children }) {
           )}
         </div>
 
-        <main className={cn('content', tw.content, isMobile && 'content--mobile')}>
+        <main className={tw.content}>
           <PageGuideProvider>
             {children}
             <SiteFooterGuide pageKey={page} />

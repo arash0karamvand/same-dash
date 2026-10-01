@@ -330,12 +330,33 @@ def _append_note(existing, note):
     return log
 
 
+def _service_flow(kind, value):
+    from logic.lookups import require_active_code
+
+    if kind != BetaCarpentryWorkshop.KIND_SATELLITE:
+        return ""
+    return require_active_code(
+        "merchant_service_flow",
+        value,
+        "جهت سرویس بازرگان نامعتبر است.",
+        default="both",
+    )
+
+
+def _service_flow_label(flow):
+    from logic.lookups import stored_label
+
+    return stored_label("merchant_service_flow", flow)
+
+
 def workshop_to_dict(workshop, current_count=None):
     return {
         "id": workshop.id,
         "name": workshop.name,
         "kind": workshop.kind,
         "kind_display": label_of(CAT_WORKSHOP_KIND, workshop.kind),
+        "service_flow": workshop.service_flow or "",
+        "service_flow_display": _service_flow_label(workshop.service_flow),
         "is_active": workshop.is_active,
         "current_count": current_count if current_count is not None else 0,
     }
@@ -487,6 +508,7 @@ def create_workshop(data):
     workshop = BetaCarpentryWorkshop.objects.create(
         name=name,
         kind=kind,
+        service_flow=_service_flow(kind, data.get("service_flow")),
         is_active=bool(data.get("is_active", True)),
     )
     return workshop
@@ -500,6 +522,8 @@ def update_workshop(workshop, data):
         workshop.name = name
     if "kind" in data:
         workshop.kind = _choice(data.get("kind"), set(codes(CAT_WORKSHOP_KIND)), "نوع واحد")
+    if "kind" in data or "service_flow" in data:
+        workshop.service_flow = _service_flow(workshop.kind, data.get("service_flow", workshop.service_flow))
     if "is_active" in data:
         workshop.is_active = bool(data.get("is_active"))
     workshop.save()

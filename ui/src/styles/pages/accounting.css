@@ -3,7 +3,10 @@
 .accounting-page--v2 {
   --acct-sidebar-w: 160px;
   --acct-tree-w: min(240px, 22vw);
-  --acct-gap: 8px;
+  --acct-gap: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
   max-width: 100%;
   width: 100%;
   padding: 0;
@@ -25,9 +28,9 @@
   flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 8px;
-  padding: 10px 14px;
+  gap: 12px;
+  margin: 0;
+  padding: 14px 16px;
   background: var(--acct-glass-bg, var(--layer-1));
   backdrop-filter: var(--acct-glass-blur, blur(16px));
   -webkit-backdrop-filter: var(--acct-glass-blur, blur(16px));
@@ -205,7 +208,11 @@
   gap: 8px;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  padding-bottom: 4px;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--acct-glass-border, var(--border-subtle));
+  border-radius: 14px;
+  background: var(--acct-glass-bg, var(--layer-1));
   scrollbar-width: thin;
 }
 
@@ -251,13 +258,8 @@
   padding: 0;
 }
 
-/* بهینه‌سازی فضا در صفحات با جدول */
 .accounting-page--v2 .acct-v2-main > * {
-  margin-bottom: var(--acct-gap);
-}
-
-.accounting-page--v2 .acct-v2-main > *:last-child {
-  margin-bottom: 0;
+  margin: 0;
 }
 
 /* Report level nav */
@@ -535,7 +537,13 @@
   gap: 10px;
 }
 
-@media (min-width: 480px) {
+@media (min-width: 768px) {
+  .accounting-amount-sections {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1441px) {
   .accounting-amount-sections {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -985,8 +993,8 @@
   align-items: center;
   gap: 2px;
   min-height: 42px;
-  padding: 4px;
-  margin-bottom: var(--acct-gap);
+  padding: 6px;
+  margin: 0;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
   background: var(--layer-0);
@@ -1024,7 +1032,7 @@
   justify-content: space-between;
   gap: 16px;
   min-height: 58px;
-  padding: 10px 14px;
+  padding: 16px;
   border: 1px solid var(--acct-glass-border, var(--border-subtle));
   border-radius: 16px;
   background: var(--acct-glass-bg, var(--layer-1));
@@ -1065,7 +1073,7 @@
 
 .acct-erp-toolbar {
   min-height: 44px;
-  padding: 6px 10px;
+  padding: 10px 12px;
   border: 1px solid var(--acct-glass-border, var(--border-subtle));
   border-radius: 14px;
   background: var(--acct-glass-bg, var(--layer-1));
@@ -1127,8 +1135,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 46px;
-  padding: 7px 10px;
+  min-height: 52px;
+  padding: 14px 16px;
   border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -1139,6 +1147,7 @@
 
 .acct-erp-panel-body {
   min-width: 0;
+  padding: 16px;
 }
 
 .acct-erp-data-panel .accounting-table th:first-child,
@@ -1200,20 +1209,11 @@
     padding: 6px 8px;
   }
 
-  .acct-v2-section-label,
-  .acct-v2-ledger-badge {
-    display: none;
-  }
-
   .acct-v2-mobile-pill {
-    min-height: 34px;
-    padding: 5px 9px;
-    border-radius: 7px;
-    font-size: 0.72rem;
-  }
-
-  .acct-v2-mobile-nav {
-    display: none;
+    min-height: 40px;
+    padding: 6px 12px;
+    border-radius: 12px;
+    font-size: 0.78rem;
   }
 
   .acct-v2-subnav {
@@ -1230,17 +1230,23 @@
     white-space: nowrap;
   }
 
+  .acct-erp-panel-body,
+  .table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
   .accounting-table {
-    width: 100%;
-    table-layout: fixed;
-    font-size: 0.68rem;
+    width: max-content;
+    min-width: 100%;
+    table-layout: auto;
+    font-size: 0.78rem;
   }
 
   .accounting-table th,
   .accounting-table td {
-    padding: 0.3rem 0.35rem;
-    white-space: normal;
-    overflow-wrap: anywhere;
+    padding: 0.45rem 0.55rem;
+    white-space: nowrap;
   }
 
   .accounting-table .col-numeric,
@@ -1307,14 +1313,6 @@
 .accounting-table tr.is-selected {
   background: var(--layer-3) !important;
   box-shadow: inset -3px 0 0 var(--accent);
-}
-
-/* Chart of accounts workspace */
-.acct-chart-workspace {
-  display: grid;
-  grid-template-columns: minmax(440px, 1fr) minmax(240px, 320px);
-  gap: var(--acct-gap);
-  align-items: start;
 }
 
 .acct-chart-inspector {
@@ -1427,28 +1425,8 @@
   color: var(--text-secondary, #666);
 }
 
-@media (max-width: 1200px) {
-  .acct-chart-workspace {
-    grid-template-columns: 1fr;
-  }
 
-  .acct-chart-inspector {
-    position: static;
-    max-height: none;
-  }
-}
-
-/* ── Excel import ── */
-.excel-uploader-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1.4fr) minmax(240px, 0.9fr);
-  gap: 10px;
-  align-items: start;
-}
-
-.excel-uploader-layout .excel-result-panel {
-  grid-column: 1 / -1;
-}
+/* چیدمان آپلود اکسل با کلاس Tailwind روی خود کامپوننت است. */
 
 .excel-dropzone {
   display: flex;

@@ -132,7 +132,7 @@ DEFAULT_LOOKUPS = [
     ("workflow_stage", "merchant_assigned", "بازرگان — صف کارخانه", 8, {"color": "#a855f7"}),
     ("workflow_stage", "completed", "تکمیل شده", 9, {"color": "#10b981"}),
     ("beta_workshop_kind", "internal", "داخل کارخانه", 0, {"color": "#6366f1"}),
-    ("beta_workshop_kind", "satellite", "کارگاه اقماری", 1, {"color": "#a855f7"}),
+    ("beta_workshop_kind", "satellite", "بازرگان", 1, {"color": "#a855f7"}),
     ("beta_carpentry_kind", "build", "ساخت کلاف", 0, {}),
     ("beta_carpentry_kind", "repair", "تعمیرات", 1, {}),
     ("beta_carpentry_status", "in_progress", "در حال ساخت / تعمیر", 0, {"color": "#f59e0b"}),

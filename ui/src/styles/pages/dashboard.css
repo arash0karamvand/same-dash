@@ -91,7 +91,7 @@
 }
 
 .dashboard-sales-stats {
-  grid-template-columns: repeat(3, minmax(16.5rem, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   margin-bottom: 8px;
 }
 
@@ -99,8 +99,22 @@
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+@media (max-width: 1440px) {
+  .dashboard-sales-stats,
+  .dashboard-meta-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .dashboard-sales-stats,
+  .dashboard-meta-stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .stat-card--amount {
-  min-width: min(100%, 16.5rem);
+  min-width: 0;
 }
 
 .stat-card--amount .stat-body {
@@ -109,14 +123,9 @@
 }
 
 .stat-card--amount .stat-value {
-  white-space: nowrap;
-  overflow: visible;
-  min-width: 14ch;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  min-width: 0;
   font-size: clamp(1.05rem, 1.7vw, 1.5rem);
 }
 
-@media (max-width: 1100px) {
-  .stat-grid.dashboard-sales-stats {
-    grid-template-columns: 1fr;
-  }
-}

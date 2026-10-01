@@ -1,4 +1,4 @@
-"""دست مبلمان — قطعات با تعداد در کلاف، رنگ و پارچه در محصول."""
+"""سرویس مبلمان — قطعات با تعداد در کلاف، رنگ و پارچه در محصول."""
 
 from decimal import Decimal, InvalidOperation
 
@@ -229,7 +229,7 @@ def _sync_pieces(workset, pieces):
 def create_workset(data):
     name = (data.get("name") or "").strip()
     if not name:
-        raise ValueError("نام دست الزامی است.")
+        raise ValueError("نام سرویس الزامی است.")
     workset = FurnitureWorkset.objects.create(
         name=name,
         design_style=(data.get("design_style") or "").strip(),
@@ -249,7 +249,7 @@ def update_workset(workset, data):
     if "name" in data:
         name = (data.get("name") or "").strip()
         if not name:
-            raise ValueError("نام دست الزامی است.")
+            raise ValueError("نام سرویس الزامی است.")
         workset.name = name
     if "design_style" in data:
         workset.design_style = (data.get("design_style") or "").strip()
@@ -320,7 +320,7 @@ def normalize_suite_config(workset, raw_pieces=None):
 
     composition = list(workset.pieces.all())
     if not composition:
-        raise ValueError("این دست قطعه‌ای ندارد. اول در تولید کلاف تعداد قطعات را بگذارید.")
+        raise ValueError("این سرویس قطعه‌ای ندارد. اول در تولید کلاف تعداد قطعات را بگذارید.")
 
     incoming = {}
     for item in raw_pieces or []:

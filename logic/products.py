@@ -505,6 +505,7 @@ def resolve_line_item_from_catalog(item):
         if product:
             variant = product.variants.filter(is_active=True).order_by("sort_order", "id").first()
 
+    quoted = None
     if product:
         name = product.name
         product_model = product.product_model or ""
@@ -512,12 +513,21 @@ def resolve_line_item_from_catalog(item):
         if variant:
             color_name = variant.color_name
             color_hex = variant.color_hex
-        price = resolve_catalog_price(product)
+        from logic.workshop_recipes import sale_finish_quote
+
+        quoted = sale_finish_quote(product, item)
+        price = quoted["unit_price"] if quoted else resolve_catalog_price(product)
+        if quoted:
+            fabric = quoted["fabric_label"]
+            if quoted["paint_label"]:
+                color_name = quoted["paint_label"]
 
     if not product or not name:
         return None
     require_price = item.get("require_price", True)
     if require_price and price <= 0:
+        if quoted:
+            raise ValueError(f"قیمت «{name}» از متراژ پارچه حساب نشد.")
         raise ValueError(f"محصول «{name}» قیمت ندارد — ابتدا در بخش محصولات قیمت را تنظیم کنید.")
 
     frame_id = item.get("frame_id") or product.frame_id
@@ -563,7 +573,7 @@ def resolve_line_item_from_catalog(item):
         "frame": frame,
         "frame_model": frame_model,
         "frame_config": frame_config or {},
-        "workset_config": _resolve_line_workset(product, item),
+        "workset_config": quoted["workset_config"] if quoted else _resolve_line_workset(product, item),
         "furniture_workset": furniture_workset,
     }
 

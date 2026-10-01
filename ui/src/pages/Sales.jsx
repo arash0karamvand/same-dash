@@ -23,7 +23,7 @@ import AttendanceWidget from '../components/AttendanceWidget'
 import PersianDateInput from '../components/PersianDateInput'
 import SaleDiscountFields, { saleBalanceDue } from '../components/SaleDiscountFields'
 import Select from '../components/Select'
-import { Badge, Button, Card, EmptyState, Field, FilterBar, LoadMoreButton, Modal, StatCard } from '../components/ui'
+import { Badge, Button, Card, EmptyState, Field, FilterBar, FormFooter, FormGrid, FormSection, LoadMoreButton, Modal, StatCard } from '../components/ui'
 import { PAGE_SIZE, withPageParams } from '../config/pagination'
 import PersonalSalesPanel from '../components/PersonalSalesPanel'
 import PersianMonthPicker from '../components/PersianMonthPicker'
@@ -86,11 +86,76 @@ const EMPTY_EDIT = {
   invoice_number: '',
   payment_method: 'cash',
   credit_override_reason: '',
+  order_kind: 'normal',
   amount: '',
   discount_type: 'amount',
   discount_value: '',
   vat_rate: '0',
   paid_amount: '',
+  delivery_date: '',
+  line_items: [],
+  installments: [],
+  seat_count: '',
+}
+
+function lineFromSale(item) {
+  return {
+    product_id: item.product_id || '',
+    variant_id: item.variant_id || '',
+    frame_id: item.frame_id || '',
+    frame_model_id: item.frame_model_id || '',
+    frame_config: item.frame_config || {},
+    workset_config: item.workset_config || {},
+    furniture_workset_id: item.furniture_workset_id || '',
+    furniture_workset_name: item.furniture_workset_name || '',
+    product_name: item.product_name || '',
+    product_model: item.product_model || '',
+    fabric: item.fabric || '',
+    color_name: item.color_name || '',
+    color_hex: item.color_hex || '',
+    quantity: item.quantity || 1,
+    unit_price: item.unit_price != null ? String(item.unit_price) : '',
+    fabric_recipe_id: item.fabric_recipe_id || item.workset_config?.sale_choices?.fabric_recipe_id || '',
+    paint_recipe_id: item.paint_recipe_id || item.workset_config?.sale_choices?.paint_recipe_id || '',
+    price_note: '',
+  }
+}
+
+function linePayload(items) {
+  return items.map((item) => ({
+    product_id: item.product_id,
+    variant_id: item.variant_id || null,
+    quantity: Number(item.quantity || 1),
+    frame_id: item.frame_id || null,
+    frame_model_id: item.frame_model_id || null,
+    frame_config: item.frame_config || {},
+    workset_config: item.workset_config || {},
+    furniture_workset_id: item.furniture_workset_id || null,
+    fabric_recipe_id: item.fabric_recipe_id || item.workset_config?.sale_choices?.fabric_recipe_id || null,
+    paint_recipe_id: item.paint_recipe_id || item.workset_config?.sale_choices?.paint_recipe_id || null,
+  }))
+}
+
+function saleReturnedFromOffice(sale) {
+  return (sale?.description || '').includes('[عدم تایید اداری')
+}
+
+function SaleFollowup({ sale }) {
+  const doc = sale.accounting_document
+  const destination = sale.fulfillment_route_display
+  const sent = sale.workflow_stage && sale.workflow_stage !== 'pending_branch'
+  return (
+    <div className={fromLegacy('muted small')}>
+      {saleReturnedFromOffice(sale) && <Badge color="var(--warning)">برگشت از اداری</Badge>}
+      {doc?.status_label && (
+        <span>
+          {' '}سند حسابداری: {doc.status_label}
+          {doc.document_code ? ` (${doc.document_code})` : ''}
+        </span>
+      )}
+      {destination ? <span> · مقصد CRM: {destination}</span> : sent ? <span> · مقصد را CRM انتخاب می‌کند</span> : null}
+    </div>
+  )
 }
 
 function showInstallmentSection(form, isShop) {
@@ -157,6 +222,8 @@ function validateSaleSubmit({
     return 'برای بیعانیه، تاریخ تحویل الزامی است.'
   }
   if (form.line_items?.length) {
+    const unfinished = form.line_items.find((i) => (i.workset_config?.pieces || []).length && !Number(i.unit_price))
+    if (unfinished) return unfinished.price_note || 'برای هر سرویس رنگ بدنه و پارچه را انتخاب کنید. اگر متراژ مصرف در تعریف کار نباشد، قیمت اعلام نمی‌شود.'
     const invalid = form.line_items.some((i) => !i.product_id || !Number(i.unit_price))
     if (invalid) return 'هر ردیف باید محصول با قیمت تعریف‌شده در کاتالوگ داشته باشد.'
     const amount = form.line_items.reduce(
@@ -260,6 +327,8 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
   const confirm = useConfirm()
   const { choices, branchOptions, stockLocations } = useConfig()
   const paymentMethods = choices('payment_method')
+  const paymentStatuses = choices('payment_status')
+  const discountTypes = choices('discount_type')
   const orderKinds = choices('order_kind')
   const accountingModes = choices('accounting_mode')
   const orderStatusColors = Object.fromEntries(
@@ -601,32 +670,42 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
 
 
 
-  const openEdit = (sale) => {
-
-    setEditing(sale)
-
-    setForm({
-
-      ...EMPTY_EDIT,
-
-      description: sale.description || '',
-
-      invoice_number: sale.invoice_number || '',
-
-      payment_method: sale.payment_method || 'cash',
-
-      amount: String(sale.amount ?? ''),
-      discount_type: sale.discount_type || 'amount',
-      discount_value: String(sale.discount_value ?? sale.discount ?? 0),
-      vat_rate: String(sale.vat_rate ?? 0),
-
-      paid_amount: String(sale.paid_amount ?? 0),
-
-    })
-
+  const openEdit = async (sale) => {
     setFormError('')
+    setEditing(sale)
     setModalOpen(true)
-
+    try {
+      const full = await salesApi.get(sale.id)
+      const pending = !full.workflow_stage || full.workflow_stage === 'pending_branch'
+      setEditing(full)
+      setForm({
+        ...EMPTY_EDIT,
+        description: full.description || '',
+        invoice_number: full.invoice_number || '',
+        payment_method: full.payment_method || 'cash',
+        order_kind: full.order_kind || 'normal',
+        amount: String(full.amount ?? ''),
+        discount_type: full.discount_type || 'amount',
+        discount_value: String(full.discount_value ?? full.discount ?? 0),
+        vat_rate: String(full.vat_rate ?? 0),
+        paid_amount: String(full.paid_amount ?? 0),
+        delivery_date: full.delivery_date || '',
+        credit_override_reason: full.credit_override_reason || '',
+        line_items: pending ? (full.line_items || []).map(lineFromSale) : [],
+        installments: full.installments || [],
+        seat_count: full.seat_count ? String(full.seat_count) : '',
+      })
+      if (full.customer_id) {
+        setSelectedCustomer({
+          id: full.customer_id,
+          full_name: full.customer_name,
+          wallet_balance: full.customer_wallet_balance,
+          cashback_balance: full.customer_cashback_balance,
+        })
+      }
+    } catch (e) {
+      setFormError(e.message)
+    }
   }
 
 
@@ -777,16 +856,28 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
     try {
       setFormError('')
       if (editing) {
-        await salesApi.update(editing.id, {
+        const pending = !editing.workflow_stage || editing.workflow_stage === 'pending_branch'
+        const payload = {
           description: form.description,
           invoice_number: form.invoice_number,
           payment_method: form.payment_method,
+          order_kind: form.order_kind,
+          delivery_date: form.delivery_date || null,
           amount: Number(form.amount),
           discount_type: form.discount_type,
           discount_value: Number(form.discount_value) || 0,
           vat_rate: Number(form.vat_rate) || 0,
           paid_amount: Number(form.paid_amount),
-        })
+        }
+        if (pending && form.line_items?.length) {
+          payload.line_items = linePayload(form.line_items)
+          if (form.seat_count) payload.seat_count = Number(form.seat_count)
+          payload.amount = form.line_items.reduce(
+            (sum, item) => sum + Number(item.unit_price || 0) * Number(item.quantity || 1),
+            0,
+          )
+        }
+        await salesApi.update(editing.id, payload)
       } else {
         const payload = {
           amount: Number(form.amount),
@@ -824,16 +915,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
         }
 
         if (form.line_items?.length) {
-          payload.line_items = form.line_items.map((i) => ({
-            product_id: i.product_id,
-            variant_id: i.variant_id || null,
-            quantity: Number(i.quantity || 1),
-            frame_id: i.frame_id || null,
-            frame_model_id: i.frame_model_id || null,
-            frame_config: i.frame_config || {},
-            workset_config: i.workset_config || {},
-            furniture_workset_id: i.furniture_workset_id || null,
-          }))
+          payload.line_items = linePayload(form.line_items)
           if (form.seat_count) payload.seat_count = Number(form.seat_count)
           payload.amount = form.line_items.reduce(
             (s, i) => s + Number(i.unit_price || 0) * Number(i.quantity || 1),
@@ -1108,12 +1190,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
               <Select
                 value={filters.payment_status}
                 onChange={(v) => setFilters({ ...filters, payment_status: v })}
-                options={[
-                  { value: '', label: 'همه' },
-                  { value: 'paid', label: 'پرداخت‌شده' },
-                  { value: 'unpaid', label: 'پرداخت‌نشده' },
-                  { value: 'installment', label: 'قسطی' },
-                ]}
+                options={[{ value: '', label: 'همه' }, ...paymentStatuses]}
                 placeholder="همه"
               />
             </Field>
@@ -1197,7 +1274,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
 
                   {isShop && branchQueueView && <td>{s.branch_label || s.branch || '—'}</td>}
 
-                  <td>{s.customer_name}</td>
+                  <td>{s.customer_name}<SaleFollowup sale={s} /></td>
 
                   <td>
                     <Badge color={resolvedOrderStatusColors[s.order_status] || 'var(--accent)'}>
@@ -1312,7 +1389,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
                         {s.order_kind_display}
                       </Badge>
                     </div>
-                    <div className={fromLegacy("shop-office-card-customer")}>{s.customer_name}</div>
+                    <div className={fromLegacy("shop-office-card-customer")}>{s.customer_name}<SaleFollowup sale={s} /></div>
                     <div className={fromLegacy("shop-office-card-grid")}>
                       <div className={fromLegacy("shop-office-card-stat")}>
                         <span className={fromLegacy("shop-office-card-stat-label")}>مبلغ نهایی</span>
@@ -1379,6 +1456,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
                 <div className={fromLegacy("m-card-head")}>
                   <div>
                     <strong>{s.customer_name}</strong>
+                    <SaleFollowup sale={s} />
                     <div className={fromLegacy("muted small")}>{s.invoice_number || `#${s.id}`}</div>
                     {isShop && branchQueueView && (
                       <div className={fromLegacy("muted small")}>{s.branch_label || s.branch || '—'}</div>
@@ -1482,10 +1560,33 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
 
             <>
 
-              <p className={fromLegacy("muted")}>مشتری: {editing.customer_name}</p>
+              <FormSection title="مشتری">
+                <p className={fromLegacy("muted")}>مشتری: {editing.customer_name}</p>
+                <SaleFollowup sale={editing} />
+              </FormSection>
 
-              <Field label="مبلغ"><MoneyInput min="1" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required /></Field>
+              {(!editing.workflow_stage || editing.workflow_stage === 'pending_branch') && (
+                <FormSection title="سرویس" hint="رنگ بدنه و پارچه را می‌توانید اصلاح کنید. اسفنج و متراژ از کار می‌آیند و قیمت دوباره حساب می‌شود.">
+                  <ProductLines
+                    lines={form.line_items}
+                    seatCount={form.seat_count}
+                    onSeatCountChange={(seat_count) => setForm({ ...form, seat_count })}
+                    onChange={(line_items) => {
+                      const amount = line_items.reduce(
+                        (sum, item) => sum + Number(item.unit_price || 0) * Number(item.quantity || 1),
+                        0,
+                      )
+                      setForm({ ...form, line_items, amount: amount ? String(amount) : form.amount })
+                    }}
+                  />
+                </FormSection>
+              )}
 
+              {!(form.line_items?.length) && (
+                <Field label="مبلغ"><MoneyInput min="1" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required /></Field>
+              )}
+
+              <FormSection title="تخفیف و پرداخت">
               <SaleDiscountFields
                 form={form}
                 setForm={setForm}
@@ -1493,6 +1594,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
                 customerSelected={customerSelected}
                 customerId={editing?.customer_id}
                 excludeSaleId={editing?.id}
+                discountTypes={discountTypes}
               />
 
               <Field label="نرخ مالیات ارزش افزوده (%)">
@@ -1521,9 +1623,14 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
                 </Field>
               )}
 
+              </FormSection>
+              <FormSection title="فاکتور">
               <Field label="شماره فاکتور"><input className={fromLegacy("ltr")} value={form.invoice_number} onChange={(e) => setForm({ ...form, invoice_number: e.target.value })} /></Field>
-
+              <Field label="تاریخ تحویل">
+                <PersianDateInput value={form.delivery_date} onChange={(v) => setForm({ ...form, delivery_date: v })} {...shopDeliveryDateProps} />
+              </Field>
               <Field label="توضیحات"><textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} /></Field>
+              </FormSection>
 
             </>
 
@@ -1531,6 +1638,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
 
             <>
 
+              <FormSection title="مشتری و شعبه">
               <CustomerSearch
                 value={selectedCustomer}
                 onSelect={(c) => {
@@ -1560,6 +1668,9 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
                 </Field>
               )}
 
+              </FormSection>
+              <FormSection title="نوع فروش و موجودی">
+              <FormGrid>
               <Field label="نوع فروش">
                 <Select
                   value={form.order_kind}
@@ -1599,16 +1710,21 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
               </Field>
 
 
+              </FormGrid>
+              </FormSection>
+              <FormSection title="سرویس" hint="رنگ بدنه و پارچه را انتخاب کنید. اسفنج، تسمه، کوسن و متراژ از تعریف کار می‌آیند.">
               <ProductLines
                 lines={form.line_items}
                 seatCount={form.seat_count}
                 onSeatCountChange={(seat_count) => setForm({ ...form, seat_count })}
-                stockSourceKey={
-                  form.stock_source_kind === 'warehouse' && form.stock_source_warehouse_id
-                    ? `warehouse:${form.stock_source_warehouse_id}`
-                    : form.stock_source_kind === 'branch' && form.stock_source_branch
-                      ? `branch:${form.stock_source_branch}`
-                      : ''
+                stockSourceLabel={
+                  (stockLocations || []).find((item) => item.key === (
+                    form.stock_source_kind === 'warehouse' && form.stock_source_warehouse_id
+                      ? `warehouse:${form.stock_source_warehouse_id}`
+                      : form.stock_source_kind === 'branch' && form.stock_source_branch
+                        ? `branch:${form.stock_source_branch}`
+                        : ''
+                  ))?.label || ''
                 }
                 onChange={(line_items) => {
                   const amount = line_items.reduce(
@@ -1627,12 +1743,15 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
                 <Field label="مبلغ"><MoneyInput min="1" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required /></Field>
               )}
 
+              </FormSection>
+              <FormSection title="تخفیف و پرداخت">
               <SaleDiscountFields
                 form={form}
                 setForm={setForm}
                 walletBalance={walletBalance}
                 customerSelected={customerSelected}
                 customerId={selectedCustomer?.id}
+                discountTypes={discountTypes}
               />
 
               <Field label="نرخ مالیات ارزش افزوده (%)">
@@ -1706,6 +1825,8 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
                 />
               )}
 
+              </FormSection>
+              <FormSection title="فاکتور">
               <Field label="شماره فاکتور"><input className={fromLegacy("ltr")} value={form.invoice_number} onChange={(e) => setForm({ ...form, invoice_number: e.target.value })} placeholder="خالی = شماره سیستمی" /></Field>
 
               {!isDeposit(form) && (
@@ -1719,6 +1840,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
               )}
 
               <Field label="توضیحات فاکتور"><textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={2} /></Field>
+              </FormSection>
 
             </>
 
@@ -1727,7 +1849,9 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
           {formError ? (
             <div ref={formErrorRef} className={fromLegacy("alert-error")} role="alert">{formError}</div>
           ) : null}
-          <Button type="submit" disabled={!editing && Boolean(saleGate?.blocked)}>{editing ? 'ذخیره تغییرات' : 'ثبت'}</Button>
+          <FormFooter>
+            <Button type="submit" disabled={!editing && Boolean(saleGate?.blocked)}>{editing ? 'ذخیره تغییرات' : 'ثبت'}</Button>
+          </FormFooter>
 
         </form>
 
@@ -1745,11 +1869,13 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
               <div className={fromLegacy("alert-error")} role="alert">{formError}</div>
             ) : null}
 
-            <p className={fromLegacy("muted")}>مانده: {formatMoney(payModal.balance_due)}</p>
-
-            <Field label="مبلغ"><MoneyInput min="1" max={payModal.balance_due} value={payAmount} onChange={(e) => setPayAmount(e.target.value)} required /></Field>
-
-            <Button type="submit">ثبت</Button>
+            <FormSection title="پرداخت">
+              <p className={fromLegacy("muted")}>مانده: {formatMoney(payModal.balance_due)}</p>
+              <Field label="مبلغ"><MoneyInput min="1" max={payModal.balance_due} value={payAmount} onChange={(e) => setPayAmount(e.target.value)} required /></Field>
+            </FormSection>
+            <FormFooter>
+              <Button type="submit">ثبت</Button>
+            </FormFooter>
 
           </form>
 

@@ -9,7 +9,7 @@ export default function MobileBottomNav({ user, portals, currentPortal, menuOpen
   const items = (portals || []).filter((p) => canSeePortal(user, p)).slice(0, 4)
 
   return (
-    <nav className={cn('mobile-bottom-nav', tw.mobileBottomNav)} aria-label="پورتال‌ها">
+    <nav className={tw.mobileBottomNav} aria-label="پورتال‌ها">
       {items.map((p) => (
         <button
           key={p.id}

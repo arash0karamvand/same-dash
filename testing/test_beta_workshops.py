@@ -98,8 +98,12 @@ class BetaCarpentryLogicTests(TestCase):
         self.assertEqual(BetaCarpentryWorkshop.objects.count(), 0)
 
     def test_workshop_crud_and_blocked_delete(self):
-        workshop = L.create_workshop({"name": "نجاری تست", "kind": "satellite"})
+        workshop = L.create_workshop({"name": "نجاری تست", "kind": "satellite", "service_flow": "give"})
         self.assertEqual(workshop.kind, BetaCarpentryWorkshop.KIND_SATELLITE)
+        self.assertEqual(workshop.service_flow, BetaCarpentryWorkshop.FLOW_GIVE)
+        self.assertEqual(L.workshop_to_dict(workshop)["service_flow_display"], "سرویس را به بازرگان می‌دهیم تا بسازد")
+        with self.assertRaisesMessage(ValueError, "جهت سرویس بازرگان نامعتبر است"):
+            L.create_workshop({"name": "نامعتبر", "kind": "satellite", "service_flow": "sideways"})
         L.update_workshop(workshop, {"name": "نجاری ویرایش", "is_active": False})
         workshop.refresh_from_db()
         self.assertEqual(workshop.name, "نجاری ویرایش")

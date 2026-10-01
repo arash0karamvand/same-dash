@@ -50,11 +50,11 @@ export const tw = {
   statBar: 'w-1 shrink-0 rounded-capsule',
   statBody: 'flex flex-col gap-1.5 px-[22px] py-[18px]',
   statLabel: 'text-sm font-medium text-muted',
-  statValue: 'font-display text-2xl font-bold tracking-tight text-text whitespace-nowrap max-bp560:text-xl',
+  statValue: 'font-display text-2xl font-bold tracking-tight text-text whitespace-nowrap max-compact:whitespace-normal max-compact:break-words max-bp560:text-xl',
   statHint: 'text-xs text-muted',
-  statGrid: 'mb-2 grid grid-cols-[1.3fr_1fr_1fr_1fr] gap-5 max-bp1100:grid-cols-2 max-bp560:grid-cols-1',
-  statsGrid: 'mb-2 grid grid-cols-[1.4fr_1fr_1fr] gap-5 max-bp1100:grid-cols-2 max-bp560:grid-cols-1',
-  statsGrid4: 'grid-cols-[1.3fr_1fr_1fr_1fr]',
+  statGrid: 'mb-2 grid grid-cols-[1.3fr_1fr_1fr_1fr] gap-5 max-compact:grid-cols-2 max-md:grid-cols-1',
+  statsGrid: 'mb-2 grid grid-cols-[1.4fr_1fr_1fr] gap-5 max-compact:grid-cols-2 max-md:grid-cols-1',
+  statsGrid4: 'min-[1441px]:grid-cols-[1.3fr_1fr_1fr_1fr] max-compact:grid-cols-2 max-md:grid-cols-1',
   grid2: 'grid grid-cols-[1.2fr_1fr] gap-[26px] max-bp1100:grid-cols-1',
 
   field: 'flex flex-col gap-1.5',
@@ -66,6 +66,18 @@ export const tw = {
   formRow: 'grid gap-4 max-bp900:grid-cols-1',
   formActions: 'flex flex-wrap items-center gap-2.5 max-md:w-full max-md:flex-col max-md:items-stretch',
   formActionsRow: 'flex flex-wrap items-center gap-2.5',
+  formSection:
+    'flex min-w-0 flex-col gap-3 rounded-pill border border-jelly-rim bg-layer-1 p-4 shadow-[inset_0_1px_0_var(--jelly-gloss-top)] max-md:rounded-lg max-md:p-3.5',
+  formSectionPlain: 'flex min-w-0 flex-col gap-3',
+  formSectionHead:
+    'flex flex-wrap items-start justify-between gap-2 border-b border-border-subtle pb-2.5 [&_h4]:m-0 [&_h4]:font-display [&_h4]:text-base [&_h4]:font-bold [&_h4]:text-text',
+  formSectionHint: 'm-0 text-xs leading-relaxed text-muted',
+  formPanel:
+    'rounded-pill border border-jelly-rim bg-layer-0 p-4 shadow-sunken max-md:rounded-lg max-md:p-3',
+  formFooter:
+    'sticky -bottom-7 z-10 -mx-7 -mb-7 mt-1 flex flex-wrap items-center gap-2.5 border-t border-border-subtle bg-[color-mix(in_srgb,var(--layer-3)_92%,transparent)] px-7 py-4 backdrop-blur-[14px] max-md:-bottom-[max(24px,env(safe-area-inset-bottom))] max-md:-mx-5 max-md:-mb-[max(24px,env(safe-area-inset-bottom))] max-md:flex-col max-md:items-stretch max-md:px-5 max-md:pb-[max(16px,env(safe-area-inset-bottom))]',
+  checkboxRow:
+    'flex min-h-11 cursor-pointer items-center gap-2.5 rounded-capsule border border-jelly-rim bg-layer-0 px-4 py-2.5 text-sm text-text shadow-sunken [&_input]:h-4 [&_input]:w-4 [&_input]:accent-[var(--accent)]',
   toolbar: 'flex flex-wrap gap-2 max-md:w-full max-md:flex-col max-md:items-stretch',
   dangerZone:
     'mt-6 rounded-pill border border-jelly-rim bg-layer-2 p-[22px] shadow-jelly max-md:p-4 [&_h3]:mb-2 [&_h3]:text-base [&_h3]:text-text [&_p]:mb-4 [&_p]:text-sm [&_p]:leading-relaxed [&_p]:text-text-secondary',
@@ -90,12 +102,12 @@ export const tw = {
     'fixed inset-0 z-[100] flex items-center justify-center bg-black/62 p-6 backdrop-blur-[8px] max-md:z-[400] max-md:items-end max-md:p-0',
   modal:
     'liquid-glass liquid-glass--strong liquid-glass--panel w-full max-h-[90vh] max-w-[520px] overflow-auto rounded-lg max-md:max-h-[92dvh] max-md:max-w-none max-md:rounded-t-lg max-md:rounded-b-none',
-  modalWide: 'max-w-[920px] max-compact:max-w-[min(920px,calc(100vw-32px))] max-md:max-w-none',
+  modalWide: 'max-w-[920px] max-compact:max-w-[min(920px,calc(100vw-32px))] max-md:max-w-none wide:max-w-[min(70rem,calc(100vw-4rem))]',
   modalSheet: 'max-md:animate-[modal-sheet-in_0.28s_cubic-bezier(0.4,0,0.2,1)]',
   modalHead: 'flex items-center justify-between border-b border-border-subtle px-7 py-5 max-md:px-5 max-md:py-3 max-md:pb-4',
   modalClose:
     'cursor-pointer rounded-capsule border border-jelly-rim bg-layer-1 px-2 py-1 text-2xl leading-none text-muted transition-[background,color] duration-200 hover:bg-layer-0 hover:text-text',
-  modalBody: 'px-7 py-6 pb-7 max-md:overflow-y-auto max-md:px-5 max-md:py-4 max-md:pb-[max(24px,env(safe-area-inset-bottom))]',
+  modalBody: 'flex min-w-0 flex-col gap-4 px-7 py-6 pb-7 max-md:overflow-y-auto max-md:px-5 max-md:py-4 max-md:pb-[max(24px,env(safe-area-inset-bottom))]',
   modalSheetHandle:
     'mx-auto mt-2.5 hidden h-1 w-9 shrink-0 rounded-full bg-muted opacity-45 max-md:block',
 
@@ -126,7 +138,7 @@ export const tw = {
   icon: 'inline-flex shrink-0 items-center justify-center align-middle',
   iconMissing: 'rounded bg-surface-2',
 
-  layout: 'flex min-h-dvh w-full max-w-full bg-bg',
+  layout: 'flex min-h-dvh w-full max-w-full overflow-x-clip bg-bg',
   sidebar:
     'sticky top-0 z-[200] flex h-dvh w-[var(--sidebar-width)] shrink-0 flex-col overflow-hidden border-l border-sidebar-border bg-sidebar p-6 px-4 text-sidebar-text shadow-[var(--jelly-drop)] max-compact:!fixed max-compact:inset-y-0 max-compact:right-0 max-compact:h-dvh max-compact:w-[min(320px,92vw)] max-compact:max-w-[320px] max-compact:overflow-hidden max-compact:px-3 max-compact:py-[max(14px,env(safe-area-inset-top))] max-compact:pb-[max(14px,env(safe-area-inset-bottom))] max-compact:shadow-[-8px_0_32px_rgba(0,0,0,0.28)] max-compact:transition-[translate] max-compact:duration-[280ms] max-md:!hidden',
   sidebarClosed: 'max-compact:translate-x-[110%]',
@@ -169,7 +181,7 @@ export const tw = {
   userName: 'max-w-40 overflow-hidden text-ellipsis whitespace-nowrap font-display text-sm font-semibold max-[1024px]:max-w-[110px]',
   userRole: 'text-xs text-muted max-compact:hidden',
   menuToggle:
-    'menu-toggle hidden h-11 w-11 shrink-0 cursor-pointer flex-col justify-center gap-1.5 rounded-capsule border border-jelly-rim bg-layer-2 p-2.5 shadow-[inset_0_1px_0_var(--jelly-gloss-top)] max-compact:flex',
+    'hidden h-11 w-11 shrink-0 cursor-pointer flex-col justify-center gap-1.5 rounded-capsule border border-jelly-rim bg-layer-2 p-2.5 shadow-[inset_0_1px_0_var(--jelly-gloss-top)] max-compact:!flex',
   menuToggleOpen:
     'bg-layer-3 border-jelly-rim-strong [&>span:nth-child(1)]:translate-y-[7px] [&>span:nth-child(1)]:rotate-45 [&>span:nth-child(2)]:opacity-0 [&>span:nth-child(3)]:-translate-y-[7px] [&>span:nth-child(3)]:-rotate-45',
   menuToggleBar: 'block h-0.5 w-full rounded-[1px] bg-text transition-[transform,opacity] duration-200',
@@ -189,7 +201,7 @@ export const tw = {
   portalSubnavIcon: 'flex items-center',
 
   mobileBottomNav:
-    'fixed inset-x-0 bottom-0 z-[300] hidden border-t border-jelly-rim bg-layer-2 px-2 py-1.5 pb-[max(6px,env(safe-area-inset-bottom))] shadow-jelly-raised max-md:flex',
+    'fixed inset-x-0 bottom-0 z-[300] hidden border-t border-jelly-rim bg-layer-2 px-2 py-1.5 pb-[max(6px,env(safe-area-inset-bottom))] shadow-jelly-raised max-md:!flex',
   mobileNavItem:
     'flex flex-1 cursor-pointer flex-col items-center gap-0.5 rounded-capsule border-0 bg-transparent px-1 py-1.5 font-inherit text-[10px] text-muted',
   mobileNavItemActive: 'bg-layer-3 text-text shadow-[inset_0_1px_0_var(--jelly-gloss-top)]',
@@ -266,6 +278,14 @@ export const tw = {
   barFill: 'h-full rounded-capsule bg-layer-4 shadow-[inset_0_1px_0_var(--jelly-gloss-top)] transition-[width] duration-300',
   barValue: 'w-10 text-left text-sm text-muted [font-variant-numeric:tabular-nums]',
   inlineStats: 'flex gap-10 max-md:flex-col max-md:gap-3 [&_div]:flex [&_div]:flex-col [&_div]:gap-1 [&_strong]:font-display [&_strong]:text-xl',
+
+  // DataTable styles
+  dataTableToolbar: 'flex flex-wrap items-center justify-between gap-2.5 mb-3',
+  dataTableFilters: 'flex flex-wrap gap-2',
+  bulkActionsBar: 'flex items-center gap-2 px-4 py-2 rounded-capsule border border-jelly-rim bg-layer-2 shadow-[inset_0_1px_0_var(--jelly-gloss-top)]',
+  columnVisibilityDropdown: 'liquid-glass liquid-glass--panel rounded-pill p-2',
+  editableCell: 'cursor-text hover:bg-layer-1 transition-colors',
+  editingCell: 'bg-layer-1 ring-1 ring-jelly-rim-strong',
 }
 
 const BTN_VARIANTS = {
@@ -355,6 +375,19 @@ const LEGACY_MAP = {
   'form-row': tw.formRow,
   'form-actions': tw.formActions,
   'form-actions-row': tw.formActionsRow,
+  'factory-form-section': tw.formSection,
+  'factory-form-section--plain': tw.formSectionPlain,
+  'section-head': tw.formSectionHead,
+  'section-hint': tw.formSectionHint,
+  'factory-form-panel': tw.formPanel,
+  'factory-form-footer': tw.formFooter,
+  'checkbox-row': tw.checkboxRow,
+  'product-variants-section': tw.formSection,
+  'piece-form-section': tw.formSection,
+  'variant-row': tw.formPanel,
+  'frame-model-block': tw.formPanel,
+  'material-value-preview': tw.formPanel,
+  'factory-form': 'flex min-w-0 flex-col gap-4',
   toolbar: tw.toolbar,
   'danger-zone': tw.dangerZone,
   'table-wrap': tw.tableWrap,
@@ -411,6 +444,59 @@ const LEGACY_MAP = {
   'bar-value': tw.barValue,
   'inline-stats': tw.inlineStats,
   'theme-toggle': tw.themeToggle,
+  'products-page-header':
+    'mb-4 flex flex-wrap items-start justify-between gap-3 max-md:flex-col max-md:items-stretch',
+  'products-header-actions':
+    'flex flex-wrap gap-2 max-md:w-full max-md:flex-col max-md:[&_button]:w-full',
+  'excel-uploader-layout':
+    'grid min-w-0 grid-cols-[minmax(0,1.4fr)_minmax(240px,0.9fr)] items-start gap-2.5 max-bp900:grid-cols-1',
+  'excel-result-panel': 'col-span-full min-w-0',
+  ...Object.fromEntries([
+    'sales-table-desktop',
+    'checks-table-desktop',
+    'dashboard-table-desktop',
+    'accounting-table-desktop',
+    'accounting-doc-list-table-desktop',
+    'accounting-doc-table-desktop',
+    'accounting-drill-table-desktop',
+    'accounting-transfer-table-desktop',
+    'customers-table-desktop',
+    'wallet-table-desktop',
+    'sms-table-desktop',
+    'workflow-table-desktop',
+    'levels-table-desktop',
+    'logs-table-desktop',
+    'staff-table-desktop',
+    'materials-table-desktop',
+    'attendance-table-desktop',
+    'settings-table-desktop',
+    'record-filter-table-desktop',
+    'top-selling-table-desktop',
+    'office-orders-table-desktop',
+  ].map((name) => [name, 'max-compact:!hidden'])),
+  ...Object.fromEntries([
+    'sales-cards-mobile',
+    'checks-cards-mobile',
+    'dashboard-cards-mobile',
+    'accounting-cards-mobile',
+    'accounting-doc-cards-mobile',
+    'accounting-doc-list-cards-mobile',
+    'accounting-drill-cards-mobile',
+    'accounting-transfer-cards-mobile',
+    'customers-cards-mobile',
+    'wallet-cards-mobile',
+    'sms-cards-mobile',
+    'workflow-cards-mobile',
+    'levels-cards-mobile',
+    'logs-cards-mobile',
+    'staff-cards-mobile',
+    'materials-cards-mobile',
+    'attendance-cards-mobile',
+    'settings-cards-mobile',
+    'record-filter-cards-mobile',
+    'top-selling-cards-mobile',
+    'office-orders-cards-mobile',
+  ].map((name) => [name, 'hidden max-compact:!flex max-compact:flex-col max-compact:gap-2.5'])),
 }
 
 export function fromLegacy(...chunks) {

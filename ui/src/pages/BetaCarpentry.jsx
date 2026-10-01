@@ -3,8 +3,9 @@ import { betaCarpentryApi } from '../api/client'
 import MoneyInput from '../components/MoneyInput'
 import PersianDateInput from '../components/PersianDateInput'
 import Select from '../components/Select'
-import { Badge, Button, Card, EmptyState, Field, FilterBar, Modal, StatCard } from '../components/ui'
+import { Badge, Button, Card, EmptyState, Field, FilterBar, FormFooter, FormGrid, FormSection, Modal, StatCard } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
+import { useConfig } from '../context/ConfigContext'
 import { useConfirm } from '../context/ConfirmContext'
 import { formatMoney } from '../utils/format'
 import { formatJalali, todayIso } from '../utils/jalali'
@@ -26,11 +27,11 @@ const EMPTY_SERVICE = { service_type: '', provider: '', workshop_id: '', carpent
 const EMPTY_FREIGHT = { destination: '', driver_name: '', workshop_id: '', carpentry_order_id: '', cost: '', sent_date: todayIso(), note: '' }
 const EMPTY_ATTENDANCE = { workshop_id: '', person_name: '', visit_date: todayIso(), check_in: '', check_out: '', note: '' }
 
-const TOOL_STATUS_OPTS = [
-  { value: 'active', label: 'فعال' },
-  { value: 'maintenance', label: 'در تعمیر' },
-  { value: 'retired', label: 'اسقاط' },
-]
+const FLOW_SHORT = {
+  give: 'سرویس به بازرگان',
+  receive: 'سرویس از بازرگان',
+  both: 'دوطرفه',
+}
 
 function scopeParams(workshopScope) {
   if (!workshopScope) return {}
@@ -40,6 +41,7 @@ function scopeParams(workshopScope) {
 
 export default function BetaCarpentry() {
   const { user } = useAuth()
+  const { choices } = useConfig()
   const confirm = useConfirm()
   const betaOptions = useBetaOptions()
   const canManage = hasPermission(user, 'manage_beta_carpentry')
@@ -56,13 +58,15 @@ export default function BetaCarpentry() {
   const [saving, setSaving] = useState(false)
 
   const [editingWorkshop, setEditingWorkshop] = useState(null)
-  const [workshopForm, setWorkshopForm] = useState({ name: '', kind: '', is_active: true })
+  const [workshopForm, setWorkshopForm] = useState({ name: '', kind: '', service_flow: 'both', is_active: true })
   const [modal, setModal] = useState(null)
   const [editing, setEditing] = useState(null)
   const [form, setForm] = useState({})
 
   const scope = useMemo(() => scopeParams(workshopScope), [workshopScope])
-  const workshopKindOpts = useMemo(() => betaOptions(BETA_WORKSHOP_KIND, stats.workshop_kinds), [betaOptions, stats.workshop_kinds])
+  const workshopKindOpts = useMemo(() => betaOptions(BETA_WORKSHOP_KIND), [betaOptions])
+  const toolStatusOpts = useMemo(() => choices('carpentry_tool_status'), [choices])
+  const serviceFlowOpts = useMemo(() => choices('merchant_service_flow'), [choices])
   const workshopOpts = useMemo(() => workshops.map((w) => ({ value: String(w.id), label: w.name })), [workshops])
   const orderOpts = useMemo(() => orderPicker.map((r) => ({ value: String(r.id), label: r.code })), [orderPicker])
 
@@ -163,8 +167,8 @@ export default function BetaCarpentry() {
   const openWorkshopModal = (workshop = null) => {
     setEditingWorkshop(workshop)
     setWorkshopForm(workshop
-      ? { name: workshop.name, kind: workshop.kind, is_active: workshop.is_active !== false }
-      : { name: '', kind: workshopKindOpts[0]?.value || '', is_active: true })
+      ? { name: workshop.name, kind: workshop.kind, service_flow: workshop.service_flow || 'both', is_active: workshop.is_active !== false }
+      : { name: '', kind: workshopKindOpts[0]?.value || '', service_flow: 'both', is_active: true })
     setModal('workshop')
   }
 
@@ -307,7 +311,7 @@ export default function BetaCarpentry() {
         <div>
           <h1>واحدهای نجاری (بتا)</h1>
           <p className={fromLegacy('muted')}>
-            مدیریت چندکارگاهی — ابزار، خرید چوب، خدمات برون‌سازمانی، باربری و تردد پرسنل
+            بازرگان همان کارگاه اقماری است: یا سرویس را به آن‌ها می‌دهیم تا بسازند، یا آن‌ها سرویس را به ما می‌دهند.
           </p>
         </div>
         {canManage && (
@@ -335,13 +339,13 @@ export default function BetaCarpentry() {
         ))}
         {workshops.map((w) => (
           <button key={w.id} type="button" className={fromLegacy(`workflow-filter-tab ${workshopScope === String(w.id) ? 'active' : ''}`)} onClick={() => setWorkshopScope(String(w.id))}>
-            {w.name}
+            {w.name}{w.kind === 'satellite' && FLOW_SHORT[w.service_flow] ? ` — ${FLOW_SHORT[w.service_flow]}` : ''}
           </button>
         ))}
       </div>
 
       <div className={fromLegacy('stat-grid')}>
-        <StatCard label="هزینه باربری اقماری" value={formatMoney(summary.satellite_freight_cost || 0)} />
+        <StatCard label="هزینه باربری بازرگان" value={formatMoney(summary.satellite_freight_cost || 0)} />
         <StatCard label="ابزار و دستگاه" value={summary.tools_count ?? 0} hint="دستگاه" />
         <StatCard label="خرید چوب و MDF" value={formatMoney(summary.wood_purchase_total || 0)} />
       </div>
@@ -365,74 +369,117 @@ export default function BetaCarpentry() {
       </Card>
 
       <Modal title={editingWorkshop ? 'ویرایش واحد نجاری' : 'افزودن واحد نجاری'} open={modal === 'workshop'} onClose={() => { setModal(null); setEditingWorkshop(null) }}>
-        <Field label="نام واحد"><input value={workshopForm.name} onChange={(e) => setWorkshopForm({ ...workshopForm, name: e.target.value })} /></Field>
-        <Field label="نوع"><Select value={workshopForm.kind} onChange={(v) => setWorkshopForm({ ...workshopForm, kind: v })} options={workshopKindOpts} /></Field>
-        <Field label="وضعیت">
-          <label className={fromLegacy('checkbox-row')}>
-            <input type="checkbox" checked={workshopForm.is_active} onChange={(e) => setWorkshopForm({ ...workshopForm, is_active: e.target.checked })} />
-            <span>واحد فعال است</span>
-          </label>
-        </Field>
-        <Button disabled={saving} onClick={save}>ذخیره واحد</Button>
+        <div className={fromLegacy('form')}>
+          <FormSection title="مشخصات واحد" hint="واحد داخلی یا بازرگانی طرف قرارداد را تعریف کنید.">
+            <FormGrid>
+              <Field label="نام واحد"><input value={workshopForm.name} onChange={(e) => setWorkshopForm({ ...workshopForm, name: e.target.value })} /></Field>
+              <Field label="نوع"><Select value={workshopForm.kind} onChange={(v) => setWorkshopForm({ ...workshopForm, kind: v })} options={workshopKindOpts} /></Field>
+              {workshopForm.kind === 'satellite' && (
+                <Field label="جهت سرویس">
+                  <Select
+                    value={workshopForm.service_flow || 'both'}
+                    onChange={(v) => setWorkshopForm({ ...workshopForm, service_flow: v })}
+                    options={serviceFlowOpts}
+                  />
+                </Field>
+              )}
+              <Field label="وضعیت">
+                <label className={fromLegacy('checkbox-row')}>
+                  <input type="checkbox" checked={workshopForm.is_active} onChange={(e) => setWorkshopForm({ ...workshopForm, is_active: e.target.checked })} />
+                  <span>واحد فعال است</span>
+                </label>
+              </Field>
+            </FormGrid>
+          </FormSection>
+          <FormFooter><Button variant="ghost" onClick={() => setModal(null)}>انصراف</Button><Button disabled={saving} onClick={save}>ذخیره واحد</Button></FormFooter>
+        </div>
       </Modal>
 
       <Modal title={editing ? 'ویرایش ابزار' : 'ثبت ابزار'} open={modal === 'tools'} onClose={() => setModal(null)}>
-        <Field label="نام"><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
-        <Field label="دسته"><input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} /></Field>
-        <Field label="کارگاه"><Select value={form.workshop_id} onChange={(v) => setForm({ ...form, workshop_id: v })} options={[{ value: '', label: '—' }, ...workshopOpts]} /></Field>
-        <Field label="وضعیت"><Select value={form.status} onChange={(v) => setForm({ ...form, status: v })} options={TOOL_STATUS_OPTS} /></Field>
-        <Field label="تعداد"><input className={fromLegacy('ltr')} type="number" min="1" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} /></Field>
-        <Field label="ارزش"><MoneyInput value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} /></Field>
-        <Field label="تاریخ تحویل"><PersianDateInput value={form.purchase_date} onChange={(v) => setForm({ ...form, purchase_date: v })} /></Field>
-        <Field label="توضیحات"><textarea rows={2} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></Field>
-        <Button disabled={saving} onClick={save}>ذخیره</Button>
+        <div className={fromLegacy('form')}>
+          <FormSection title="مشخصات ابزار">
+            <FormGrid>
+              <Field label="نام"><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Field>
+              <Field label="دسته"><input value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} /></Field>
+              <Field label="کارگاه"><Select value={form.workshop_id} onChange={(v) => setForm({ ...form, workshop_id: v })} options={[{ value: '', label: '—' }, ...workshopOpts]} /></Field>
+              <Field label="وضعیت"><Select value={form.status} onChange={(v) => setForm({ ...form, status: v })} options={toolStatusOpts} /></Field>
+              <Field label="تعداد"><input className={fromLegacy('ltr')} type="number" min="1" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} /></Field>
+              <Field label="ارزش"><MoneyInput value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} /></Field>
+              <Field label="تاریخ تحویل"><PersianDateInput value={form.purchase_date} onChange={(v) => setForm({ ...form, purchase_date: v })} /></Field>
+            </FormGrid>
+            <Field label="توضیحات"><textarea rows={2} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></Field>
+          </FormSection>
+          <FormFooter><Button variant="ghost" onClick={() => setModal(null)}>انصراف</Button><Button disabled={saving} onClick={save}>ذخیره</Button></FormFooter>
+        </div>
       </Modal>
 
       <Modal title={editing ? 'ویرایش خرید' : 'ثبت خرید چوب'} open={modal === 'wood'} onClose={() => setModal(null)} wide>
-        <Field label="تامین‌کننده"><input value={form.supplier} onChange={(e) => setForm({ ...form, supplier: e.target.value })} /></Field>
-        <Field label="نوع متریال"><input value={form.material_type} onChange={(e) => setForm({ ...form, material_type: e.target.value })} placeholder="چوب، MDF…" /></Field>
-        <Field label="جنس"><input value={form.wood_type} onChange={(e) => setForm({ ...form, wood_type: e.target.value })} /></Field>
-        <Field label="مقدار"><input className={fromLegacy('ltr')} type="number" step="0.01" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} /></Field>
-        <Field label="واحد"><input value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder="متر، عدد…" /></Field>
-        <Field label="بهای واحد"><MoneyInput value={form.unit_cost} onChange={(e) => setForm({ ...form, unit_cost: e.target.value })} /></Field>
-        <Field label="مبلغ کل"><MoneyInput value={form.total_cost} onChange={(e) => setForm({ ...form, total_cost: e.target.value })} /></Field>
-        <Field label="شماره فاکتور"><input value={form.invoice_ref} onChange={(e) => setForm({ ...form, invoice_ref: e.target.value })} /></Field>
-        <Field label="کارگاه"><Select value={form.workshop_id} onChange={(v) => setForm({ ...form, workshop_id: v })} options={[{ value: '', label: '—' }, ...workshopOpts]} /></Field>
-        <Field label="تاریخ"><PersianDateInput value={form.purchase_date} onChange={(v) => setForm({ ...form, purchase_date: v })} /></Field>
-        <Field label="توضیحات"><textarea rows={2} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></Field>
-        <Button disabled={saving} onClick={save}>ذخیره</Button>
+        <div className={fromLegacy('form')}>
+          <FormSection title="مشخصات خرید" hint="اطلاعات تامین‌کننده، متریال و مقصد مصرف را وارد کنید.">
+            <FormGrid>
+              <Field label="تامین‌کننده"><input value={form.supplier} onChange={(e) => setForm({ ...form, supplier: e.target.value })} /></Field>
+              <Field label="نوع متریال"><input value={form.material_type} onChange={(e) => setForm({ ...form, material_type: e.target.value })} placeholder="چوب، MDF…" /></Field>
+              <Field label="جنس"><input value={form.wood_type} onChange={(e) => setForm({ ...form, wood_type: e.target.value })} /></Field>
+              <Field label="مقدار"><input className={fromLegacy('ltr')} type="number" step="0.01" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} /></Field>
+              <Field label="واحد"><input value={form.unit} onChange={(e) => setForm({ ...form, unit: e.target.value })} placeholder="متر، عدد…" /></Field>
+              <Field label="کارگاه"><Select value={form.workshop_id} onChange={(v) => setForm({ ...form, workshop_id: v })} options={[{ value: '', label: '—' }, ...workshopOpts]} /></Field>
+            </FormGrid>
+          </FormSection>
+          <FormSection title="مالی و سند">
+            <FormGrid>
+              <Field label="بهای واحد"><MoneyInput value={form.unit_cost} onChange={(e) => setForm({ ...form, unit_cost: e.target.value })} /></Field>
+              <Field label="مبلغ کل"><MoneyInput value={form.total_cost} onChange={(e) => setForm({ ...form, total_cost: e.target.value })} /></Field>
+              <Field label="شماره فاکتور"><input value={form.invoice_ref} onChange={(e) => setForm({ ...form, invoice_ref: e.target.value })} /></Field>
+              <Field label="تاریخ"><PersianDateInput value={form.purchase_date} onChange={(v) => setForm({ ...form, purchase_date: v })} /></Field>
+            </FormGrid>
+            <Field label="توضیحات"><textarea rows={2} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></Field>
+          </FormSection>
+          <FormFooter><Button variant="ghost" onClick={() => setModal(null)}>انصراف</Button><Button disabled={saving} onClick={save}>ذخیره خرید</Button></FormFooter>
+        </div>
       </Modal>
 
       <Modal title={editing ? 'ویرایش خدمت' : 'ثبت خدمت'} open={modal === 'services'} onClose={() => setModal(null)} wide>
-        <Field label="نوع خدمت"><input value={form.service_type} onChange={(e) => setForm({ ...form, service_type: e.target.value })} placeholder="خراطی، CNC…" /></Field>
-        <Field label="ارائه‌دهنده"><input value={form.provider} onChange={(e) => setForm({ ...form, provider: e.target.value })} /></Field>
-        <Field label="کارگاه"><Select value={form.workshop_id} onChange={(v) => setForm({ ...form, workshop_id: v })} options={[{ value: '', label: '—' }, ...workshopOpts]} /></Field>
-        <Field label="دستور مرتبط"><Select value={form.carpentry_order_id} onChange={(v) => setForm({ ...form, carpentry_order_id: v })} options={[{ value: '', label: '—' }, ...orderOpts]} /></Field>
-        <Field label="مبلغ"><MoneyInput value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></Field>
-        <Field label="تاریخ"><PersianDateInput value={form.service_date} onChange={(v) => setForm({ ...form, service_date: v })} /></Field>
-        <Field label="شرح"><textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
-        <Button disabled={saving} onClick={save}>ذخیره</Button>
+        <div className={fromLegacy('form')}>
+          <FormSection title="خدمت برون‌سازمانی">
+            <FormGrid>
+              <Field label="نوع خدمت"><input value={form.service_type} onChange={(e) => setForm({ ...form, service_type: e.target.value })} placeholder="خراطی، CNC…" /></Field>
+              <Field label="ارائه‌دهنده"><input value={form.provider} onChange={(e) => setForm({ ...form, provider: e.target.value })} /></Field>
+              <Field label="کارگاه"><Select value={form.workshop_id} onChange={(v) => setForm({ ...form, workshop_id: v })} options={[{ value: '', label: '—' }, ...workshopOpts]} /></Field>
+              <Field label="دستور مرتبط"><Select value={form.carpentry_order_id} onChange={(v) => setForm({ ...form, carpentry_order_id: v })} options={[{ value: '', label: '—' }, ...orderOpts]} /></Field>
+              <Field label="مبلغ"><MoneyInput value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} /></Field>
+              <Field label="تاریخ"><PersianDateInput value={form.service_date} onChange={(v) => setForm({ ...form, service_date: v })} /></Field>
+            </FormGrid>
+            <Field label="شرح"><textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} /></Field>
+          </FormSection>
+          <FormFooter><Button variant="ghost" onClick={() => setModal(null)}>انصراف</Button><Button disabled={saving} onClick={save}>ذخیره خدمت</Button></FormFooter>
+        </div>
       </Modal>
 
       <Modal title={editing ? 'ویرایش باربری' : 'ثبت باربری'} open={modal === 'freight'} onClose={() => setModal(null)}>
-        <Field label="مقصد"><input value={form.destination} onChange={(e) => setForm({ ...form, destination: e.target.value })} /></Field>
-        <Field label="راننده / باربری"><input value={form.driver_name} onChange={(e) => setForm({ ...form, driver_name: e.target.value })} /></Field>
-        <Field label="کارگاه"><Select value={form.workshop_id} onChange={(v) => setForm({ ...form, workshop_id: v })} options={[{ value: '', label: '—' }, ...workshopOpts]} /></Field>
-        <Field label="دستور"><Select value={form.carpentry_order_id} onChange={(v) => setForm({ ...form, carpentry_order_id: v })} options={[{ value: '', label: '—' }, ...orderOpts]} /></Field>
-        <Field label="هزینه"><MoneyInput value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} /></Field>
-        <Field label="تاریخ"><PersianDateInput value={form.sent_date} onChange={(v) => setForm({ ...form, sent_date: v })} /></Field>
-        <Field label="توضیحات"><textarea rows={2} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></Field>
-        <Button disabled={saving} onClick={save}>ذخیره</Button>
+        <div className={fromLegacy('form')}>
+          <FormSection title="اطلاعات حمل"><FormGrid>
+            <Field label="مقصد"><input value={form.destination} onChange={(e) => setForm({ ...form, destination: e.target.value })} /></Field>
+            <Field label="راننده / باربری"><input value={form.driver_name} onChange={(e) => setForm({ ...form, driver_name: e.target.value })} /></Field>
+            <Field label="کارگاه"><Select value={form.workshop_id} onChange={(v) => setForm({ ...form, workshop_id: v })} options={[{ value: '', label: '—' }, ...workshopOpts]} /></Field>
+            <Field label="دستور"><Select value={form.carpentry_order_id} onChange={(v) => setForm({ ...form, carpentry_order_id: v })} options={[{ value: '', label: '—' }, ...orderOpts]} /></Field>
+            <Field label="هزینه"><MoneyInput value={form.cost} onChange={(e) => setForm({ ...form, cost: e.target.value })} /></Field>
+            <Field label="تاریخ"><PersianDateInput value={form.sent_date} onChange={(v) => setForm({ ...form, sent_date: v })} /></Field>
+          </FormGrid><Field label="توضیحات"><textarea rows={2} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></Field></FormSection>
+          <FormFooter><Button variant="ghost" onClick={() => setModal(null)}>انصراف</Button><Button disabled={saving} onClick={save}>ذخیره باربری</Button></FormFooter>
+        </div>
       </Modal>
 
       <Modal title={editing ? 'ویرایش تردد' : 'ثبت تردد'} open={modal === 'attendance'} onClose={() => setModal(null)}>
-        <Field label="کارگاه"><Select value={form.workshop_id} onChange={(v) => setForm({ ...form, workshop_id: v })} options={workshopOpts} /></Field>
-        <Field label="نام پرسنل"><input value={form.person_name} onChange={(e) => setForm({ ...form, person_name: e.target.value })} /></Field>
-        <Field label="تاریخ"><PersianDateInput value={form.visit_date} onChange={(v) => setForm({ ...form, visit_date: v })} /></Field>
-        <Field label="ورود"><input className={fromLegacy('ltr')} type="time" value={form.check_in} onChange={(e) => setForm({ ...form, check_in: e.target.value })} /></Field>
-        <Field label="خروج"><input className={fromLegacy('ltr')} type="time" value={form.check_out} onChange={(e) => setForm({ ...form, check_out: e.target.value })} /></Field>
-        <Field label="توضیحات"><textarea rows={2} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></Field>
-        <Button disabled={saving} onClick={save}>ذخیره</Button>
+        <div className={fromLegacy('form')}>
+          <FormSection title="ثبت ورود و خروج"><FormGrid>
+            <Field label="کارگاه"><Select value={form.workshop_id} onChange={(v) => setForm({ ...form, workshop_id: v })} options={workshopOpts} /></Field>
+            <Field label="نام پرسنل"><input value={form.person_name} onChange={(e) => setForm({ ...form, person_name: e.target.value })} /></Field>
+            <Field label="تاریخ"><PersianDateInput value={form.visit_date} onChange={(v) => setForm({ ...form, visit_date: v })} /></Field>
+            <Field label="ورود"><input className={fromLegacy('ltr')} type="time" value={form.check_in} onChange={(e) => setForm({ ...form, check_in: e.target.value })} /></Field>
+            <Field label="خروج"><input className={fromLegacy('ltr')} type="time" value={form.check_out} onChange={(e) => setForm({ ...form, check_out: e.target.value })} /></Field>
+          </FormGrid><Field label="توضیحات"><textarea rows={2} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} /></Field></FormSection>
+          <FormFooter><Button variant="ghost" onClick={() => setModal(null)}>انصراف</Button><Button disabled={saving} onClick={save}>ذخیره تردد</Button></FormFooter>
+        </div>
       </Modal>
     </div>
   )

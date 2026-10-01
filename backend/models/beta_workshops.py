@@ -11,11 +11,20 @@ class BetaCarpentryWorkshop(SoftDeleteModel):
     KIND_SATELLITE = "satellite"
     KIND_CHOICES = [
         (KIND_INTERNAL, "داخل کارخانه"),
-        (KIND_SATELLITE, "کارگاه اقماری"),
+        (KIND_SATELLITE, "بازرگان"),
+    ]
+    FLOW_GIVE = "give"
+    FLOW_RECEIVE = "receive"
+    FLOW_BOTH = "both"
+    FLOW_CHOICES = [
+        (FLOW_GIVE, "سرویس را به بازرگان می‌دهیم تا بسازد"),
+        (FLOW_RECEIVE, "بازرگان سرویس را به ما می‌دهد تا بسازیم"),
+        (FLOW_BOTH, "هر دو طرف"),
     ]
 
     name = models.CharField("نام واحد", max_length=150)
     kind = models.CharField("نوع", max_length=20, choices=KIND_CHOICES, default=KIND_INTERNAL)
+    service_flow = models.CharField("جهت سرویس", max_length=16, blank=True, default="")
     is_active = models.BooleanField("فعال", default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

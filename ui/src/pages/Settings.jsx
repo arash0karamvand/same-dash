@@ -5,47 +5,9 @@ import { configApi } from '../api/client'
 import { useConfig } from '../context/ConfigContext'
 import { Badge, Button, Card, EmptyState, Field, Modal } from '../components/ui'
 import LogoSettings from '../components/LogoSettings'
+import LookupOptions from '../components/settings/LookupOptions'
 import { isSystemAdmin } from '../utils/permissions'
 import { fromLegacy } from '../styles/tw.js'
-
-const LOOKUP_CATEGORIES = [
-  { id: 'payment_method', label: 'روش پرداخت' },
-  { id: 'payment_status', label: 'وضعیت پرداخت' },
-  { id: 'order_kind', label: 'نوع سفارش' },
-  { id: 'order_status', label: 'وضعیت سفارش' },
-  { id: 'discount_type', label: 'نوع تخفیف' },
-  { id: 'accounting_mode', label: 'حالت حسابداری' },
-  { id: 'workflow_stage', label: 'مرحله گردش سفارش' },
-  { id: 'fulfillment_route', label: 'مسیر تحویل' },
-  { id: 'receive_kind', label: 'نوع دریافت کارخانه' },
-  { id: 'attendance_status', label: 'وضعیت حضور' },
-  { id: 'approval_status', label: 'وضعیت تایید' },
-  { id: 'staff_kind', label: 'نوع پرسنل' },
-  { id: 'material_unit', label: 'واحد متریال' },
-  { id: 'document_code', label: 'کد نوع سند' },
-  { id: 'account_class', label: 'گروه حساب' },
-  { id: 'normal_balance', label: 'ماهیت حساب' },
-  { id: 'source_module', label: 'ماژول مبدأ حسابداری' },
-  { id: 'frame_design_style', label: 'سبک طراحی کلاف' },
-  { id: 'frame_wood_type', label: 'جنس چوب' },
-  { id: 'frame_piece_kind', label: 'نوع قطعه مبل' },
-  { id: 'frame_arm_style', label: 'حالت دسته' },
-  { id: 'frame_component_type', label: 'نوع قطعه سرویس' },
-  { id: 'frame_rule_key', label: 'قانون متریال کلاف' },
-  { id: 'workshop_recipe_kind', label: 'نوع دستور کارگاه' },
-  { id: 'workshop_paint_category', label: 'دسته رنگ' },
-  { id: 'workshop_fabric_category', label: 'دسته پارچه' },
-  { id: 'workshop_fabric_company', label: 'شرکت پارچه' },
-  { id: 'workshop_fabric_country', label: 'کشور پارچه' },
-  { id: 'beta_workshop_kind', label: 'نوع واحد نجاری (بتا)' },
-  { id: 'beta_carpentry_kind', label: 'نوع دستور نجاری (بتا)' },
-  { id: 'beta_carpentry_status', label: 'وضعیت دستور نجاری (بتا)' },
-  { id: 'beta_paint_kind', label: 'نوع سفارش رنگ (بتا)' },
-  { id: 'beta_paint_stage', label: 'مراحل خط رنگ (بتا)' },
-  { id: 'beta_upholstery_stage', label: 'مراحل رویه‌کوبی (بتا)' },
-  { id: 'beta_qc_status', label: 'وضعیت کنترل کیفیت (بتا)' },
-  { id: 'beta_qc_grade', label: 'گریدهای کنترل کیفیت (بتا)' },
-]
 
 const EMPTY_BRANCH = { code: '', label: '', color: 'var(--accent)', sort_order: 0, work_start: '', work_end: '', is_profit_center: true }
 const EMPTY_LOOKUP = { category: 'payment_method', code: '', label: '', sort_order: 0 }
@@ -73,7 +35,7 @@ export default function Settings() {
   const [branchForm, setBranchForm] = useState(EMPTY_BRANCH)
   const [lookupForm, setLookupForm] = useState(EMPTY_LOOKUP)
   const [selectedBranch, setSelectedBranch] = useState(null)
-  const [lookupCategory, setLookupCategory] = useState('payment_method')
+  const [selectedLookup, setSelectedLookup] = useState(null)
   const [attendanceEnforced, setAttendanceEnforced] = useState(true)
   const [workStart, setWorkStart] = useState('')
   const [workEnd, setWorkEnd] = useState('')
@@ -132,12 +94,38 @@ export default function Settings() {
     }
   }
 
+  const openCreateLookup = (category) => {
+    setSelectedLookup(null)
+    setLookupForm({ ...EMPTY_LOOKUP, category })
+    setLookupModal(true)
+  }
+
+  const openEditLookup = (item) => {
+    setSelectedLookup(item)
+    setLookupForm({
+      category: item.category,
+      code: item.code,
+      label: item.label,
+      sort_order: item.sort_order || 0,
+    })
+    setLookupModal(true)
+  }
+
   const saveLookup = async (e) => {
     e.preventDefault()
     try {
-      await configApi.createLookup({ ...lookupForm, category: lookupCategory })
-      setInfo('گزینه جدید ساخته شد.')
+      if (selectedLookup) {
+        await configApi.updateLookup(selectedLookup.id, {
+          label: lookupForm.label,
+          sort_order: lookupForm.sort_order,
+        })
+        setInfo('عنوان گزینه به‌روز شد.')
+      } else {
+        await configApi.createLookup(lookupForm)
+        setInfo('گزینه جدید ساخته شد.')
+      }
       setLookupModal(false)
+      setSelectedLookup(null)
       await afterSave()
     } catch (err) {
       setError(err.message)
@@ -191,8 +179,6 @@ export default function Settings() {
       </div>
     )
   }
-
-  const filteredLookups = lookups.filter((l) => l.category === lookupCategory)
 
   return (
     <div className={fromLegacy("page settings-page")}>
@@ -385,50 +371,12 @@ export default function Settings() {
             )}
 
             {tab === 'lookups' && (
-              <>
-                <div className={fromLegacy("branch-tabs")} style={{ marginBottom: 12 }}>
-                  {LOOKUP_CATEGORIES.map((c) => (
-                    <button key={c.id} type="button" className={fromLegacy(`branch-tab ${lookupCategory === c.id ? 'active' : ''}`)} onClick={() => setLookupCategory(c.id)}>{c.label}</button>
-                  ))}
-                </div>
-                <Button onClick={() => { setLookupForm({ ...EMPTY_LOOKUP, category: lookupCategory }); setLookupModal(true) }}>+ گزینه</Button>
-                <div className={fromLegacy("table-wrap settings-table-desktop")} style={{ marginTop: 12 }}>
-                  <table className={fromLegacy("table")}>
-                    <thead><tr><th>کد</th><th>عنوان</th><th>ترتیب</th><th>عملیات</th></tr></thead>
-                    <tbody>
-                      {filteredLookups.map((l) => (
-                        <tr key={l.id}>
-                          <td className={fromLegacy("ltr")}>{l.code}</td>
-                          <td>{l.label}</td>
-                          <td>{l.sort_order}</td>
-                          <td>
-                            <button type="button" className={fromLegacy("link")} onClick={() => toggleLookup(l)}>
-                              {l.is_active ? 'غیرفعال' : 'فعال'}
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <div className={fromLegacy("settings-cards-mobile")} style={{ marginTop: 12 }}>
-                  {filteredLookups.map((l) => (
-                    <div key={l.id} className={fromLegacy("m-card")}>
-                      <div className={fromLegacy("m-card-head")}>
-                        <strong>{l.label}</strong>
-                        <span className={fromLegacy("muted")}>{l.is_active ? 'فعال' : 'غیرفعال'}</span>
-                      </div>
-                      <div className={fromLegacy("m-card-grid")}>
-                        <div><span className={fromLegacy("muted")}>کد</span><span className={fromLegacy("ltr")}>{l.code}</span></div>
-                        <div><span className={fromLegacy("muted")}>ترتیب</span>{l.sort_order}</div>
-                      </div>
-                      <div className={fromLegacy("m-card-actions")}>
-                        <button type="button" className={fromLegacy("link")} onClick={() => toggleLookup(l)}>{l.is_active ? 'غیرفعال' : 'فعال'}</button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </>
+              <LookupOptions
+                lookups={lookups}
+                onCreate={openCreateLookup}
+                onEdit={openEditLookup}
+                onToggle={toggleLookup}
+              />
             )}
 
             {tab === 'menu' && (
@@ -513,9 +461,18 @@ export default function Settings() {
         </form>
       </Modal>
 
-      <Modal open={lookupModal} onClose={() => setLookupModal(false)} title="گزینه جدید">
+      <Modal open={lookupModal} onClose={() => { setLookupModal(false); setSelectedLookup(null) }} title={selectedLookup ? 'ویرایش گزینه' : 'گزینه جدید'}>
         <form onSubmit={saveLookup} className={fromLegacy("form")}>
-          <Field label="کد"><input value={lookupForm.code} onChange={(e) => setLookupForm({ ...lookupForm, code: e.target.value })} required /></Field>
+          <Field label="کد">
+            <input
+              className={fromLegacy("ltr")}
+              value={lookupForm.code}
+              onChange={(e) => setLookupForm({ ...lookupForm, code: e.target.value })}
+              required
+              readOnly={Boolean(selectedLookup)}
+            />
+          </Field>
+          {selectedLookup && <p className={fromLegacy("muted small")}>کد ثابت می‌ماند تا رکوردهای قبلی به همین گزینه وصل بمانند.</p>}
           <Field label="عنوان"><input value={lookupForm.label} onChange={(e) => setLookupForm({ ...lookupForm, label: e.target.value })} required /></Field>
           <Field label="ترتیب"><input type="number" value={lookupForm.sort_order} onChange={(e) => setLookupForm({ ...lookupForm, sort_order: Number(e.target.value) })} /></Field>
           <Button type="submit">ذخیره</Button>

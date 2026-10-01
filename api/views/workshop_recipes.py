@@ -179,7 +179,7 @@ def recipe_detail(request, pk):
         return fail("Permission denied", status=403)
     recipe = WorkshopRecipe.objects.filter(pk=pk, is_deleted=False).first()
     if not recipe:
-        return fail("دستور دست‌کار یافت نشد.", status=404)
+        return fail("دستور سرویس یافت نشد.", status=404)
     if request.method == "GET":
         return success(L.recipe_to_dict(recipe))
     if not _can_manage(request.user):

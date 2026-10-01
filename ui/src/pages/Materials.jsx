@@ -10,10 +10,11 @@ import Select from '../components/Select'
 
 import UnitSelect, { resolveUnitValue, splitUnitValue } from '../components/UnitSelect'
 
-import { Badge, Button, Card, EmptyState, Field, FilterBar, LoadMoreButton, Modal } from '../components/ui'
+import { Badge, Button, Card, EmptyState, Field, FilterBar, FormFooter, FormSection, LoadMoreButton, Modal } from '../components/ui'
 import { PAGE_SIZE } from '../config/pagination'
 
 import { useAuth } from '../context/AuthContext'
+import { useConfig } from '../context/ConfigContext'
 
 import { useConfirm } from '../context/ConfirmContext'
 
@@ -67,16 +68,6 @@ const APPROVAL_COLORS = {
 
 
 
-const USAGE_KIND_OPTIONS = [
-  { value: 'wood', label: 'چوب' },
-  { value: 'paint', label: 'رنگ' },
-  { value: 'fabric', label: 'پارچه' },
-  { value: 'foam', label: 'اسفنج' },
-  { value: 'webbing', label: 'تسمه' },
-  { value: 'cushion', label: 'کوسن' },
-  { value: 'other', label: 'سایر' },
-]
-
 const EMPTY_MATERIAL = {
 
   name: '',
@@ -116,6 +107,10 @@ const EMPTY_MATERIAL = {
 export default function Materials() {
 
   const { user } = useAuth()
+  const { choices } = useConfig()
+  const usageKindOptions = useMemo(() => choices('material_usage_kind'), [choices])
+  const valuationOptions = useMemo(() => choices('material_valuation_method'), [choices])
+  const freightOptions = useMemo(() => choices('material_freight_treatment'), [choices])
 
   const confirm = useConfirm()
 
@@ -773,9 +768,13 @@ export default function Materials() {
 
         onClose={() => !saving && setModal(false)}
 
+        wide
+
       >
 
-        <form onSubmit={saveMaterial} className={fromLegacy("form")}>
+        <form onSubmit={saveMaterial} className={fromLegacy("form factory-form")}>
+
+          <FormSection title="مشخصات و موجودی" hint="اطلاعات پایه، روش ارزش‌گذاری و مقدار موجودی را ثبت کنید.">
 
           <Field label="نام متریال">
 
@@ -785,7 +784,7 @@ export default function Materials() {
 
           <Field label="نوع مصرف کارخانه">
 
-            <Select value={form.usage_kind || 'other'} onChange={(v) => setForm({ ...form, usage_kind: v })} options={USAGE_KIND_OPTIONS} />
+            <Select value={form.usage_kind || 'other'} onChange={(v) => setForm({ ...form, usage_kind: v })} options={usageKindOptions} />
 
           </Field>
 
@@ -857,13 +856,7 @@ export default function Materials() {
 
             <Field label="روش ارزیابی">
 
-              <select value={form.valuation_method || 'weighted_average'} onChange={(e) => setForm({ ...form, valuation_method: e.target.value })}>
-
-                <option value="weighted_average">میانگین موزون</option>
-
-                <option value="fifo">FIFO</option>
-
-              </select>
+              <Select value={form.valuation_method || 'weighted_average'} onChange={(v) => setForm({ ...form, valuation_method: v })} options={valuationOptions} />
 
             </Field>
 
@@ -881,13 +874,7 @@ export default function Materials() {
 
             <Field label="ثبت حمل">
 
-              <select value={form.freight_treatment || 'capitalize'} onChange={(e) => setForm({ ...form, freight_treatment: e.target.value })}>
-
-                <option value="capitalize">سرشکن در بهای کالا</option>
-
-                <option value="period_expense">هزینه دوره</option>
-
-              </select>
+              <Select value={form.freight_treatment || 'capitalize'} onChange={(v) => setForm({ ...form, freight_treatment: v })} options={freightOptions} />
 
             </Field>
 
@@ -898,6 +885,9 @@ export default function Materials() {
             </Field>
 
           </div>
+          </FormSection>
+
+          <FormSection title="خلاصه و توضیحات" hint="ارزش موجودی پیش از ذخیره به‌صورت خودکار محاسبه می‌شود.">
 
           {previewInventoryValue != null && (
             <div className={fromLegacy("material-value-preview")}>
@@ -911,6 +901,7 @@ export default function Materials() {
             <textarea rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
 
           </Field>
+          </FormSection>
 
           {isOffice && (
 
@@ -924,13 +915,13 @@ export default function Materials() {
 
           )}
 
-          <div className={fromLegacy("form-actions")}>
+          <FormFooter>
 
             <Button type="button" variant="ghost" onClick={() => setModal(false)} disabled={saving}>انصراف</Button>
 
             <Button type="submit" disabled={saving}>{saving ? 'در حال ذخیره…' : 'ذخیره'}</Button>
 
-          </div>
+          </FormFooter>
 
         </form>
 

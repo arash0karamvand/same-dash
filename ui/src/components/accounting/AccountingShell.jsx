@@ -1,7 +1,7 @@
 // قالب اصلی حسابداری — سایدبار دسکتاپ + ناوبری موبایل
 
 import Icon from '../icons/Icon'
-import { useIsCompactTablet, useIsPhone } from '../../hooks/breakpoints'
+import { useIsCompactTablet } from '../../hooks/breakpoints'
 import { usePersistedState } from '../../hooks/usePersistedState'
 import { ACCOUNTING_SECTIONS, sectionForTab, tabsForSection } from '../../config/accountingNav'
 import { fromLegacy } from '../../styles/tw.js'
@@ -14,9 +14,8 @@ export default function AccountingShell({
   toolbar,
   children,
 }) {
-  const isPhone = useIsPhone()
   const compact = useIsCompactTablet()
-  const showTabletNav = compact && !isPhone
+  const showSectionPills = compact
   const [sidebarCollapsed, setSidebarCollapsed] = usePersistedState('accounting-sidebar-collapsed', false)
   const tabSet = new Set((visibleTabs || []).map((t) => t.id))
   const sections = ACCOUNTING_SECTIONS.filter((s) => s.tabs.some((id) => tabSet.has(id)))
@@ -99,7 +98,7 @@ export default function AccountingShell({
           </aside>
         )}
 
-        {showTabletNav && (
+        {showSectionPills && (
           <nav className={fromLegacy("acct-v2-mobile-nav")} aria-label="بخش‌های حسابداری">
             {sections.map((section) => {
               const active = section.tabs.includes(activeTab)

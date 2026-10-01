@@ -90,6 +90,78 @@
   --breakpoint-bp380: 381px;
 }
 
+/* Animations */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes slide-in-from-left {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@keyframes confirm-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes confirm-slide-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes modal-sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+@keyframes mobile-menu-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes mobile-menu-slide-up {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+/* Body classes */
+body.modal-open,
+body.slideover-open {
+  overflow: hidden;
+}
+
 @utility content-pad-x {
   padding-inline-start: var(--content-pad-start);
   padding-inline-end: var(--content-pad-end);
@@ -104,4 +176,3 @@
 @import "./styles/pages/rfm.css";
 @import "./styles/pages/legacy.css";
 @import "./styles/pages/legacy-glass.css";
-@import "./styles/responsive.css";

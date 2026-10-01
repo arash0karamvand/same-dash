@@ -40,12 +40,13 @@ import Frames from './pages/Frames'
 import BetaCarpentry from './pages/BetaCarpentry'
 import BetaPaint from './pages/BetaPaint'
 import BetaUpholstery from './pages/BetaUpholstery'
-import BetaFabric from './pages/BetaFabric'
 import BetaQc from './pages/BetaQc'
 import BetaPipelineJobs from './pages/BetaPipelineJobs'
 import WorkshopRecipes from './pages/WorkshopRecipes'
 import PickupOrders from './pages/PickupOrders'
 import Notifications from './pages/Notifications'
+import ActivityTimeline from './pages/ActivityTimeline'
+import Tasks from './pages/Tasks'
 import Icon from './components/icons/Icon'
 import { Button } from './components/ui'
 import BrandLogo from './components/BrandLogo'
@@ -78,11 +79,9 @@ const PAGES = {
   'factory-frames': Frames,
   'factory-carpentry': BetaCarpentry,
   'factory-paint': BetaPaint,
-  'factory-foam': BetaPipelineJobs,
   'factory-cushion': BetaPipelineJobs,
   'factory-upholstery': BetaUpholstery,
   'factory-assembly': BetaPipelineJobs,
-  'factory-fabric': BetaFabric,
   'factory-qc': BetaQc,
   'factory-clearance': BetaPipelineJobs,
   'factory-paint-recipes': WorkshopRecipes,
@@ -92,6 +91,8 @@ const PAGES = {
   'factory-cushion-recipes': WorkshopRecipes,
   pickup: PickupOrders,
   notifications: Notifications,
+  'activity-timeline': ActivityTimeline,
+  tasks: Tasks,
   ranking: EmployeeRanking,
   orgchart: OrgChart,
   attendance: Attendance,

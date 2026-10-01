@@ -42,17 +42,23 @@ function LedgerLinesTable({ payload, loading }) {
       </div>
       {lines.map((line) => (
         <div key={line.id} className="acct-line-card">
-          <div>
+          <div className="acct-line-main">
             <strong className="acct-number">{line.document_number || line.document_code || '—'}</strong>
             <div className="acct-ledger-description">{line.description || '—'}</div>
           </div>
-          <div>{formatDate(line.entry_date)}</div>
-          <strong className={`acct-number${line.debit ? ' acct-debit' : ''}`}>{formatRial(line.debit || 0)}</strong>
-          <strong className={`acct-number${line.credit ? ' acct-credit' : ''}`}>{formatRial(line.credit || 0)}</strong>
-          <span>
-            <strong className="acct-number">{formatRial(line.balance || 0)}</strong>
-            <small style={{ display: 'block', color: 'var(--text-secondary)' }}>{line.balance_side_label || '—'}</small>
-          </span>
+          <div data-label="تاریخ">{formatDate(line.entry_date)}</div>
+          <div data-label="بدهکار">
+            <strong className={`acct-number${line.debit ? ' acct-debit' : ''}`}>{formatRial(line.debit || 0)}</strong>
+          </div>
+          <div data-label="بستانکار">
+            <strong className={`acct-number${line.credit ? ' acct-credit' : ''}`}>{formatRial(line.credit || 0)}</strong>
+          </div>
+          <div data-label="مانده">
+            <span className="acct-line-balance">
+              <strong className="acct-number">{formatRial(line.balance || 0)}</strong>
+              <small>{line.balance_side_label || '—'}</small>
+            </span>
+          </div>
         </div>
       ))}
       <LiveTBalance debit={totals.debit} credit={totals.credit} label="تراز آزمایشی لحظه‌ای گردش" compact />

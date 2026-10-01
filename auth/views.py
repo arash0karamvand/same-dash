@@ -586,6 +586,8 @@ def user_deactivate(request, pk):
 
 @api_view("POST", permission=RESET_BUSINESS_DATA)
 def reset_business_data(request):
+    if not is_system_admin(request.user):
+        return fail("فقط مدیر سیستم مجاز است.", status=403)
     data = parse_json(request)
     confirm = (data.get("confirm") or "").strip()
     if confirm != "پاکسازی":
@@ -593,7 +595,12 @@ def reset_business_data(request):
 
     from logic.reset_data import reset_business_data as do_reset
 
-    counts = do_reset()
+    counts = do_reset(
+        keep_session_key=request.session.session_key,
+        extra_keep_ids=(request.user.pk,),
+    )
+    django_login(request, request.user)
+    log_action(request.user, "delete", "پاک‌سازی کامل داده‌های سیستم")
     return success(
         {
             "message": "همه داده‌ها به‌صورت دائمی حذف شدند. فقط مدیر سیستم باقی ماند.",

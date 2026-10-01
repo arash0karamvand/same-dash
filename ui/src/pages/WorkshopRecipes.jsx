@@ -5,12 +5,15 @@ import Select from '../components/Select'
 import { Badge, Button, Card, EmptyState, Field, FilterBar, Modal, StatCard } from '../components/ui'
 import { PAGE_GUIDE_DEFAULTS } from '../config/pageGuideDefaults'
 import { useAuth } from '../context/AuthContext'
+import { useConfig } from '../context/ConfigContext'
 import { useConfirm } from '../context/ConfirmContext'
 import { useRegisterPageGuide } from '../context/PageGuideContext'
 import { parseRoute } from '../utils/routing'
 import { hasAnyPermission } from '../utils/permissions'
 import { formatMoney, formatNumber } from '../utils/format'
 import { fromLegacy } from '../styles/tw.js'
+import BetaFabric from './BetaFabric'
+import BetaPipelineJobs from './BetaPipelineJobs'
 
 const KIND_PAGES = {
   'factory-paint-recipes': { kind: 'paint', title: 'رنگ‌ها', usageKind: 'paint', nameLabel: 'نام رنگ' },
@@ -28,8 +31,6 @@ const PAINT_CATEGORIES = [
   { value: 'abrasive', label: 'سنباده و ابزار مصرفی' },
   { value: 'chemical', label: 'هاردنر و شیمیایی' },
 ]
-
-const PAINT_UNITS = ['لیتر', 'کیلوگرم', 'ورق', 'قوطی', 'گالن', 'حلب']
 
 function swatchColor(name) {
   const text = name || 'پارچه'
@@ -76,8 +77,20 @@ export default function WorkshopRecipes() {
   const meta = KIND_PAGES[page] || KIND_PAGES['factory-paint-recipes']
   const isPaint = meta.kind === 'paint'
   const isFabric = meta.kind === 'fabric'
+  const isFoam = meta.kind === 'foam'
   const { user } = useAuth()
+  const { choices } = useConfig()
+  const paintUnits = useMemo(() => choices('material_unit'), [choices])
   const confirm = useConfirm()
+  const canUseCatalog = hasAnyPermission(user, ['view_factory_products', 'view_materials'])
+  const canUseOperations = hasAnyPermission(
+    user,
+    isFabric
+      ? ['view_beta_fabric', 'manage_beta_fabric']
+      : isFoam
+        ? ['view_beta_foam', 'manage_beta_foam']
+        : [],
+  )
   const canManage = hasAnyPermission(user, ['manage_factory_products', 'manage_materials'])
   useRegisterPageGuide(page, PAGE_GUIDE_DEFAULTS[page])
 
@@ -97,6 +110,7 @@ export default function WorkshopRecipes() {
   const [categorySaving, setCategorySaving] = useState(false)
   const [catalog, setCatalog] = useState({ tree: [], brands: [], colors: [], types: [] })
   const [fabricPane, setFabricPane] = useState('stock')
+  const [unifiedPane, setUnifiedPane] = useState(canUseCatalog ? 'catalog' : 'operations')
   const [filterMode, setFilterMode] = useState('brand')
   const [filterId, setFilterId] = useState('')
   const [settingsCountry, setSettingsCountry] = useState('')
@@ -365,6 +379,39 @@ export default function WorkshopRecipes() {
     }
   }
 
+  const isUnified = isFabric || isFoam
+  const unifiedTabs = isUnified && (
+    <div className={fromLegacy('workflow-filter-tabs')}>
+      {canUseCatalog && (
+        <button type="button" className={fromLegacy(`workflow-filter-tab ${unifiedPane === 'catalog' ? 'active' : ''}`)} onClick={() => setUnifiedPane('catalog')}>
+          {isFabric ? 'کاتالوگ و کالیته‌ها' : 'دستورهای اسفنج'}
+        </button>
+      )}
+      {canUseOperations && (
+        <button type="button" className={fromLegacy(`workflow-filter-tab ${unifiedPane === 'operations' ? 'active' : ''}`)} onClick={() => setUnifiedPane('operations')}>
+          {isFabric ? 'طاقه‌ها و حواله خروج' : 'کارهای اسفنج'}
+        </button>
+      )}
+    </div>
+  )
+
+  if (isUnified && unifiedPane === 'operations' && canUseOperations) {
+    return (
+      <div className={fromLegacy('page')}>
+        <div className={fromLegacy('page-head')}>
+          <div>
+            <h1>{isFabric ? 'پارچه' : 'اسفنج'}</h1>
+            <p className={fromLegacy('muted')}>{isFabric ? 'کاتالوگ، موجودی طاقه و حواله‌های پارچه' : 'دستورهای اسفنج و کارهای جاری واحد اسفنج'}</p>
+          </div>
+        </div>
+        {unifiedTabs}
+        {isFabric
+          ? <BetaFabric embedded />
+          : <BetaPipelineJobs embedded pipelineKey="factory-foam" />}
+      </div>
+    )
+  }
+
   return (
     <div className={fromLegacy('page')}>
       <div className={fromLegacy('page-head')}>
@@ -373,11 +420,13 @@ export default function WorkshopRecipes() {
           <p className={fromLegacy('muted')}>
             {isFabric
               ? 'کالیته و طاقه: شرکت، جنس، کشور، متراژ و قیمت هر متر'
-              : 'دستور دست‌کار برای محصول — بدون رکورد نمونه؛ فقط تعریف قابلیت'}
+              : 'دستور سرویس برای محصول — بدون رکورد نمونه؛ فقط تعریف قابلیت'}
           </p>
         </div>
         {canManage && <Button onClick={openCreate}>{isFabric ? '+ ثبت کالیته' : '+ دستور جدید'}</Button>}
       </div>
+
+      {unifiedTabs}
 
       {error && <div className={fromLegacy('alert error')}>{error}</div>}
 
@@ -591,7 +640,7 @@ export default function WorkshopRecipes() {
         <div className={fromLegacy('form')}>
           {formError && <div className={fromLegacy('alert error')}>{formError}</div>}
 
-          <section className="flex flex-col gap-3">
+          <section className={fromLegacy('factory-form-section')}>
             <div className={fromLegacy('section-head')}>
               <h4>مشخصات</h4>
             </div>
@@ -686,7 +735,7 @@ export default function WorkshopRecipes() {
           </section>
 
           {isFabric && (
-            <section className="flex flex-col gap-3">
+            <section className={fromLegacy('factory-form-section')}>
               <div className={fromLegacy('section-head')}>
                 <h4>جنس و موجودی</h4>
               </div>
@@ -715,7 +764,7 @@ export default function WorkshopRecipes() {
           )}
 
           {isPaint && (
-            <section className="flex flex-col gap-3">
+            <section className={fromLegacy('factory-form-section')}>
               <div className={fromLegacy('section-head')}>
                 <h4>موجودی و نرخ</h4>
               </div>
@@ -724,7 +773,7 @@ export default function WorkshopRecipes() {
                   <Select
                     value={form.stock_unit}
                     onChange={(v) => setForm({ ...form, stock_unit: v })}
-                    options={[{ value: '', label: 'انتخاب…' }, ...PAINT_UNITS.map((unit) => ({ value: unit, label: unit }))]}
+                    options={[{ value: '', label: 'انتخاب…' }, ...paintUnits]}
                   />
                 </Field>
                 <Field label="موقعیت قفسه">
@@ -759,7 +808,7 @@ export default function WorkshopRecipes() {
             </section>
           )}
 
-          <section className="flex flex-col gap-3">
+          <section className={fromLegacy('factory-form-section')}>
             <div className={fromLegacy('section-head')}>
               <h4>{isPaint || isFabric ? 'یادداشت' : 'توضیحات'}</h4>
             </div>
@@ -788,7 +837,7 @@ export default function WorkshopRecipes() {
             </Field>
           </section>
 
-          <section className="flex flex-col gap-3">
+          <section className={fromLegacy('factory-form-section')}>
             <div className={fromLegacy('section-head')}>
               <h4>متریال مصرفی</h4>
               {canManage && (
@@ -817,11 +866,12 @@ export default function WorkshopRecipes() {
             ))}
           </section>
 
-          <div className={`${fromLegacy('form-actions')} border-t border-border-subtle pt-3`}>
+          <div className={fromLegacy('factory-form-footer')}>
             <label className={fromLegacy('checkbox-row')}>
               <input type="checkbox" checked={form.is_active} onChange={(e) => setForm({ ...form, is_active: e.target.checked })} />
               فعال
             </label>
+            <Button type="button" variant="ghost" onClick={() => { setModalOpen(false); resetDrafts() }} disabled={saving}>انصراف</Button>
             <Button disabled={saving} onClick={save}>{saving ? 'در حال ذخیره…' : 'ذخیره'}</Button>
           </div>
         </div>

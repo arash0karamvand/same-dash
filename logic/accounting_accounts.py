@@ -1,8 +1,13 @@
-"""Chart of accounts CRUD; account rows are created from uploaded workbooks."""
+"""Chart of accounts CRUD for the office and factory ledgers."""
 
+import re
+
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError, transaction
 from django.db.models import Max
+from django.db.models.deletion import ProtectedError
 
-from backend.models import Account, AccountClosure
+from backend.models import Account, AccountClosure, JournalEntry
 from logic.chart_of_accounts import ACCOUNT_CLASS_LABELS
 from logic.dynamic_choices import entry_type_account_map, payment_method_account_map
 from logic.ledger import OFFICE_LEDGER
@@ -244,16 +249,62 @@ def list_detailed_accounts(params, *, ledger=OFFICE_LEDGER):
     return [detailed_to_dict(a) for a in qs.order_by("parent__parent__sort_order", "parent__code", "code")]
 
 
-def _create_child(parent, code, name):
-    code, name = (code or "").strip(), (name or "").strip()
+_DIGIT_MAP = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
+_ACCOUNT_CLASSES = {"asset", "liability", "equity", "revenue", "expense"}
+_NORMAL_BALANCES = {"debit", "credit"}
+
+
+def _clean_code(code):
+    return str(code or "").translate(_DIGIT_MAP).strip()
+
+
+def _slug_piece(code):
+    raw = "".join(ch if ch.isascii() and (ch.isalnum() or ch == "_") else "-" for ch in _clean_code(code))
+    raw = "-".join(part for part in raw.split("-") if part)
+    return (raw or "x")[:40]
+
+
+def _unique_slug(ledger_id, base):
+    base = (base or "account")[:55]
+    slug = base[:60]
+    number = 2
+    while Account.objects.filter(ledger_id=ledger_id, slug=slug).exists():
+        suffix = f"-{number}"
+        slug = f"{base[:60 - len(suffix)]}{suffix}"
+        number += 1
+    return slug
+
+
+def _child_slug(parent, code):
+    piece = _clean_code(code)
+    if not re.fullmatch(r"[-A-Za-z0-9_]+", piece):
+        piece = _slug_piece(piece)
+    return _unique_slug(parent.ledger_id, f"{parent.slug}-{piece}")
+
+
+def _require_code_name(code, name):
+    code, name = _clean_code(code), (name or "").strip()
     if not code or not name:
         raise ValueError("کد و عنوان حساب الزامی است.")
-    if Account.objects.filter(ledger=parent.ledger, code=code).exists():
-        raise ValueError("این کد حساب قبلاً ثبت شده است.")
+    if "/" in code or "\\" in code:
+        raise ValueError("کد هر سطح جداست و نباید / داشته باشد.")
+    return code, name
+
+
+def _rewrite_descendant_paths(account):
+    for child in account.children.all():
+        child.save()
+        _rewrite_descendant_paths(child)
+
+
+def _create_child(parent, code, name):
+    code, name = _require_code_name(code, name)
+    if parent.children.filter(code=code).exists():
+        raise ValueError("این کد زیر همین حساب قبلاً ثبت شده است.")
     return Account.objects.create(
         ledger=parent.ledger,
         parent=parent,
-        slug=f"{parent.slug}-{code}",
+        slug=_child_slug(parent, code),
         code=code,
         name=name,
         account_class=parent.account_class,
@@ -261,36 +312,109 @@ def _create_child(parent, code, name):
     )
 
 
+def create_general_account(*, code, name, account_class, normal_balance="debit", is_active=True, ledger=OFFICE_LEDGER):
+    code, name = _require_code_name(code, name)
+    account_class = (account_class or "").strip()
+    normal_balance = (normal_balance or "").strip()
+    if account_class not in _ACCOUNT_CLASSES:
+        raise ValueError("گروه حساب نامعتبر است.")
+    if normal_balance not in _NORMAL_BALANCES:
+        raise ValueError("ماهیت حساب نامعتبر است.")
+    if _depth(0, ledger).filter(code=code).exists():
+        raise ValueError("این کد حساب کل قبلاً ثبت شده است.")
+    digits = "".join(ch for ch in code if ch.isdigit())
+    sort_order = min(int(digits[:5] or 0), 32767)
+    try:
+        return Account.objects.create(
+            ledger=ledger.model,
+            parent=None,
+            slug=_unique_slug(ledger.model.id, f"g-{_slug_piece(code)}"),
+            code=code,
+            name=name,
+            account_class=account_class,
+            normal_balance=normal_balance,
+            sort_order=sort_order,
+            is_active=bool(is_active),
+        )
+    except (IntegrityError, ValidationError) as exc:
+        raise ValueError("ثبت حساب کل ممکن نشد.") from exc
+
+
 def create_subsidiary_account(*, account_id, code, name, ledger=OFFICE_LEDGER):
-    parent = _depth(0, ledger).get(pk=account_id, is_active=True)
+    try:
+        parent = _depth(0, ledger).get(pk=account_id, is_active=True)
+    except Account.DoesNotExist as exc:
+        raise LookupError("حساب کل یافت نشد.") from exc
     return _create_child(parent, code, name)
 
 
 def create_detailed_account(*, subsidiary_id, code, name, ledger=OFFICE_LEDGER):
-    parent = _depth(1, ledger).get(pk=subsidiary_id, is_active=True)
+    try:
+        parent = _depth(1, ledger).get(pk=subsidiary_id, is_active=True)
+    except Account.DoesNotExist as exc:
+        raise LookupError("حساب معین یافت نشد.") from exc
     return _create_child(parent, code, name)
 
 
 def _update(account, code=None, name=None, is_active=None):
+    previous = account.code
     if code is not None:
-        account.code = (code or "").strip()
+        account.code = _clean_code(code)
+        if "/" in account.code or "\\" in account.code:
+            raise ValueError("کد هر سطح جداست و نباید / داشته باشد.")
+        if Account.objects.filter(
+            ledger_id=account.ledger_id, parent_id=account.parent_id, code=account.code,
+        ).exclude(pk=account.pk).exists():
+            raise ValueError("این کد زیر همین حساب قبلاً ثبت شده است.")
     if name is not None:
         account.name = (name or "").strip()
     if is_active is not None:
         account.is_active = bool(is_active)
     if not account.code or not account.name:
         raise ValueError("کد و عنوان حساب الزامی است.")
-    account.save()
+    try:
+        with transaction.atomic():
+            account.save()
+            if account.code != previous:
+                _rewrite_descendant_paths(account)
+    except IntegrityError as exc:
+        raise ValueError("این کد با مسیر حساب دیگری تداخل دارد.") from exc
+    except ValidationError as exc:
+        message = "؛ ".join(getattr(exc, "messages", []) or []) or "ذخیره حساب ممکن نشد."
+        raise ValueError(message) from exc
     return account
 
 
-def update_general_account(*, account_id, name=None, is_active=None, ledger=OFFICE_LEDGER):
-    return _update(_depth(0, ledger).get(pk=account_id), name=name, is_active=is_active)
+def update_general_account(*, account_id, name=None, is_active=None, code=None, ledger=OFFICE_LEDGER):
+    try:
+        account = _depth(0, ledger).get(pk=account_id)
+    except Account.DoesNotExist as exc:
+        raise LookupError("حساب کل یافت نشد.") from exc
+    return _update(account, code=code, name=name, is_active=is_active)
+
+
+def delete_chart_account(account):
+    if account.children.exists():
+        raise ValueError("این حساب زیرحساب دارد. اول زیرحساب‌ها را حذف کنید.")
+    if account.journal_lines.exclude(journal__status_ref_id=JournalEntry.STATUS_VOID).exists():
+        raise ValueError("روی این حساب رکورد ثبت شده و حذف نمی‌شود. برای بردنش از فهرست، از ویرایش آن را غیرفعال کنید.")
+    try:
+        account.delete()
+    except ProtectedError as exc:
+        raise ValueError("این حساب در سند، چک یا طرف‌حساب دیگری استفاده شده و حذف نمی‌شود.") from exc
 
 
 def update_subsidiary_account(*, sub_id, code=None, name=None, is_active=None, ledger=OFFICE_LEDGER):
-    return _update(_depth(1, ledger).get(pk=sub_id), code, name, is_active)
+    try:
+        account = _depth(1, ledger).get(pk=sub_id)
+    except Account.DoesNotExist as exc:
+        raise LookupError("حساب معین یافت نشد.") from exc
+    return _update(account, code, name, is_active)
 
 
 def update_detailed_account(*, detail_id, code=None, name=None, is_active=None, ledger=OFFICE_LEDGER):
-    return _update(_depth(2, ledger).get(pk=detail_id), code, name, is_active)
+    try:
+        account = _depth(2, ledger).get(pk=detail_id)
+    except Account.DoesNotExist as exc:
+        raise LookupError("حساب تفصیلی یافت نشد.") from exc
+    return _update(account, code, name, is_active)

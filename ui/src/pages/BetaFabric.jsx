@@ -3,7 +3,7 @@ import { betaFabricApi } from '../api/client'
 import MoneyInput from '../components/MoneyInput'
 import PersianDateInput from '../components/PersianDateInput'
 import Select from '../components/Select'
-import { Badge, Button, Card, EmptyState, Field, FilterBar, Modal, StatCard } from '../components/ui'
+import { Badge, Button, Card, EmptyState, Field, FilterBar, FormFooter, FormGrid, FormSection, Modal, StatCard } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmContext'
 import { formatMoney } from '../utils/format'
@@ -36,7 +36,7 @@ const toOptions = (allLabel, values) => [
   ...(values || []).map((v) => ({ value: v, label: v })),
 ]
 
-export default function BetaFabric() {
+export default function BetaFabric({ embedded = false }) {
   const { user } = useAuth()
   const confirm = useConfirm()
   const canManage = hasPermission(user, 'manage_beta_fabric')
@@ -144,12 +144,12 @@ export default function BetaFabric() {
   }
 
   return (
-    <div className={fromLegacy('page')}>
-      <div className={fromLegacy('page-head')}>
+    <div className={embedded ? '' : fromLegacy('page')}>
+      {!embedded && <div className={fromLegacy('page-head')}>
         <div>
           <h1>انبار پارچه و کالیته‌ها (بتا)</h1>
           <p className={fromLegacy('muted')}>
-            کالیته‌ها، جنس، کشور سازنده، قیمت، تصاویر و حواله‌های برش کارگاه‌های اقماری
+            کالیته‌ها، جنس، کشور سازنده، قیمت، تصاویر و حواله‌های برش بازرگان
           </p>
         </div>
         {canManage && (
@@ -158,7 +158,13 @@ export default function BetaFabric() {
             <Button onClick={openCreateRoll}>+ ثبت کالیته / طاقه جدید</Button>
           </div>
         )}
-      </div>
+      </div>}
+      {embedded && canManage && (
+        <div className={fromLegacy('row')}>
+          <Button variant="ghost" onClick={() => { setDispatchForm({ ...EMPTY_DISPATCH, sent_date: todayIso(), roll_id: rolls[0] ? String(rolls[0].id) : '' }); setDispatchModal(true) }}>صدور حواله خروج</Button>
+          <Button onClick={openCreateRoll}>+ ثبت کالیته / طاقه جدید</Button>
+        </div>
+      )}
 
       {error && <div className={fromLegacy('alert error')}>{error}</div>}
 
@@ -340,6 +346,8 @@ export default function BetaFabric() {
       )}
 
       <Modal title={editingRoll ? `ویرایش ${editingRoll.code}` : 'ثبت کالیته / طاقه جدید'} open={rollModal} onClose={() => { setRollModal(false); setEditingRoll(null) }} wide>
+        <div className={fromLegacy('form')}>
+        <FormSection title="شناسنامه پارچه"><FormGrid>
         <Field label="کد پارچه">
           <input value={rollForm.code} onChange={(e) => setRollForm({ ...rollForm, code: e.target.value })} placeholder="خالی بماند تا خودکار ساخته شود" />
         </Field>
@@ -364,6 +372,8 @@ export default function BetaFabric() {
             {(stats.country_options || []).map((c) => <option key={c} value={c} />)}
           </datalist>
         </Field>
+        </FormGrid></FormSection>
+        <FormSection title="موجودی و بهای خرید"><FormGrid>
         <Field label="بهای خرید هر متر">
           <MoneyInput value={rollForm.unit_cost} onChange={(e) => setRollForm({ ...rollForm, unit_cost: e.target.value })} />
         </Field>
@@ -376,10 +386,14 @@ export default function BetaFabric() {
         <Field label="آدرس تصویر">
           <input value={rollForm.image_url} onChange={(e) => setRollForm({ ...rollForm, image_url: e.target.value })} placeholder="https://…" />
         </Field>
-        <Button disabled={saving} onClick={saveRoll}>{editingRoll ? 'ذخیره تغییرات' : 'ورود به انبار'}</Button>
+        </FormGrid></FormSection>
+        <FormFooter><Button variant="ghost" onClick={() => setRollModal(false)}>انصراف</Button><Button disabled={saving} onClick={saveRoll}>{editingRoll ? 'ذخیره تغییرات' : 'ورود به انبار'}</Button></FormFooter>
+        </div>
       </Modal>
 
       <Modal title="صدور حواله خروج" open={dispatchModal} onClose={() => setDispatchModal(false)}>
+        <FormSection title="جزئیات حواله" hint="مقصد و متراژ ارسالی را پیش از صدور کنترل کنید.">
+        <FormGrid>
         <Field label="طاقه / کالیته">
           <Select
             value={dispatchForm.roll_id}
@@ -403,7 +417,9 @@ export default function BetaFabric() {
         <Field label="تاریخ ارسال">
           <PersianDateInput value={dispatchForm.sent_date} onChange={(v) => setDispatchForm({ ...dispatchForm, sent_date: v })} />
         </Field>
-        <Button disabled={saving} onClick={saveDispatch}>صدور حواله</Button>
+        </FormGrid>
+        </FormSection>
+        <FormFooter><Button variant="ghost" onClick={() => setDispatchModal(false)}>انصراف</Button><Button disabled={saving} onClick={saveDispatch}>صدور حواله</Button></FormFooter>
       </Modal>
     </div>
   )

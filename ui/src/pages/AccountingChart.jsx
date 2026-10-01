@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { accountingApi } from '../api/client'
 import { resultList } from '../api/accounting'
+import { useConfirm } from '../context/ConfirmContext'
 import AccountTreeView from '../components/accounting/AccountTreeView'
 import AccountFormModal from '../components/accounting/AccountFormModal'
 import { AccountingDataPanel, AccountingPageHeader, AccountingToolbar } from '../components/accounting/AccountingERP'
@@ -24,6 +25,7 @@ export default function AccountingChart() {
   })
 
   const api = accountingApi
+  const confirm = useConfirm()
 
   const loadAccounts = useCallback(async () => {
     setLoading(true)
@@ -41,10 +43,10 @@ export default function AccountingChart() {
         accounts: (group.accounts || []).map((account) => ({
           ...account,
           subsidiaries: subsidiaries
-            .filter((sub) => sub.account_id === account.id)
+            .filter((sub) => Number(sub.account_id) === Number(account.id))
             .map((sub) => ({
               ...sub,
-              details: details.filter((detail) => detail.subsidiary_id === sub.id),
+              details: details.filter((detail) => Number(detail.subsidiary_id) === Number(sub.id)),
             })),
         })),
       }))
@@ -77,6 +79,43 @@ export default function AccountingChart() {
       }),
     })).filter((group) => group.accounts.length)
   }, [accountGroups, search])
+
+  const postableAccounts = useMemo(() => {
+    const rows = []
+    accountGroups.forEach((group) => {
+      ;(group.accounts || []).forEach((account) => {
+        const subsidiaries = account.subsidiaries || []
+        if (!subsidiaries.length) {
+          rows.push({
+            level: 'general',
+            id: account.id,
+            code: account.full_code || account.code,
+            name: account.name,
+          })
+        }
+        subsidiaries.forEach((sub) => {
+          const details = sub.details || []
+          if (!details.length) {
+            rows.push({
+              level: 'subsidiary',
+              id: sub.id,
+              code: sub.full_code || sub.code,
+              name: sub.name,
+            })
+          }
+          details.forEach((detail) => {
+            rows.push({
+              level: 'detailed',
+              id: detail.id,
+              code: detail.full_code || detail.code,
+              name: detail.name,
+            })
+          })
+        })
+      })
+    })
+    return rows
+  }, [accountGroups])
 
   const handleCreateGeneral = () => {
     setFormConfig({
@@ -121,12 +160,63 @@ export default function AccountingChart() {
     setShowForm(true)
   }
 
+  const handleCreateChild = (account, level) => {
+    if (level === 'general') {
+      setFormConfig({
+        level: 'subsidiary',
+        account: null,
+        parentAccount: account,
+        parentSubsidiary: null,
+      })
+      setShowForm(true)
+      return
+    }
+    if (level !== 'subsidiary') return
+    let parentAccount = null
+    for (const group of accountGroups) {
+      parentAccount = group.accounts.find((item) => item.id === account.account_id)
+      if (parentAccount) break
+    }
+    if (!parentAccount) {
+      alert('حساب کل این معین پیدا نشد.')
+      return
+    }
+    setFormConfig({
+      level: 'detailed',
+      account: null,
+      parentAccount,
+      parentSubsidiary: account,
+    })
+    setShowForm(true)
+  }
+
+  const handleDelete = async (account, level) => {
+    const ok = await confirm({
+      title: 'حذف حساب',
+      message: `حساب «${account.name}» حذف شود؟ اگر زیرحساب داشته باشد حذف نمی‌شود. اگر رکورد داشته باشد هم حذف نمی‌شود و باید غیرفعال شود.`,
+      confirmText: 'حذف',
+      variant: 'danger',
+    })
+    if (!ok) return
+    try {
+      if (level === 'general') await api.deleteGeneralAccount(account.id)
+      else if (level === 'subsidiary') await api.deleteSubsidiary(account.id)
+      else await api.deleteDetailed(account.id)
+      if (selectedAccount?.account?.id === account.id && selectedAccount.level === level) {
+        setSelectedAccount(null)
+      }
+      loadAccounts()
+    } catch (err) {
+      alert(err.message || 'حذف حساب ممکن نشد.')
+    }
+  }
+
   const handleSave = async (formData, level) => {
     if (level === 'general') {
       if (formConfig.account) {
         await api.updateGeneralAccount(formConfig.account.id, formData)
       } else {
-        await api.create(formData)
+        await api.createGeneral(formData)
       }
     } else if (level === 'subsidiary') {
       if (formConfig.account) {
@@ -154,11 +244,11 @@ export default function AccountingChart() {
   }
 
   return (
-    <div className={fromLegacy('accounting-chart-page')}>
+    <div className={fromLegacy('accounting-chart-page min-w-0 max-w-full')}>
       <AccountingPageHeader
         eyebrow="ساختار کدینگ"
         title="درخت حساب‌ها"
-        description="نقشه سلسله‌مراتبی حساب‌های کل، معین و تفصیلی"
+        description="روی ردیف بزنید تا زیرحساب‌ها باز شوند. رکوردها با دکمهٔ «رکوردها» باز می‌شوند. از همان‌جا حساب و رکورد را بسازید، ویرایش یا حذف کنید."
         actions={(
           <Button variant="primary" onClick={handleCreateGeneral}>
             <Icon name="plus" size={16} />
@@ -168,14 +258,16 @@ export default function AccountingChart() {
       />
 
       <AccountingToolbar>
-        <Icon name="search" size={16} />
-        <input
-          className={fromLegacy("search-input")}
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          placeholder="جست‌وجوی کد یا عنوان حساب…"
-        />
-        <span className={fromLegacy("muted small")}>
+        <label className="acct-chart-search">
+          <Icon name="search" size={16} />
+          <input
+            className={fromLegacy("search-input")}
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="جست‌وجوی کد یا عنوان حساب…"
+          />
+        </label>
+        <span className="acct-chart-count">
           {filteredGroups.reduce((count, group) => count + group.accounts.length, 0).toLocaleString('fa-IR')} حساب کل
         </span>
       </AccountingToolbar>
@@ -183,28 +275,18 @@ export default function AccountingChart() {
       {loading ? (
         <div className={fromLegacy("loading")}>در حال بارگذاری کدینگ حساب‌ها…</div>
       ) : (
-        <div className={fromLegacy("acct-chart-workspace")}>
-          <AccountingDataPanel title="ساختار حساب‌ها">
-            <AccountTreeView
-              accountGroups={filteredGroups}
-              onEdit={handleEdit}
-              onSelect={setSelectedAccount}
-              selectedId={selectedAccount?.account?.id}
-            />
-          </AccountingDataPanel>
-          <AccountingDataPanel title="مشخصات حساب" className="acct-chart-inspector">
-            {selectedAccount ? (
-              <dl className={fromLegacy("acct-account-inspector acct-inspector")}>
-                <div><dt>سطح</dt><dd>{selectedAccount.level === 'general' ? 'کل' : selectedAccount.level === 'subsidiary' ? 'معین' : 'تفصیلی'}</dd></div>
-                <div><dt>کد</dt><dd className="acct-number">{selectedAccount.account.full_code || selectedAccount.account.code || '—'}</dd></div>
-                <div><dt>عنوان</dt><dd>{selectedAccount.account.name}</dd></div>
-                <div><dt>وضعیت</dt><dd>{selectedAccount.account.is_active === false ? 'غیرفعال' : 'فعال'}</dd></div>
-              </dl>
-            ) : (
-              <p className={fromLegacy("muted acct-empty-inspector")}>یک حساب را از درخت انتخاب کنید.</p>
-            )}
-          </AccountingDataPanel>
-        </div>
+        <AccountingDataPanel title="ساختار حساب‌ها" subtitle="زیرحساب با کلیک روی ردیف باز می‌شود. رکوردها فقط با دکمهٔ «رکوردها».">
+          <AccountTreeView
+            accountGroups={filteredGroups}
+            postableAccounts={postableAccounts}
+            onEdit={handleEdit}
+            onCreateChild={handleCreateChild}
+            onDelete={handleDelete}
+            onSelect={setSelectedAccount}
+            selectedKey={selectedAccount ? `${selectedAccount.level}:${selectedAccount.account.id}` : ''}
+            expandAll={Boolean(search.trim())}
+          />
+        </AccountingDataPanel>
       )}
 
       <AccountFormModal

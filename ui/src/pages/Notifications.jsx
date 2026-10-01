@@ -548,7 +548,7 @@ export default function Notifications() {
             ? 'تیکت باید به فاکتور وصل شود. مرخصی و ماموریت فقط به یک نفر ارسال می‌شود و همان لحظه در حضور ثبت می‌گردد.'
             : 'تیکت باید به فاکتور وصل شود. گیرنده می‌تواند یک نفر یا یک دپارتمان باشد؛ اولین بازکننده تیکت دپارتمانی مالک گفتگو می‌شود.'}
         </p>
-        <form className={fromLegacy('form')} onSubmit={sendMessage}>
+        <form className={fromLegacy('form factory-form-panel')} onSubmit={sendMessage}>
           <Field label="گیرنده">
             <Select
               value={compose.target}

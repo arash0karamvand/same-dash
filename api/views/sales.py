@@ -49,6 +49,20 @@ from logic.sales_reports import (
 from logic.sellers import get_seller_for_user, resolve_sale_branch_for_create
 
 
+@api_view("GET")
+def sale_finish_options(request):
+    if not (
+        has_permission(request.user, CREATE_SALE)
+        or has_permission(request.user, APPROVE_SALE_ACCOUNTING)
+        or has_permission(request.user, APPROVE_SALE_BRANCH)
+        or can_list_sales(request.user)
+    ):
+        return fail("Permission denied", status=403)
+    from logic.workshop_recipes import sale_finish_catalog
+
+    return success(sale_finish_catalog())
+
+
 def _serialize_sales(user, sales):
     from logic.sales_accounting import attach_accounting_journals
 

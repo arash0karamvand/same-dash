@@ -45,7 +45,7 @@ export function AccountingDataPanel({ title, subtitle, actions, children, classN
           {actions && <div className={fromLegacy("acct-erp-panel-actions")}>{actions}</div>}
         </header>
       )}
-      <div className={fromLegacy("acct-erp-panel-body")}>{children}</div>
+      <div className={fromLegacy("acct-erp-panel-body min-w-0 overflow-x-auto")}>{children}</div>
     </section>
   )
 }

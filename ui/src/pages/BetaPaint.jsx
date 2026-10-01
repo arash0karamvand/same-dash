@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { betaPaintApi } from '../api/client'
 import Select from '../components/Select'
-import { Badge, Button, Card, EmptyState, Field, FilterBar, Modal, StatCard } from '../components/ui'
+import { Badge, Button, Card, EmptyState, Field, FilterBar, FormFooter, FormGrid, FormSection, Modal, StatCard } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmContext'
 import { useBetaSaleSources } from '../hooks/useBetaSaleSources'
@@ -41,8 +41,8 @@ export default function BetaPaint() {
   const [saving, setSaving] = useState(false)
   const [busyId, setBusyId] = useState(null)
 
-  const kindOpts = useMemo(() => betaOptions(BETA_PAINT_KIND, stats.kinds), [betaOptions, stats.kinds])
-  const stageOpts = useMemo(() => betaOptions(BETA_PAINT_STAGE, stats.stages), [betaOptions, stats.stages])
+  const kindOpts = useMemo(() => betaOptions(BETA_PAINT_KIND), [betaOptions])
+  const stageOpts = useMemo(() => betaOptions(BETA_PAINT_STAGE), [betaOptions])
   const finalStage = stats.final_stage || (stageOpts.length ? stageOpts[stageOpts.length - 1].value : '')
 
   const load = useCallback(async () => {
@@ -236,50 +236,40 @@ export default function BetaPaint() {
       )}
 
       <Modal title={editing ? `ویرایش ${editing.code}` : 'ثبت سفارش کلاف رنگ'} open={modalOpen} onClose={() => { setModalOpen(false); setEditing(null) }} wide>
-        <Field label="سفارش کارخانه">
-          <Select value={form.sale_id} onChange={(v) => setForm(applySale(v, form))} options={saleOptions} />
-        </Field>
-        <Field label="نام محصول">
-          <input value={form.product_name} onChange={(e) => setForm({ ...form, product_name: e.target.value })} />
-        </Field>
-        <Field label="نوع سفارش">
-          <Select value={form.kind} onChange={(v) => setForm({ ...form, kind: v })} options={kindOpts} />
-        </Field>
-        <Field label="فام رنگ">
-          <input list="beta-paint-colors" value={form.color_name} onChange={(e) => setForm({ ...form, color_name: e.target.value })} />
-          <datalist id="beta-paint-colors">
-            {(stats.color_options || []).map((c) => <option key={c} value={c} />)}
-          </datalist>
-        </Field>
-        <Field label="مرحله">
-          <Select value={form.stage} onChange={(v) => setForm({ ...form, stage: v })} options={stageOpts} />
-        </Field>
-        <Field label="پیشرفت (٪)">
-          <input className={fromLegacy('ltr')} type="number" min="0" max="100" value={form.progress} onChange={(e) => setForm({ ...form, progress: e.target.value })} />
-        </Field>
-        <Field label="ایراد QC">
-          <textarea rows={3} value={form.qc_issue} onChange={(e) => setForm({ ...form, qc_issue: e.target.value })} />
-        </Field>
-        <Field label="یادداشت">
-          <textarea rows={2} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder={editing ? 'به لاگ یادداشت‌ها اضافه می‌شود' : 'یادداشت اولیه'} />
-        </Field>
-        {editing && (editing.notes_log || []).length > 0 && (
-          <Field label="لاگ یادداشت‌ها">
-            <div className={fromLegacy('muted small')}>
-              {(editing.notes_log || []).slice(-5).map((entry, i) => (
-                <div key={i}>{entry.at ? `${entry.at}: ` : ''}{entry.text}</div>
-              ))}
-            </div>
-          </Field>
-        )}
-        <Button disabled={saving} onClick={save}>{editing ? 'ذخیره تغییرات' : 'ثبت سفارش'}</Button>
+        <div className={fromLegacy('form')}>
+          <FormSection title="سفارش و محصول" hint="سفارش کارخانه را انتخاب کنید تا اطلاعات محصول تکمیل شود.">
+            <FormGrid>
+              <Field label="سفارش کارخانه"><Select value={form.sale_id} onChange={(v) => setForm(applySale(v, form))} options={saleOptions} /></Field>
+              <Field label="نام محصول"><input value={form.product_name} onChange={(e) => setForm({ ...form, product_name: e.target.value })} /></Field>
+              <Field label="نوع سفارش"><Select value={form.kind} onChange={(v) => setForm({ ...form, kind: v })} options={kindOpts} /></Field>
+              <Field label="فام رنگ">
+                <input list="beta-paint-colors" value={form.color_name} onChange={(e) => setForm({ ...form, color_name: e.target.value })} />
+                <datalist id="beta-paint-colors">{(stats.color_options || []).map((c) => <option key={c} value={c} />)}</datalist>
+              </Field>
+            </FormGrid>
+          </FormSection>
+          <FormSection title="وضعیت خط رنگ">
+            <FormGrid>
+              <Field label="مرحله"><Select value={form.stage} onChange={(v) => setForm({ ...form, stage: v })} options={stageOpts} /></Field>
+              <Field label="پیشرفت (٪)"><input className={fromLegacy('ltr')} type="number" min="0" max="100" value={form.progress} onChange={(e) => setForm({ ...form, progress: e.target.value })} /></Field>
+            </FormGrid>
+            <Field label="ایراد QC"><textarea rows={3} value={form.qc_issue} onChange={(e) => setForm({ ...form, qc_issue: e.target.value })} /></Field>
+            <Field label="یادداشت"><textarea rows={2} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} placeholder={editing ? 'به لاگ یادداشت‌ها اضافه می‌شود' : 'یادداشت اولیه'} /></Field>
+            {editing && (editing.notes_log || []).length > 0 && (
+              <div className={fromLegacy('factory-form-panel muted small')}>
+                {(editing.notes_log || []).slice(-5).map((entry, i) => <div key={i}>{entry.at ? `${entry.at}: ` : ''}{entry.text}</div>)}
+              </div>
+            )}
+          </FormSection>
+          <FormFooter><Button variant="ghost" onClick={() => setModalOpen(false)}>انصراف</Button><Button disabled={saving} onClick={save}>{editing ? 'ذخیره تغییرات' : 'ثبت سفارش'}</Button></FormFooter>
+        </div>
       </Modal>
 
       <Modal title={advanceItem ? `ارتقای مرحله — ${advanceItem.code}` : 'ارتقای مرحله'} open={Boolean(advanceItem)} onClose={() => setAdvanceItem(null)}>
-        <Field label="یادداشت مرحله (اختیاری)">
-          <textarea rows={3} value={advanceNote} onChange={(e) => setAdvanceNote(e.target.value)} placeholder="توضیح کوتاه برای لاگ خط رنگ…" />
-        </Field>
-        <Button disabled={busyId === advanceItem?.id} onClick={submitAdvance}>تایید و مرحله بعد</Button>
+        <FormSection title="ثبت پیشرفت" hint="این یادداشت در تاریخچه سفارش باقی می‌ماند.">
+          <Field label="یادداشت مرحله (اختیاری)"><textarea rows={3} value={advanceNote} onChange={(e) => setAdvanceNote(e.target.value)} placeholder="توضیح کوتاه برای لاگ خط رنگ…" /></Field>
+        </FormSection>
+        <FormFooter><Button variant="ghost" onClick={() => setAdvanceItem(null)}>انصراف</Button><Button disabled={busyId === advanceItem?.id} onClick={submitAdvance}>تایید و مرحله بعد</Button></FormFooter>
       </Modal>
     </div>
   )

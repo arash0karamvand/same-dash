@@ -50,8 +50,35 @@ def lookup_label(category, code):
     return code or "—"
 
 
+def stored_label(category, code):
+    """عنوان ذخیره‌شده، حتی اگر گزینه بعداً غیرفعال شده باشد."""
+    if not code:
+        return ""
+    active = lookup_label(category, code)
+    if active != code:
+        return active
+    label = (
+        LookupOption.objects.filter(category=category, code=code)
+        .values_list("label", flat=True)
+        .first()
+    )
+    return label or code
+
+
 def valid_codes(category):
     return {item["code"] for item in get_lookup_choices(category)}
+
+
+def require_active_code(category, code, error, *, default=""):
+    value = (code or "").strip()
+    allowed = valid_codes(category)
+    if not value:
+        if default and (not allowed or default in allowed):
+            return default
+        return ""
+    if allowed and value not in allowed:
+        raise ValueError(error)
+    return value
 
 
 def normalize_code(category, code, default=None):
@@ -99,13 +126,24 @@ def create_lookup(*, category, code, label, sort_order=0, is_active=True, meta=N
         raise ValueError("دسته، کد و عنوان الزامی است.")
     if LookupOption.objects.filter(category=category, code=code).exists():
         raise ValueError("این گزینه قبلاً ثبت شده.")
+    meta = dict(meta or {})
+    if not meta.get("category_label"):
+        sibling = (
+            LookupOption.objects.filter(category=category)
+            .exclude(meta={})
+            .order_by("sort_order", "id")
+            .first()
+        )
+        sibling_label = ((sibling.meta or {}) if sibling else {}).get("category_label")
+        if sibling_label:
+            meta["category_label"] = sibling_label
     opt = LookupOption.objects.create(
         category=category,
         code=code,
         label=label,
         sort_order=int(sort_order or 0),
         is_active=bool(is_active),
-        meta=meta or {},
+        meta=meta,
     )
     invalidate_lookup_cache()
     return opt

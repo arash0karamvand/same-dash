@@ -5,6 +5,8 @@ import { PORTALS } from '../config/portals'
 const LEGACY_PAGES = {
   levels: 'rfm',
   sms: 'rfm',
+  'factory-fabric': 'factory-fabric-recipes',
+  'factory-foam': 'factory-foam-recipes',
 }
 
 export function canonicalizePage(page) {

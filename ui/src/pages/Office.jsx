@@ -83,6 +83,8 @@ function mapLineItemsFromSale(items = []) {
     color_hex: i.color_hex || '',
     quantity: i.quantity || 1,
     unit_price: i.unit_price != null ? String(i.unit_price) : '',
+    fabric_recipe_id: i.fabric_recipe_id || i.workset_config?.sale_choices?.fabric_recipe_id || '',
+    paint_recipe_id: i.paint_recipe_id || i.workset_config?.sale_choices?.paint_recipe_id || '',
   }))
 }
 
@@ -226,6 +228,8 @@ export default function Office() {
         frame_id: i.frame_id || null,
         furniture_workset_id: i.furniture_workset_id || null,
         workset_config: i.workset_config || {},
+        fabric_recipe_id: i.fabric_recipe_id || i.workset_config?.sale_choices?.fabric_recipe_id || null,
+        paint_recipe_id: i.paint_recipe_id || i.workset_config?.sale_choices?.paint_recipe_id || null,
       }))
       if (form.seat_count) payload.seat_count = Number(form.seat_count)
       payload.amount = form.line_items.reduce(
@@ -399,6 +403,8 @@ export default function Office() {
           frame_id: i.frame_id || null,
           workset_config: i.workset_config || {},
           furniture_workset_id: i.furniture_workset_id || null,
+          fabric_recipe_id: i.fabric_recipe_id || i.workset_config?.sale_choices?.fabric_recipe_id || null,
+          paint_recipe_id: i.paint_recipe_id || i.workset_config?.sale_choices?.paint_recipe_id || null,
         })),
       })
       setFactoryWorkOpen(false)

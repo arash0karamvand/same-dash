@@ -3,7 +3,7 @@ import { betaUpholsteryApi } from '../api/client'
 import { BetaChipNav, BetaSegmentNav } from '../components/BetaSegmentNav'
 import PersianDateInput from '../components/PersianDateInput'
 import Select from '../components/Select'
-import { Badge, Button, Card, EmptyState, Field, FilterBar, Modal, StatCard } from '../components/ui'
+import { Badge, Button, Card, EmptyState, Field, FilterBar, FormFooter, FormGrid, FormSection, Modal, StatCard } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmContext'
 import { useBetaSaleSources } from '../hooks/useBetaSaleSources'
@@ -43,7 +43,7 @@ export default function BetaUpholstery() {
   const [saving, setSaving] = useState(false)
   const [busyId, setBusyId] = useState(null)
 
-  const stages = useMemo(() => betaOptions(BETA_UPHOLSTERY_STAGE, stats.stages), [betaOptions, stats.stages])
+  const stages = useMemo(() => betaOptions(BETA_UPHOLSTERY_STAGE), [betaOptions])
   const finalStage = stats.final_stage || stages[stages.length - 1]?.value || ''
 
   const stageCount = useCallback((code) => stats.by_stage?.[code] ?? 0, [stats.by_stage])
@@ -328,21 +328,19 @@ export default function BetaUpholstery() {
       )}
 
       <Modal title={editing ? `ویرایش ${editing.code}` : 'ثبت کار رویه‌کوبی'} open={modalOpen} onClose={() => { setModalOpen(false); setEditing(null) }} wide>
-        <Field label="سفارش کارخانه">
-          <Select value={form.sale_id} onChange={(v) => setForm(applySale(v, form))} options={saleOptions} />
-        </Field>
-        <Field label="شماره سفارش">
-          <input value={form.order_ref} onChange={(e) => setForm({ ...form, order_ref: e.target.value })} />
-        </Field>
-        <Field label="مدل مبلمان">
-          <input value={form.product_name} onChange={(e) => setForm({ ...form, product_name: e.target.value })} />
-        </Field>
+        <div className={fromLegacy('form')}>
+        <FormSection title="سفارش و متریال"><FormGrid>
+        <Field label="سفارش کارخانه"><Select value={form.sale_id} onChange={(v) => setForm(applySale(v, form))} options={saleOptions} /></Field>
+        <Field label="شماره سفارش"><input value={form.order_ref} onChange={(e) => setForm({ ...form, order_ref: e.target.value })} /></Field>
+        <Field label="مدل مبلمان"><input value={form.product_name} onChange={(e) => setForm({ ...form, product_name: e.target.value })} /></Field>
         <Field label="متریال فوم و نشیمن">
           <input list="beta-uph-foams" value={form.foam_material} onChange={(e) => setForm({ ...form, foam_material: e.target.value })} />
           <datalist id="beta-uph-foams">
             {(stats.foam_options || []).map((f) => <option key={f} value={f} />)}
           </datalist>
         </Field>
+        </FormGrid></FormSection>
+        <FormSection title="مسئول و وضعیت"><FormGrid>
         <Field label="استادکار رویه‌کوب">
           <input list="beta-uph-craftsmen" value={form.craftsman} onChange={(e) => setForm({ ...form, craftsman: e.target.value })} />
           <datalist id="beta-uph-craftsmen">
@@ -358,7 +356,9 @@ export default function BetaUpholstery() {
         <Field label="موعد تحویل">
           <PersianDateInput value={form.due_date} onChange={(v) => setForm({ ...form, due_date: v })} />
         </Field>
-        <Button disabled={saving} onClick={save}>{editing ? 'ذخیره تغییرات' : 'ثبت کار'}</Button>
+        </FormGrid></FormSection>
+        <FormFooter><Button variant="ghost" onClick={() => setModalOpen(false)}>انصراف</Button><Button disabled={saving} onClick={save}>{editing ? 'ذخیره تغییرات' : 'ثبت کار'}</Button></FormFooter>
+        </div>
       </Modal>
     </div>
   )

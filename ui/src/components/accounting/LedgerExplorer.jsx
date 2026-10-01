@@ -1,6 +1,7 @@
 // کاوشگر دفتر کل — Modern Tree + Detail Panel
 
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import Icon from '../icons/Icon'
 import { Button, EmptyState } from '../ui'
 import { TERMS } from '../../config/accountingTerms'
@@ -320,7 +321,7 @@ export default function LedgerExplorer({
       ? 'minmax(240px, 280px) minmax(0, 1fr) minmax(280px, 360px)'
       : 'minmax(240px, 280px) minmax(0, 1fr)')
 
-  return (
+  const workspace = (
     <div
       className={`acct-ledger-workspace${isFullscreen ? ' is-fullscreen' : ''}`}
       style={{
@@ -347,16 +348,16 @@ export default function LedgerExplorer({
 
       {(showDesktopTree || (compact && treeOpen && !isFullscreen)) && (
         <aside style={{
-          ...(compact ? {
+          ...(compact && !isFullscreen ? {
             position: 'fixed',
             top: '80px',
             right: 0,
             bottom: 0,
-            width: '320px',
+            width: 'min(320px, 100vw)',
             zIndex: 100,
             boxShadow: 'var(--shadow-lg)',
           } : {
-            height: isFullscreen ? 'calc(100dvh - 28px)' : 'calc(100vh - 220px)',
+            height: isFullscreen ? '100%' : 'calc(100vh - 220px)',
           })
         }}>
           {treePanel}
@@ -477,4 +478,7 @@ export default function LedgerExplorer({
       )}
     </div>
   )
+
+  if (isFullscreen) return createPortal(workspace, document.body)
+  return workspace
 }

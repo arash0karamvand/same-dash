@@ -169,9 +169,11 @@ def sale_to_dict(sale, include_installments=False, include_lines=False, user=Non
     }
     from logic.order_cycle import sale_fulfillment_payload
     from logic.receive_kinds import sale_receive_payload
+    from logic.sales_accounting import accounting_document_summary
 
     data.update(sale_fulfillment_payload(sale))
     data.update(sale_receive_payload(sale))
+    data["accounting_document"] = accounting_document_summary(sale)
     if include_installments:
         data["installments"] = [
             installment_to_dict(i, user=user) for i in sale.installments.filter(is_deleted=False)

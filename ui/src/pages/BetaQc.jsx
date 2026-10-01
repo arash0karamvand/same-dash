@@ -3,7 +3,7 @@ import { betaQcApi } from '../api/client'
 import { BetaChipNav, BetaSegmentNav } from '../components/BetaSegmentNav'
 import PersianDateInput from '../components/PersianDateInput'
 import Select from '../components/Select'
-import { Badge, Button, Card, EmptyState, Field, FilterBar, Modal, StatCard } from '../components/ui'
+import { Badge, Button, Card, EmptyState, Field, FilterBar, FormFooter, FormGrid, FormSection, Modal, StatCard } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
 import { useConfirm } from '../context/ConfirmContext'
 import { useBetaSaleSources } from '../hooks/useBetaSaleSources'
@@ -49,8 +49,8 @@ export default function BetaQc() {
   const [evalForm, setEvalForm] = useState({ status: '', grade: '', scan_url: '', requirements: '' })
   const [saving, setSaving] = useState(false)
 
-  const statusOpts = useMemo(() => betaOptions(BETA_QC_STATUS, stats.statuses), [betaOptions, stats.statuses])
-  const gradeOpts = useMemo(() => betaOptions(BETA_QC_GRADE, stats.grades), [betaOptions, stats.grades])
+  const statusOpts = useMemo(() => betaOptions(BETA_QC_STATUS), [betaOptions])
+  const gradeOpts = useMemo(() => betaOptions(BETA_QC_GRADE), [betaOptions])
   const archiveStatus = stats.archive_status || ''
   const currentStatusOpts = useMemo(
     () => statusOpts.filter((opt) => opt.value !== archiveStatus),
@@ -342,6 +342,8 @@ export default function BetaQc() {
       )}
 
       <Modal title={editing ? `ویرایش ${editing.code}` : 'ثبت قلم بازرسی'} open={createOpen} onClose={() => { setCreateOpen(false); setEditing(null) }} wide>
+        <div className={fromLegacy('form')}>
+        <FormSection title="ارجاع سفارش"><FormGrid>
         <Field label="سفارش کارخانه">
           <Select value={form.sale_id} onChange={(v) => setForm(applySale(v, form))} options={saleOptions} />
         </Field>
@@ -363,6 +365,8 @@ export default function BetaQc() {
         <Field label="محصول">
           <input value={form.product_name} onChange={(e) => setForm({ ...form, product_name: e.target.value })} />
         </Field>
+        </FormGrid></FormSection>
+        <FormSection title="مشخصات بازرسی"><FormGrid>
         <Field label="الزامات">
           <textarea rows={3} value={form.requirements} onChange={(e) => setForm({ ...form, requirements: e.target.value })} />
         </Field>
@@ -390,10 +394,14 @@ export default function BetaQc() {
         <Field label="آدرس برگه اسکن">
           <input value={form.scan_url} onChange={(e) => setForm({ ...form, scan_url: e.target.value })} placeholder="https://…" />
         </Field>
-        <Button disabled={saving} onClick={save}>{editing ? 'ذخیره تغییرات' : 'ثبت قلم'}</Button>
+        </FormGrid></FormSection>
+        <FormFooter><Button variant="ghost" onClick={() => setCreateOpen(false)}>انصراف</Button><Button disabled={saving} onClick={save}>{editing ? 'ذخیره تغییرات' : 'ثبت قلم'}</Button></FormFooter>
+        </div>
       </Modal>
 
       <Modal title={evalItem ? `ارزیابی ${evalItem.code}` : 'ارزیابی'} open={Boolean(evalItem)} onClose={() => setEvalItem(null)}>
+        <FormSection title="نتیجه کنترل کیفیت">
+        <FormGrid>
         <Field label="وضعیت بررسی">
           <Select
             value={evalForm.status}
@@ -414,7 +422,9 @@ export default function BetaQc() {
         <Field label="آدرس برگه اسکن">
           <input value={evalForm.scan_url} onChange={(e) => setEvalForm({ ...evalForm, scan_url: e.target.value })} placeholder="https://…" />
         </Field>
-        <Button disabled={saving} onClick={evaluate}>ثبت ارزیابی</Button>
+        </FormGrid>
+        </FormSection>
+        <FormFooter><Button variant="ghost" onClick={() => setEvalItem(null)}>انصراف</Button><Button disabled={saving} onClick={evaluate}>ثبت ارزیابی</Button></FormFooter>
       </Modal>
     </div>
   )

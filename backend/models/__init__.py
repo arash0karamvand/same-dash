@@ -165,6 +165,13 @@ from .notifications import (
     NotificationReceipt,
     TicketMessage,
 )
+from .activities import (
+    Activity,
+    Task,
+)
+from .dashboard import (
+    DashboardWidget,
+)
 from .people import (
     Customer,
     CustomerAttendance,

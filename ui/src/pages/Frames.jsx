@@ -192,7 +192,7 @@ export default function Frames() {
       setOffset(nextOffset)
       setTotal(data.total || 0)
     } catch (err) {
-      setError(err.message || 'خطا در بارگذاری دست‌ها')
+      setError(err.message || 'خطا در بارگذاری سرویس‌ها')
     } finally {
       setLoading(false)
     }
@@ -279,7 +279,7 @@ export default function Frames() {
 
   const removeWorkset = async (workset) => {
     if (!canManage) return
-    const ok = await confirm(`دست «${workset.name}» حذف شود؟`)
+    const ok = await confirm(`سرویس «${workset.name}» حذف شود؟`)
     if (!ok) return
     try {
       await furnitureWorksetsApi.remove(workset.id)
@@ -290,17 +290,17 @@ export default function Frames() {
     }
   }
 
-  const formTitle = editingWorkset ? `ویرایش دست «${editingWorkset.name}»` : 'ثبت دست'
+  const formTitle = editingWorkset ? `ویرایش سرویس «${editingWorkset.name}»` : 'ثبت سرویس'
 
   return (
     <div className={fromLegacy('page frames-page')}>
       <div className={fromLegacy('page-head')}>
         <div>
           <h1 className={fromLegacy('page-title')}>تولید کلاف</h1>
-          <p className={fromLegacy('muted')}>دست را ثبت کنید و قطعات را از کاتالوگ داخل فرم انتخاب کنید.</p>
+          <p className={fromLegacy('muted')}>سرویس را ثبت کنید و قطعات را از کاتالوگ داخل فرم انتخاب کنید.</p>
         </div>
         {canManage && (
-          <Button type="button" onClick={openCreate}>ثبت دست</Button>
+          <Button type="button" onClick={openCreate}>ثبت سرویس</Button>
         )}
       </div>
 
@@ -309,13 +309,17 @@ export default function Frames() {
       {canManage && formOpen && (
         <Card title={formTitle} className="workset-register-card">
           <form onSubmit={saveWorkset} className={fromLegacy('form')}>
+            <div className={fromLegacy('factory-form-section')}>
+              <div className={fromLegacy('section-head')}>
+                <div><h4>مشخصات سرویس</h4><p className={fromLegacy('section-hint')}>نام، ظرفیت و سبک کلی سرویس را مشخص کنید.</p></div>
+              </div>
             <div className={fromLegacy('form-grid-2')}>
-              <Field label="نام دست">
+              <Field label="نام سرویس">
                 <input
                   value={worksetForm.name}
                   onChange={(e) => setWorksetForm({ ...worksetForm, name: e.target.value })}
                   required
-                  placeholder="مثلاً لونا"
+                  placeholder="مثلاً سرویس ۸ نفره"
                 />
               </Field>
               <Field label="تعداد نفر (دستی)">
@@ -340,8 +344,9 @@ export default function Frames() {
                 فعال
               </label>
             </div>
+            </div>
 
-            <div className="piece-form-section">
+            <div className={fromLegacy('piece-form-section')}>
               <div className={fromLegacy('section-head')}>
                 <div>
                   <h4>کاتالوگ قطعات</h4>
@@ -420,28 +425,28 @@ export default function Frames() {
             <div className={fromLegacy('form-actions')}>
               <Button type="button" variant="ghost" onClick={resetComposer} disabled={saving}>انصراف</Button>
               <Button type="submit" disabled={saving || !selectedPieces.length}>
-                {saving ? 'در حال ذخیره…' : editingWorkset ? 'ذخیره تغییرات' : 'ثبت دست'}
+                {saving ? 'در حال ذخیره…' : editingWorkset ? 'ذخیره تغییرات' : 'ثبت سرویس'}
               </Button>
             </div>
           </form>
         </Card>
       )}
 
-      <Card title="دست‌های ثبت‌شده">
+      <Card title="سرویس‌های ثبت‌شده">
         <FilterBar>
-          <Field label="جستجوی دست">
+          <Field label="جستجوی سرویس">
             <input
               className={fromLegacy('search-input')}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="نام دست…"
+              placeholder="نام سرویس…"
             />
           </Field>
         </FilterBar>
         {loading && worksets.length === 0 ? (
           <p className={fromLegacy('muted')}>در حال بارگذاری…</p>
         ) : worksets.length === 0 ? (
-          <EmptyState text="دستی ثبت نشده. با «ثبت دست» از کاتالوگ قطعه انتخاب کنید." />
+          <EmptyState text="سرویسی ثبت نشده. با «ثبت سرویس» از کاتالوگ قطعه انتخاب کنید." />
         ) : (
           <div className="workset-catalog-grid">
             {worksets.map((workset) => (

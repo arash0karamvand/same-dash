@@ -1631,7 +1631,7 @@ input[type='number']::-webkit-inner-spin-button {
 
 @media (max-width: 1440px) {
   .users-stats {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .user-cards {
@@ -1650,176 +1650,10 @@ input[type='number']::-webkit-inner-spin-button {
 }
 
 /* ================================================================= Responsive */
-/* Desktop — سایدبار ثابت، بدون المان موبایل */
-@media (min-width: 1441px) {
-  .menu-toggle {
-    display: none !important;
-  }
-
-  .sidebar-backdrop {
-    display: none !important;
-  }
-
-  .sidebar-close {
-    display: none !important;
-  }
-
-  .mobile-bottom-nav {
-    display: none !important;
-  }
-}
-
-/* Tablet landscape / small desktop */
-@media (max-width: 1440px) {
-  .sidebar {
-    position: fixed;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: min(320px, 92vw);
-    max-width: 320px;
-    height: 100dvh;
-    transform: translateX(100%);
-    transition: transform 0.28s ease;
-    box-shadow: -8px 0 32px rgba(0, 0, 0, 0.2);
-    padding: max(14px, env(safe-area-inset-top)) 12px max(14px, env(safe-area-inset-bottom));
-  }
-
-  .layout.menu-open .sidebar {
-    transform: translateX(0);
-  }
-
-  .sidebar-backdrop {
-    display: block;
-  }
-
-  .layout.menu-open .sidebar-backdrop {
-    opacity: 1;
-    pointer-events: auto;
-  }
-
-  .sidebar-close {
-    display: block;
-  }
-
-  .menu-toggle {
-    display: flex;
-  }
-
-  .content {
-    padding: 18px 16px;
-  }
-
-  .page-head {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
-  }
-
-  .page-head .btn {
-    width: 100%;
-    justify-content: center;
-  }
-
-  .row-actions {
-    flex-wrap: wrap;
-    gap: 6px 8px;
-  }
-
-  .card-head {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 10px;
-  }
-
-  .card-head .btn,
-  .card-actions .btn {
-    width: 100%;
-    justify-content: center;
-  }
-
-  .topbar {
-    padding: 8px 16px;
-  }
-
-  .nav {
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-    overflow-x: hidden;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior: contain;
-    gap: 6px;
-    padding-bottom: 12px;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
-  }
-
-  .nav::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  .nav::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.22);
-    border-radius: 6px;
-  }
-
-  .nav-item {
-    padding: 12px 14px;
-    font-size: 15px;
-    gap: 12px;
-    min-height: 48px;
-    line-height: 1.4;
-  }
-
-  .nav-icon {
-    font-size: 18px;
-    width: 1.5em;
-    flex-shrink: 0;
-    text-align: center;
-  }
-
-  .brand {
-    padding: 6px 8px 12px;
-    font-size: 17px;
-  }
-
-  .brand-logo {
-    font-size: 22px;
-  }
-
-  .sidebar-footer {
-    padding: 10px 8px 0;
-    font-size: 12px;
-  }
-
-  .stat-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 1440px) {
-  .grid-2 {
-    grid-template-columns: 1fr;
-  }
-}
+/* پوسته، هدر، گرید و دراور سایدبار با کلاس‌های Tailwind در tw.js چیده می‌شوند. */
 
 /* Tablet portrait */
 @media (max-width: 767px) {
-  .content {
-    padding: 16px 12px;
-    padding-bottom: max(16px, env(safe-area-inset-bottom));
-  }
-
-  .topbar {
-    padding: 8px 12px;
-    padding-top: max(8px, env(safe-area-inset-top));
-  }
-
   .page-title {
     font-size: 16px;
   }
@@ -1832,37 +1666,12 @@ input[type='number']::-webkit-inner-spin-button {
     display: none !important;
   }
 
-  .grid-2,
-  .stat-grid,
-  .stats-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .form-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .card-head {
-    padding: 14px 16px;
-    flex-direction: column;
-    align-items: stretch;
-  }
-
   .card-head h3 {
     font-size: 15px;
   }
 
   .card-body {
     padding: 14px 12px;
-  }
-
-  .card-actions {
-    width: 100%;
-  }
-
-  .card-actions .btn {
-    flex: 1;
-    text-align: center;
   }
 
   .stat-value {
@@ -1953,14 +1762,6 @@ input[type='number']::-webkit-inner-spin-button {
     align-items: stretch;
   }
 
-  .toolbar {
-    flex-direction: column;
-  }
-
-  .toolbar .search-input {
-    max-width: none;
-  }
-
   .modal-overlay {
     padding: 12px;
     align-items: flex-end;
@@ -1988,38 +1789,11 @@ input[type='number']::-webkit-inner-spin-button {
     flex-direction: column;
   }
 
-  .table {
-    min-width: 480px;
-    font-size: 13px;
-  }
-
-  .table th,
-  .table td {
-    padding: 9px 8px;
-  }
-
   .row-actions {
     flex-direction: row;
     flex-wrap: wrap;
     gap: 8px;
     align-items: center;
-  }
-
-  /* ---- Mobile UX: bottom nav, touch, cards ---- */
-  .mobile-bottom-nav {
-    display: flex;
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
-    z-index: 250;
-    background: var(--surface);
-    border-top: 1px solid var(--border);
-    padding: 4px 6px;
-    padding-bottom: max(4px, env(safe-area-inset-bottom));
-    box-shadow: 0 -4px 24px rgba(28, 25, 23, 0.1);
-    justify-content: space-around;
-    gap: 2px;
   }
 
   .mobile-nav-item {
@@ -2066,10 +1840,6 @@ input[type='number']::-webkit-inner-spin-button {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .content {
-    padding-bottom: calc(58px + env(safe-area-inset-bottom));
   }
 
   .modal-overlay {
@@ -2912,26 +2682,7 @@ input[type='number']::-webkit-inner-spin-button {
   }
 }
 
-/* Large desktop */
-@media (min-width: 1441px) {
-  .content {
-    padding: 28px 32px;
-  }
-
-  .stat-grid {
-    gap: 20px;
-  }
-}
-
-/* ---------------------------------------------------------------- Mobile bottom nav + cards (hidden on desktop) */
-.mobile-bottom-nav {
-  display: none;
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 250;
-}
+/* نوار پایین با max-md:flex در tw.mobileBottomNav نمایش داده می‌شود. */
 
 /* دسکتاپ: کارت‌های موبایل/تبلت مخفی */
 @media (min-width: 1450px) {
@@ -2979,6 +2730,26 @@ input[type='number']::-webkit-inner-spin-button {
   grid-template-columns: 1fr 1fr;
   gap: 10px;
   font-size: 14px;
+}
+
+@media (max-width: 767px) {
+  .m-card,
+  .user-card,
+  .dept-column {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .m-card-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .m-card-head,
+  .user-card-head,
+  .dept-column-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 
 .m-card-grid > div {
@@ -3650,6 +3421,18 @@ input[type='number']::-webkit-inner-spin-button {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
+}
+
+@media (max-width: 1440px) {
+  .form-grid-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .form-grid-3 {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .accounting-doc-table input,
