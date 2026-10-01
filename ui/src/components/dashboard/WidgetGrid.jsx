@@ -1,6 +1,6 @@
 // کامپوننت WidgetGrid برای نمایش ویجت‌های داشبورد
 
-import { cn } from '../styles/tw'
+import { cn } from '../../styles/tw'
 
 const SIZE_CLASSES = {
   small: 'col-span-3',
