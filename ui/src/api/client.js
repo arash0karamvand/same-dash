@@ -431,10 +431,6 @@ export const recordFilterApi = {
 
 export const dashboardApi = {
   stats: () => get('/api/dashboard/summary/'),
-}
-
-export const dashboardApi = {
-  stats: () => get('/api/dashboard/summary/'),
   widgets: () => get('/api/dashboard/widgets/'),
   createWidget: (data) => post('/api/dashboard/widgets/', data),
   updateWidget: (id, data) => put(`/api/dashboard/widgets/${id}/`, data),
