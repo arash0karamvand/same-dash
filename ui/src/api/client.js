@@ -70,6 +70,17 @@ const post = (url, body) => request('POST', url, body)
 const put = (url, body) => request('PUT', url, body)
 const del = (url) => request('DELETE', url)
 
+async function upload(url, form) {
+  const response = await fetch(url, { method: 'POST', credentials: 'include', body: form })
+  const payload = await response.json().catch(() => null)
+  if (!response.ok || payload?.ok === false) {
+    const error = new Error(describeApiError(payload, response))
+    error.status = response.status
+    throw error
+  }
+  return payload?.data ?? payload
+}
+
 export const configApi = {
   get: () => get('/api/config/'),
   branches: () => get('/api/config/branches/'),
@@ -401,6 +412,72 @@ export const materialsApi = {
   reject: (id, reason = '') => post(`/api/materials/${id}/reject/`, { reason }),
 }
 
+export const inventoryApi = {
+  availability: (opts = {}) => get(`/api/inventory/availability/${listQuery({}, {
+    material_id: opts.materialId,
+    variant_id: opts.variantId,
+    location_kind: opts.locationKind,
+    warehouse_id: opts.warehouseId,
+    branch: opts.branch,
+  })}`),
+  lots: (opts = {}) => get(`/api/inventory/lots/${listQuery({}, {
+    material_id: opts.materialId,
+    variant_id: opts.variantId,
+  })}`),
+  consumptions: (opts = {}) => get(`/api/inventory/consumptions/${listQuery({}, {
+    material_id: opts.materialId,
+    variant_id: opts.variantId,
+  })}`),
+  reserve: (data) => post('/api/inventory/reservations/', data),
+  release: (uuid, reason = '') => post(`/api/inventory/reservations/${uuid}/release/`, { reason }),
+  consume: (data) => post('/api/inventory/consume/', data),
+  attachments: (sourceType, sourceId) =>
+    get(`/api/attachments/?source_type=${encodeURIComponent(sourceType)}&source_id=${encodeURIComponent(sourceId)}`),
+  uploadAttachment: (sourceType, sourceId, file, description = '') => {
+    const form = new FormData()
+    form.append('source_type', sourceType)
+    form.append('source_id', sourceId)
+    form.append('file', file)
+    if (description) form.append('description', description)
+    return upload('/api/attachments/', form)
+  },
+}
+
+export const productionApi = {
+  boms: (productId = '') =>
+    get(`/api/production/boms/${productId ? `?product_id=${encodeURIComponent(productId)}` : ''}`),
+  publishBom: (productId) => post(`/api/production/boms/products/${productId}/publish/`, {}),
+  runs: (opts = {}) => get(`/api/production/runs/${listQuery({}, {
+    status: opts.status,
+    sale_id: opts.saleId,
+  })}`),
+  run: (uuid) => get(`/api/production/runs/${uuid}/`),
+  createRun: (fulfillmentPlanLineUuid) =>
+    post('/api/production/runs/', { fulfillment_plan_line_uuid: fulfillmentPlanLineUuid }),
+  release: (uuid) => post(`/api/production/runs/${uuid}/release/`, {}),
+  consumeRequirement: (uuid, requirementId, idempotencyKey) =>
+    post(`/api/production/runs/${uuid}/requirements/${requirementId}/consume/`, {
+      idempotency_key: idempotencyKey,
+    }),
+  consumeExtra: (uuid, data) => post(`/api/production/runs/${uuid}/consume-extra/`, data),
+  returnMaterial: (uuid, data) => post(`/api/production/runs/${uuid}/return/`, data),
+  recordScrap: (uuid, data) => post(`/api/production/runs/${uuid}/scrap/`, data),
+  complete: (uuid, data = {}) => post(`/api/production/runs/${uuid}/complete/`, data),
+}
+
+export const procurementApi = {
+  requests: () => get('/api/procurement/requests/'),
+  generateShortages: (data) => post('/api/procurement/shortages/generate/', data),
+  approveRequest: (uuid, data) => post(`/api/procurement/requests/${uuid}/approve/`, data),
+  orders: () => get('/api/procurement/orders/'),
+  receiveOrder: (uuid, data) => post(`/api/procurement/orders/${uuid}/receive/`, data),
+  receipts: () => get('/api/procurement/receipts/'),
+  approveReceipt: (uuid) => post(`/api/procurement/receipts/${uuid}/approve/`, {}),
+  traceConsumption: (uuid) => get(`/api/procurement/trace/${uuid}/`),
+  uploadReceiptDocument: (receiptId, file, description = '') =>
+    inventoryApi.uploadAttachment('goods_receipt', receiptId, file, description),
+}
+
 export const auditApi = {
   list: (opts = {}) => {
     const p = new URLSearchParams()
@@ -443,6 +520,55 @@ export const dashboardApi = {
   },
 }
 
+export const crmWorkbookApi = {
+  schema: () => get('/api/crm-workbook/schema/'),
+  list: (sheet, opts = {}) => {
+    const p = new URLSearchParams()
+    if (opts.search) p.set('search', opts.search)
+    if (opts.offset != null) p.set('offset', opts.offset)
+    if (opts.limit) p.set('limit', opts.limit)
+    const q = p.toString()
+    return get(`/api/crm-workbook/${sheet}/${q ? `?${q}` : ''}`)
+  },
+  upsert: (sheet, body) => post(`/api/crm-workbook/${sheet}/upsert/`, body),
+  syncSales: (limit) => post('/api/crm-workbook/sync-sales/', limit ? { limit } : {}),
+  exportUrl: () => '/api/crm-workbook/export/',
+  importFile: async (file, opts = {}) => {
+    const form = new FormData()
+    form.append('file', file)
+    if (opts.password) form.append('password', opts.password)
+    if (opts.replace === false) form.append('replace', 'false')
+    let response
+    try {
+      response = await fetch('/api/crm-workbook/import/', {
+        method: 'POST',
+        credentials: 'include',
+        body: form,
+      })
+    } catch {
+      const error = new Error('ارتباط با سرور برقرار نشد.')
+      error.status = 0
+      throw error
+    }
+    const text = await response.text()
+    let payload = null
+    if (text) {
+      try {
+        payload = JSON.parse(text)
+      } catch {
+        payload = { ok: false, error: text }
+      }
+    }
+    if (!response.ok || (payload && payload.ok === false)) {
+      const message = describeApiError(payload, response)
+      const error = new Error(message)
+      error.status = response.status
+      throw error
+    }
+    return payload?.data ?? payload
+  },
+}
+
 export const customersApi = {
   list: (opts = {}) => {
     const p = new URLSearchParams()
@@ -480,6 +606,7 @@ export const customersApi = {
 export const salesApi = {
   list: (params = '') => get(`/api/sales/${params ? `?${params}` : ''}`),
   finishOptions: () => get('/api/sales/finish-options/'),
+  bundleQuote: (data) => post('/api/sales/bundle-quote/', data),
   get: (id) => get(`/api/sales/${id}/`),
   exportExcel: async (id) => {
     const response = await fetch(`/api/sales/${id}/export-excel/`, {
@@ -529,6 +656,9 @@ export const salesApi = {
   confirm: (id) => post(`/api/sales/${id}/confirm/`),
   cancel: (id) => post(`/api/sales/${id}/cancel/`),
   journals: (id) => get(`/api/sales/${id}/journals/`),
+  trace: (id) => get(`/api/sales/${id}/trace/`),
+  deliver: (id, data = {}) => post(`/api/sales/${id}/deliver/`, data),
+  returnDelivery: (id, data) => post(`/api/sales/${id}/returns/`, data),
   finalize: (id) => post(`/api/sales/${id}/finalize/`),
   approveBranch: (id) => post(`/api/sales/${id}/approve-branch/`),
   approveAccounting: (id) => post(`/api/sales/${id}/approve-accounting/`),
@@ -560,6 +690,18 @@ export const officeApi = {
   reject: (id, reason = '') => post(`/api/office/orders/${id}/reject/`, { reason }),
   rollback: (id, reason = '') => post(`/api/office/orders/${id}/rollback/`, { reason }),
   createFactoryWork: (data) => post('/api/office/factory-work/', data),
+}
+
+export const fulfillmentApi = {
+  availability: (lineId) => get(`/api/fulfillment/lines/${lineId}/availability/`),
+  getPlan: (lineId) => get(`/api/fulfillment/lines/${lineId}/plan/`),
+  savePlan: (lineId, lines) => put(`/api/fulfillment/lines/${lineId}/plan/`, { lines }),
+  release: (uuid, cancel = false) => post(`/api/fulfillment/plans/${uuid}/release/`, { cancel }),
+  execute: (uuid) => post(`/api/fulfillment/plans/${uuid}/execute/`),
+  receiveMerchant: (uuid, unitCost) =>
+    post(`/api/fulfillment/merchant-demands/${uuid}/receive/`, { unit_cost: unitCost }),
+  startTransfer: (data) => post('/api/fulfillment/transfers/', data),
+  completeTransfer: (uuid) => post(`/api/fulfillment/transfers/${uuid}/complete/`),
 }
 
 export const factoryApi = {
@@ -891,6 +1033,11 @@ function createAccountingApi(basePath) {
 export const accountingApi = createAccountingApi('/api/accounting')
 
 Object.assign(accountingApi, {
+  accountMappings: () => get('/api/accounting/account-mappings/'),
+  mappingCoverage: () => get('/api/accounting/account-mappings/coverage/'),
+  createAccountMapping: (data) => post('/api/accounting/account-mappings/', data),
+  updateAccountMapping: (id, data) => put(`/api/accounting/account-mappings/${id}/`, data),
+  deleteAccountMapping: (id) => del(`/api/accounting/account-mappings/${id}/`),
   profitCenters: () => get('/api/accounting/profit-centers/'),
   deposits: () => get('/api/accounting/deposits/'),
   createDeposit: (data) => post('/api/accounting/deposits/', data),

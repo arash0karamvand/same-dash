@@ -55,7 +55,9 @@ const EMPTY_SUITE_PIECE = {
   needs_paint: true,
   pipeline_end: 'upholstery',
   paint_recipe_id: '',
+  paint_recipe_ids: [],
   fabric_recipe_id: '',
+  fabric_recipe_ids: [],
   foam_recipe_id: '',
   webbing_recipe_id: '',
   cushion_recipe_id: '',
@@ -71,7 +73,11 @@ const EMPTY_PRODUCT = {
   unit: 'عدد',
   category_id: '',
   default_price: '',
+  calculated_cost: '',
+  cost_override: '',
+  profit_mode: 'percent',
   target_margin_percent: '',
+  target_profit_amount: '',
   is_active: true,
   attributes: {},
   variants: [{ ...EMPTY_VARIANT }],
@@ -94,17 +100,15 @@ function piecesFromWorkset(workset, existing = []) {
       needs_paint: old.needs_paint !== false,
       pipeline_end: old.pipeline_end || (assembly ? 'assembly' : 'upholstery'),
       paint_recipe_id: old.paint_recipe_id ? String(old.paint_recipe_id) : '',
+      paint_recipe_ids: (old.paint_recipe_ids || []).map(String),
       fabric_recipe_id: old.fabric_recipe_id ? String(old.fabric_recipe_id) : '',
+      fabric_recipe_ids: (old.fabric_recipe_ids || []).map(String),
       foam_recipe_id: old.foam_recipe_id ? String(old.foam_recipe_id) : '',
       webbing_recipe_id: old.webbing_recipe_id ? String(old.webbing_recipe_id) : '',
       cushion_recipe_id: old.cushion_recipe_id ? String(old.cushion_recipe_id) : '',
       unit_price: old.unit_price != null && old.unit_price !== '' ? String(old.unit_price) : '',
     }
   })
-}
-
-function suiteTotal(pieces) {
-  return (pieces || []).reduce((sum, piece) => sum + (Number(piece.unit_price) || 0) * (Number(piece.quantity) || 1), 0)
 }
 
 function useProductMode() {
@@ -126,7 +130,7 @@ export default function Products() {
   const canManageFactory = hasPermission(user, 'manage_factory_products')
   const canDelete = canManageSales
   const showSalesPrice = !isFactory
-  const showCosts = isOffice || (hasPermission(user, 'view_materials') && hasPermission(user, 'view_products'))
+  const showCosts = hasPermission(user, 'view_accounting') && hasPermission(user, 'view_reports')
   const canEditMaterials = canManageFactory
   const canManageCategories = canManageSales || canManageFactory
   const managersPortal = (portals || []).find((portal) => portal.id === 'managers')
@@ -250,7 +254,13 @@ export default function Products() {
     }
   }, [search, categoryFilter, activeFilter, canManage, mode, showCosts, canEditMaterials, isFactory, user])
 
-  useEffect(() => { load() }, [load])
+  useEffect(() => {
+    let active = true
+    Promise.resolve().then(() => {
+      if (active) load()
+    })
+    return () => { active = false }
+  }, [load])
 
   const categoryOptions = useMemo(
     () => [{ value: '', label: 'همه دسته‌ها' }, ...categories.map((c) => ({ value: String(c.id), label: c.name }))],
@@ -308,6 +318,25 @@ export default function Products() {
     }))
   }
 
+  const toggleSuiteRecipeOption = (idx, kind, recipeId, checked) => {
+    setProductForm((form) => ({
+      ...form,
+      suite_pieces: form.suite_pieces.map((piece, i) => {
+        if (i !== idx) return piece
+        const key = `${kind}_recipe_ids`
+        const values = new Set((piece[key] || []).map(String))
+        if (checked) values.add(String(recipeId))
+        else values.delete(String(recipeId))
+        const defaultKey = `${kind}_recipe_id`
+        return {
+          ...piece,
+          [key]: [...values],
+          [defaultKey]: !checked && String(piece[defaultKey]) === String(recipeId) ? '' : piece[defaultKey],
+        }
+      }),
+    }))
+  }
+
   const openCreateProduct = () => {
     setEditingProduct(null)
     setProductForm({
@@ -330,7 +359,11 @@ export default function Products() {
       unit: p.unit || 'عدد',
       category_id: p.category_id ? String(p.category_id) : '',
       default_price: String(p.default_price ?? p.display_price ?? ''),
+      calculated_cost: String(p.calculated_cost ?? p.material_cost_total ?? ''),
+      cost_override: p.cost_override != null ? String(p.cost_override) : '',
+      profit_mode: p.profit_mode || 'percent',
       target_margin_percent: p.target_margin_percent != null ? String(p.target_margin_percent) : '',
+      target_profit_amount: p.target_profit_amount != null ? String(p.target_profit_amount) : '',
       is_active: p.is_active,
       attributes: { ...(p.attributes || {}) },
       variants: (p.variants?.length ? p.variants : [{ ...EMPTY_VARIANT }]).map((v) => ({
@@ -476,8 +509,23 @@ export default function Products() {
           })),
       }
       if (canManageSales) {
-        payload.default_price = Number(productForm.default_price) || 0
-        payload.target_margin_percent = productForm.target_margin_percent === '' ? null : Number(productForm.target_margin_percent)
+        if (!(productForm.suite_pieces || []).length || showCosts) {
+          payload.default_price = Number(productForm.default_price) || 0
+        }
+        if (showCosts) {
+          payload.cost_override = productForm.cost_override === '' ? null : Number(productForm.cost_override)
+          payload.profit_mode = productForm.profit_mode || 'percent'
+          payload.target_margin_percent = productForm.target_margin_percent === '' ? null : Number(productForm.target_margin_percent)
+          payload.target_profit_amount = Number(productForm.target_profit_amount) || 0
+        }
+      }
+      if (canManageSales && showCosts && !canEditMaterials && (productForm.suite_pieces || []).length) {
+        payload.suite_config = (productForm.suite_pieces || []).map((piece) => ({
+          piece_kind: piece.piece_kind,
+          arm_style: piece.arm_style,
+          quantity: Number(piece.quantity) || 1,
+          unit_price: Number(piece.unit_price) || 0,
+        }))
       }
       if (canEditMaterials) {
         payload.materials = productForm.materials
@@ -496,16 +544,15 @@ export default function Products() {
           needs_paint: piece.needs_paint !== false,
           pipeline_end: piece.pipeline_end || 'upholstery',
           paint_recipe_id: piece.needs_paint && piece.paint_recipe_id ? Number(piece.paint_recipe_id) : null,
+          paint_recipe_ids: (piece.paint_recipe_ids || []).map(Number).filter(Boolean),
           fabric_recipe_id: piece.fabric_recipe_id ? Number(piece.fabric_recipe_id) : null,
+          fabric_recipe_ids: (piece.fabric_recipe_ids || []).map(Number).filter(Boolean),
           foam_recipe_id: piece.foam_recipe_id ? Number(piece.foam_recipe_id) : null,
           webbing_recipe_id: piece.webbing_recipe_id ? Number(piece.webbing_recipe_id) : null,
           cushion_recipe_id: piece.cushion_recipe_id ? Number(piece.cushion_recipe_id) : null,
           unit_price: Number(piece.unit_price) || 0,
         }))
         payload.build_model = 'frame_line'
-        if (productForm.suite_pieces?.length) {
-          payload.default_price = suiteTotal(productForm.suite_pieces)
-        }
       }
       if (editingProduct) {
         await productsApi.update(editingProduct.id, payload)
@@ -585,6 +632,14 @@ export default function Products() {
       setError(err.message)
     }
   }
+
+  const pricingBase = Number(
+    productForm.cost_override !== '' ? productForm.cost_override : productForm.calculated_cost,
+  ) || 0
+  const pricingProfit = productForm.profit_mode === 'fixed'
+    ? Number(productForm.target_profit_amount || 0)
+    : pricingBase * Number(productForm.target_margin_percent || 0) / 100
+  const suggestedSalesPrice = Math.round(pricingBase + pricingProfit)
 
   return (
     <div className={fromLegacy("page products-page")}>
@@ -758,23 +813,40 @@ export default function Products() {
                   </div>
                 )}
 
+                {(showSalesPrice || showCosts) && (
+                  <div className={fromLegacy("product-card-pricing")}>
+                    {showSalesPrice && Number(p.display_price || 0) > 0 ? (
+                      <div className={fromLegacy("product-price-final")}>
+                        <span className={fromLegacy("muted small")}>قیمت فروش</span>
+                        <strong>{formatMoney(p.display_price)}</strong>
+                      </div>
+                    ) : showSalesPrice ? (
+                      <Badge color="#f59e0b">در انتظار قیمت‌گذاری اداری</Badge>
+                    ) : null}
+                    {showCosts && p.material_cost_total != null && (
+                      <div className={fromLegacy("product-price-row")}>
+                        <span>بهای محاسبه‌شده</span>
+                        <strong>{formatMoney(p.material_cost_total)}</strong>
+                      </div>
+                    )}
+                    {showCosts && p.cost_override != null && (
+                      <div className={fromLegacy("product-price-row")}>
+                        <span>بهای اصلاحی</span>
+                        <strong>{formatMoney(p.cost_override)}</strong>
+                      </div>
+                    )}
+                    {isOffice && p.profit_margin != null && (
+                      <div className={fromLegacy("product-price-row")}>
+                        <span>سود</span>
+                        <strong className={fromLegacy(p.profit_margin >= 0 ? 'text-success' : 'text-danger')}>
+                          {formatMoney(p.profit_margin)}
+                        </strong>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className={fromLegacy("product-card-meta")}>
-                  {showSalesPrice && p.display_price != null && (
-                    <strong>{formatMoney(p.display_price)}</strong>
-                  )}
-                  {showCosts && p.material_cost_total != null && (
-                    <span className={fromLegacy("muted small")}>
-                      تمام‌شده: {formatMoney(p.material_cost_total)}
-                    </span>
-                  )}
-                  {isOffice && p.profit_margin != null && (
-                    <span className={fromLegacy(`small${p.profit_margin >= 0 ? ' text-success' : ' text-danger'}`)}>
-                      سود: {formatMoney(p.profit_margin)}
-                    </span>
-                  )}
-                  {isFactory && p.material_cost_total != null && (
-                    <strong>تمام‌شده: {formatMoney(p.material_cost_total)}</strong>
-                  )}
                   <span className={fromLegacy("muted")}>{p.variants?.length || 0} رنگ</span>
                   {p.furniture_workset?.name && (
                     <span className={fromLegacy("muted small")}>سرویس: {p.furniture_workset.name}</span>
@@ -899,13 +971,59 @@ export default function Products() {
             <Field label="واحد">
               <input value={productForm.unit} onChange={(e) => setProductForm({ ...productForm, unit: e.target.value })} placeholder="عدد" />
             </Field>
-            {canManageSales && !productForm.suite_pieces.length && (
+            {canManageSales && !showCosts && !productForm.suite_pieces.length && (
               <>
                 <Field label="قیمت فروش (ریال)">
                   <MoneyInput min="0" value={productForm.default_price} onChange={(e) => setProductForm({ ...productForm, default_price: e.target.value })} required />
                 </Field>
-                <Field label="حاشیه سود هدف (درصد)">
-                  <input className={fromLegacy('ltr')} type="number" min="0" max="100" step="0.01" value={productForm.target_margin_percent || ''} onChange={(e) => setProductForm({ ...productForm, target_margin_percent: e.target.value })} placeholder="اختیاری" />
+              </>
+            )}
+            {canManageSales && showCosts && (
+              <>
+                <Field label="بهای تمام‌شده محاسبه‌شده">
+                  <MoneyInput value={productForm.calculated_cost} disabled />
+                </Field>
+                <Field label="بهای تمام‌شده اصلاحی (اختیاری)">
+                  <MoneyInput
+                    min="0"
+                    value={productForm.cost_override}
+                    onChange={(e) => setProductForm({ ...productForm, cost_override: e.target.value })}
+                    placeholder="خالی = مبلغ محاسبه‌شده"
+                  />
+                </Field>
+                <Field label="روش سود">
+                  <Select
+                    value={productForm.profit_mode}
+                    onChange={(value) => setProductForm({ ...productForm, profit_mode: value })}
+                    options={[
+                      { value: 'percent', label: 'درصدی' },
+                      { value: 'fixed', label: 'مبلغ ثابت' },
+                    ]}
+                  />
+                </Field>
+                {productForm.profit_mode === 'fixed' ? (
+                  <Field label="مبلغ سود (ریال)">
+                    <MoneyInput
+                      min="0"
+                      value={productForm.target_profit_amount}
+                      onChange={(e) => setProductForm({ ...productForm, target_profit_amount: e.target.value })}
+                    />
+                  </Field>
+                ) : (
+                  <Field label="درصد سود">
+                    <input
+                      className={fromLegacy('ltr')}
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.01"
+                      value={productForm.target_margin_percent || ''}
+                      onChange={(e) => setProductForm({ ...productForm, target_margin_percent: e.target.value })}
+                    />
+                  </Field>
+                )}
+                <Field label="قیمت فروش نهایی">
+                  <MoneyInput value={String(suggestedSalesPrice)} disabled />
                 </Field>
               </>
             )}
@@ -1062,16 +1180,34 @@ export default function Products() {
                     رنگ دارد
                   </label>
                   {piece.needs_paint !== false && (
-                    <Field label="رنگ">
-                      <Select
-                        value={piece.paint_recipe_id}
-                        onChange={(v) => updateSuitePiece(idx, 'paint_recipe_id', v)}
-                        options={recipeOptions('paint')}
-                        disabled={!canEditMaterials}
-                      />
-                    </Field>
+                    <>
+                      <Field label="رنگ پیش‌فرض">
+                        <Select
+                          value={piece.paint_recipe_id}
+                          onChange={(v) => updateSuitePiece(idx, 'paint_recipe_id', v)}
+                          options={recipeOptions('paint')}
+                          disabled={!canEditMaterials}
+                        />
+                      </Field>
+                      {canEditMaterials && (
+                        <Field label="رنگ‌های پیشنهادی">
+                          <div className={fromLegacy('checkbox-list')}>
+                            {(recipeCatalog.paint || []).map((recipe) => (
+                              <label key={recipe.id} className={fromLegacy('checkbox-row')}>
+                                <input
+                                  type="checkbox"
+                                  checked={(piece.paint_recipe_ids || []).map(String).includes(String(recipe.id))}
+                                  onChange={(e) => toggleSuiteRecipeOption(idx, 'paint', recipe.id, e.target.checked)}
+                                />
+                                {recipe.name}{recipe.color_name ? ` — ${recipe.color_name}` : ''}
+                              </label>
+                            ))}
+                          </div>
+                        </Field>
+                      )}
+                    </>
                   )}
-                  <Field label="پارچه">
+                  <Field label="پارچه پیش‌فرض">
                     <Select
                       value={piece.fabric_recipe_id}
                       onChange={(v) => updateSuitePiece(idx, 'fabric_recipe_id', v)}
@@ -1079,6 +1215,22 @@ export default function Products() {
                       disabled={!canEditMaterials}
                     />
                   </Field>
+                  {canEditMaterials && (
+                    <Field label="پارچه‌های پیشنهادی">
+                      <div className={fromLegacy('checkbox-list')}>
+                        {(recipeCatalog.fabric || []).map((recipe) => (
+                          <label key={recipe.id} className={fromLegacy('checkbox-row')}>
+                            <input
+                              type="checkbox"
+                              checked={(piece.fabric_recipe_ids || []).map(String).includes(String(recipe.id))}
+                              onChange={(e) => toggleSuiteRecipeOption(idx, 'fabric', recipe.id, e.target.checked)}
+                            />
+                            {recipe.name}{recipe.color_name ? ` — ${recipe.color_name}` : ''}
+                          </label>
+                        ))}
+                      </div>
+                    </Field>
+                  )}
                   <Field label="اسفنج">
                     <Select
                       value={piece.foam_recipe_id}
@@ -1103,16 +1255,6 @@ export default function Products() {
                       disabled={!canEditMaterials}
                     />
                   </Field>
-                  {(canManageSales || canEditMaterials) && (
-                    <Field label="قیمت این قطعه (ریال)">
-                      <MoneyInput
-                        min="0"
-                        value={piece.unit_price}
-                        onChange={(e) => updateSuitePiece(idx, 'unit_price', e.target.value)}
-                        disabled={!canEditMaterials && !canManageSales}
-                      />
-                    </Field>
-                  )}
                 </div>
                 {['paint', 'fabric', 'foam', 'webbing', 'cushion'].map((kind) => {
                   const preview = selectedRecipePreview(kind, piece[`${kind}_recipe_id`])
@@ -1123,9 +1265,6 @@ export default function Products() {
                 })}
               </div>
             ))}
-            {productForm.suite_pieces.length > 0 && (canManageSales || canEditMaterials) && (
-              <p className={fromLegacy('muted')}>جمع قیمت سرویس: {formatMoney(suiteTotal(productForm.suite_pieces))}</p>
-            )}
           </div>
 
           <label className={fromLegacy("checkbox-row")}>

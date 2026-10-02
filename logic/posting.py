@@ -14,9 +14,14 @@ def build_journal_lines(
     accounts: dict | None = None,
     description: str = "",
     ledger=None,
+    branch=None,
+    warehouse=None,
+    item_category="",
+    effective_date=None,
 ):
     """rule_name → list of journal line dicts with resolved Account objects."""
     from logic.accounting_accounts import get_account
+    from logic.account_mappings import resolve_mapped_account, validate_postable_account
 
     if ledger is None:
         from logic.ledger import OFFICE_LEDGER
@@ -37,14 +42,29 @@ def build_journal_lines(
             continue
 
         account_key = rule.get("account_key")
-        if account_key:
+        role = rule.get("role") or account_key or rule.get("slug")
+        side = rule["side"]
+        explicit_account = accounts.get(role) or accounts.get(rule.get("slug"))
+        account = explicit_account or resolve_mapped_account(
+            rule_name,
+            role,
+            side,
+            ledger=ledger,
+            branch=branch,
+            warehouse=warehouse,
+            item_category=item_category,
+            effective_date=effective_date,
+        )
+        if account is not None:
+            pass
+        elif account_key:
             account = accounts.get(account_key)
             if account is None:
                 raise ValueError(f"حساب «{account_key}» برای قانون ثبت مشخص نشده است.")
         else:
             account = get_account(rule["slug"], ledger=ledger)
+        validate_postable_account(account, ledger=ledger)
 
-        side = rule["side"]
         lines.append(
             {
                 "account": account,

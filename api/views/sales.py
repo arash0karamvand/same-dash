@@ -16,10 +16,11 @@ from auth.permissions import (
     VIEW_EMPLOYEE_RANKING,
     VIEW_SALES_SUMMARY,
     can_edit_sale,
+    can_view_costs,
     can_view_sale,
     has_permission,
 )
-from backend.models import Customer, Sale
+from backend.models import Customer, Product, Sale
 from logic.audit import log_action
 from logic.sales import (
     cancel_order,
@@ -61,6 +62,39 @@ def sale_finish_options(request):
     from logic.workshop_recipes import sale_finish_catalog
 
     return success(sale_finish_catalog())
+
+
+@api_view("POST")
+def sale_bundle_quote(request):
+    if not (
+        has_permission(request.user, CREATE_SALE)
+        or has_permission(request.user, APPROVE_SALE_ACCOUNTING)
+        or has_permission(request.user, APPROVE_SALE_BRANCH)
+    ):
+        return fail("Permission denied", status=403)
+    data = parse_json(request)
+    product = Product.objects.filter(
+        pk=data.get("product_id"), is_active=True, is_deleted=False
+    ).select_related("furniture_workset", "frame").first()
+    if not product:
+        return fail("محصول انتخاب‌شده یافت نشد.", status=404)
+    try:
+        from logic.workshop_recipes import sale_finish_quote
+
+        quote = sale_finish_quote(product, data)
+        if not quote:
+            return fail("این محصول دست قابل قیمت‌گذاری ندارد.", status=400)
+    except ValueError as exc:
+        return fail(str(exc), status=400)
+    return success(
+        {
+            "unit_price": int(quote["unit_price"]),
+            "workset_config": quote["workset_config"],
+            "fabric_label": quote["fabric_label"],
+            "paint_label": quote["paint_label"],
+            "meters": float(quote["meters"]),
+        }
+    )
 
 
 def _serialize_sales(user, sales):
@@ -696,3 +730,81 @@ def sale_journals(request, pk):
     if not can_view_sale(request.user, sale):
         return fail("Permission denied", status=403)
     return success(sale_journals_payload(sale))
+
+
+@api_view("GET")
+def sale_trace(request, pk):
+    sale = get_sale(pk)
+    if sale is None:
+        return fail("Sale not found", status=404)
+    if not can_view_sale(request.user, sale):
+        return fail("Permission denied", status=403)
+    from logic.delivery import delivery_trace
+
+    from logic.materials import mask_cost_fields
+    payload = delivery_trace(sale)
+    return success(payload if can_view_costs(request.user) else mask_cost_fields(payload))
+
+
+@api_view("POST")
+def sale_deliver(request, pk):
+    sale = get_sale(pk)
+    if sale is None:
+        return fail("Sale not found", status=404)
+    if not (
+        can_edit_sale(request.user, sale)
+        or has_permission(request.user, APPROVE_SALE_ACCOUNTING)
+    ):
+        return fail("Permission denied", status=403)
+    data = parse_json(request) if request.body else {}
+    from logic.delivery import deliver_sale, delivery_trace
+
+    try:
+        deliver_sale(
+            sale,
+            user=request.user,
+            idempotency_key=(
+                request.headers.get("Idempotency-Key")
+                or data.get("idempotency_key")
+                or None
+            ),
+        )
+    except ValueError as exc:
+        return fail(str(exc), status=400)
+    from logic.materials import mask_cost_fields
+    payload = delivery_trace(sale)
+    return success(payload if can_view_costs(request.user) else mask_cost_fields(payload))
+
+
+@api_view("POST")
+def sale_return(request, pk):
+    sale = get_sale(pk)
+    if sale is None:
+        return fail("Sale not found", status=404)
+    if not (
+        can_edit_sale(request.user, sale)
+        or has_permission(request.user, APPROVE_SALE_ACCOUNTING)
+    ):
+        return fail("Permission denied", status=403)
+    if not hasattr(sale, "delivery_document"):
+        return fail("Sale has not been delivered", status=400)
+    data = parse_json(request)
+    from logic.delivery import delivery_trace, return_sale
+
+    try:
+        return_sale(
+            sale.delivery_document,
+            data.get("lines"),
+            reason=data.get("reason") or "",
+            user=request.user,
+            idempotency_key=(
+                request.headers.get("Idempotency-Key")
+                or data.get("idempotency_key")
+                or ""
+            ),
+        )
+    except (ValueError, TypeError) as exc:
+        return fail(str(exc), status=400)
+    from logic.materials import mask_cost_fields
+    payload = delivery_trace(sale)
+    return success(payload if can_view_costs(request.user) else mask_cost_fields(payload), status=201)

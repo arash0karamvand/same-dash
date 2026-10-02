@@ -4,7 +4,19 @@ from decimal import Decimal
 from django.core.management.base import BaseCommand, CommandError
 from django.db.models import Count, F, Q, Sum
 
-from backend.models import FinancialEvent, JournalEntry, JournalLine, Ledger
+from backend.models import (
+    DeliveryDocument,
+    FinancialEvent,
+    GoodsReceipt,
+    InventoryConsumption,
+    InventoryCostLayer,
+    JournalEntry,
+    JournalLine,
+    Ledger,
+    ProductionEvent,
+    ReconciliationQueue,
+)
+from logic.feature_flags import rollout_status
 
 
 class Command(BaseCommand):
@@ -82,6 +94,62 @@ class Command(BaseCommand):
         ).aggregate(debit=Sum("debit"), credit=Sum("credit"))
         debit = global_totals["debit"] or Decimal(0)
         credit = global_totals["credit"] or Decimal(0)
+        flags = rollout_status()
+        open_reconciliation = (
+            ReconciliationQueue.objects.filter(status=ReconciliationQueue.STATUS_OPEN).count()
+            if any(flags.values()) else 0
+        )
+        delivery_missing_events = (
+            DeliveryDocument.objects.filter(status=DeliveryDocument.STATUS_POSTED)
+            .filter(
+                Q(sale_event__isnull=True)
+                | Q(cogs_event__isnull=True)
+                | Q(sale_event__journal__isnull=True)
+                | Q(cogs_event__journal__isnull=True)
+            )
+            .count()
+            if flags["unified_delivery"] else 0
+        )
+        receipt_missing_accounting = (
+            GoodsReceipt.objects.filter(status=GoodsReceipt.STATUS_APPROVED)
+            .filter(
+                Q(accounting_event__isnull=True)
+                | Q(accounting_event__journal__isnull=True)
+                | Q(lines__inventory_move__isnull=True)
+            )
+            .distinct()
+            .count()
+            if flags["procurement"] else 0
+        )
+        production_trace_missing = (
+            ProductionEvent.objects.filter(
+                event_type__in=[
+                    ProductionEvent.TYPE_CONSUMPTION,
+                    ProductionEvent.TYPE_EXTRA_CONSUMPTION,
+                ]
+            )
+            .filter(
+                Q(consumption__isnull=True)
+                | Q(run__bom_version__isnull=True)
+            )
+            .count()
+            if flags["actual_cost_production"] else 0
+        )
+        lot_balance_mismatch = 0
+        allocation_mismatch = 0
+        if flags["fulfillment_reservations"] or flags["actual_cost_production"]:
+            for layer in InventoryCostLayer.objects.annotate(
+                allocated=Sum("allocations__quantity")
+            ).only("original_qty", "qty_remaining"):
+                if Decimal(layer.qty_remaining or 0) != (
+                    Decimal(layer.original_qty or 0) - Decimal(layer.allocated or 0)
+                ):
+                    lot_balance_mismatch += 1
+            for consumption in InventoryConsumption.objects.annotate(
+                allocated=Sum("allocations__quantity")
+            ).only("quantity"):
+                if Decimal(consumption.quantity or 0) != Decimal(consumption.allocated or 0):
+                    allocation_mismatch += 1
 
         result = {
             "ok": True,
@@ -97,6 +165,13 @@ class Command(BaseCommand):
             "journals_with_multiple_live_events": journals_with_multiple_live_events,
             "event_journal_status_mismatch": event_journal_status_mismatch,
             "factory_live_journals": factory_live,
+            "feature_flags": flags,
+            "open_reconciliation_items": open_reconciliation,
+            "delivery_missing_events": delivery_missing_events,
+            "approved_receipts_missing_accounting": receipt_missing_accounting,
+            "production_trace_missing": production_trace_missing,
+            "lot_balance_mismatch": lot_balance_mismatch,
+            "allocation_quantity_mismatch": allocation_mismatch,
         }
         failures = [
             bool(unbalanced),
@@ -109,6 +184,12 @@ class Command(BaseCommand):
             event_journal_status_mismatch > 0,
             debit != credit,
             factory_live > 0 and not options["allow_factory"],
+            open_reconciliation > 0,
+            delivery_missing_events > 0,
+            receipt_missing_accounting > 0,
+            production_trace_missing > 0,
+            lot_balance_mismatch > 0,
+            allocation_mismatch > 0,
         ]
         result["ok"] = not any(failures)
 

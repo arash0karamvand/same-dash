@@ -43,11 +43,7 @@ def _live_sale_journal(sale):
 
 
 def _issue_sale_journal(sale, user):
-    """سند فروش از قانون ثبت هسته.
-
-    فروش نسیه: بدهکار حساب‌های دریافتنی (۱۳۱۰) و بستانکار درآمد فروش (۷۲۴۰).
-    بخش نقد فاکتور به حساب دریافت همان روش پرداخت بدهکار می‌شود تا سند تراز بماند.
-    """
+    """Legacy sale/VAT/estimated-COGS document for non-phase-6 sales."""
     from logic.accounting_accounts import get_account, payment_account_for_sale
     from logic.materials import compute_product_material_cost
     from logic.sales import balance_due
@@ -55,89 +51,52 @@ def _issue_sale_journal(sale, user):
     final_amount = Decimal(sale.final_amount or 0)
     if final_amount <= 0:
         raise ValueError("مبلغ فاکتور برای صدور سند باید بزرگ‌تر از صفر باشد.")
-
-    party = sale.customer.full_name if sale.customer_id else "بدون مشتری"
     invoice = sale.invoice_number or sale.pk
-    description = f"تایید نهایی فاکتور {invoice} — {party}"
-    vat_amount = Decimal(sale.vat_amount or 0)
-    net_revenue = final_amount - vat_amount
+    description = f"تایید نهایی فاکتور {invoice}"
+    vat = Decimal(sale.vat_amount or 0)
+    lines = []
     outstanding = balance_due(sale)
     paid = Decimal(sale.paid_amount or 0)
-    lines = []
-    if outstanding > 0:
-        lines.append({
-            "account": get_account(ACCOUNT_SLUGS.RECEIVABLES, ledger=LEGAL_LEDGER),
-            "debit": outstanding,
-            "credit": 0,
-            "description": description,
-        })
-    if paid > 0:
-        lines.append({
-            "account": payment_account_for_sale(sale, ledger=LEGAL_LEDGER),
-            "debit": paid,
-            "credit": 0,
-            "description": description,
-        })
-    lines.append({
-        "account": get_account(ACCOUNT_SLUGS.PRODUCT_SALES, ledger=LEGAL_LEDGER),
-        "debit": 0,
-        "credit": net_revenue,
-        "description": description,
-    })
-    if vat_amount > 0:
-        lines.append({
-            "account": get_account(ACCOUNT_SLUGS.VAT_PAYABLE, ledger=LEGAL_LEDGER),
-            "debit": 0,
-            "credit": vat_amount,
-            "description": f"مالیات فروش فاکتور {invoice}",
-        })
-
-    cogs = Decimal(0)
-    for item in sale.line_items.select_related("product").all():
-        if item.product_id:
-            cogs += compute_product_material_cost(item.product) * Decimal(item.quantity or 0)
-    cogs = cogs.quantize(Decimal("1"))
-    if cogs > 0:
+    if outstanding:
+        lines.append({"account": get_account(ACCOUNT_SLUGS.RECEIVABLES, ledger=LEGAL_LEDGER),
+                      "debit": outstanding, "credit": 0, "description": description})
+    if paid:
+        lines.append({"account": payment_account_for_sale(sale, ledger=LEGAL_LEDGER),
+                      "debit": paid, "credit": 0, "description": description})
+    lines.append({"account": get_account(ACCOUNT_SLUGS.PRODUCT_SALES, ledger=LEGAL_LEDGER),
+                  "debit": 0, "credit": final_amount - vat, "description": description})
+    if vat:
+        lines.append({"account": get_account(ACCOUNT_SLUGS.VAT_PAYABLE, ledger=LEGAL_LEDGER),
+                      "debit": 0, "credit": vat, "description": description})
+    cogs = sum(
+        (
+            compute_product_material_cost(item.product) * Decimal(item.quantity or 0)
+            for item in sale.line_items.select_related("product")
+            if item.product_id
+        ),
+        Decimal("0"),
+    ).quantize(Decimal("1"))
+    if cogs:
         lines.extend([
-            {
-                "account": get_account(ACCOUNT_SLUGS.COGS, ledger=LEGAL_LEDGER),
-                "debit": cogs,
-                "credit": 0,
-                "description": f"بهای تمام‌شده فاکتور {invoice}",
-            },
-            {
-                "account": get_account(ACCOUNT_SLUGS.FINISHED_GOODS_INVENTORY, ledger=LEGAL_LEDGER),
-                "debit": 0,
-                "credit": cogs,
-                "description": f"خروج کالای ساخته‌شده فاکتور {invoice}",
-            },
+            {"account": get_account(ACCOUNT_SLUGS.COGS, ledger=LEGAL_LEDGER),
+             "debit": cogs, "credit": 0, "description": description},
+            {"account": get_account(ACCOUNT_SLUGS.FINISHED_GOODS_INVENTORY, ledger=LEGAL_LEDGER),
+             "debit": 0, "credit": cogs, "description": description},
         ])
-
-    event, _created = register_event(
-        source_module="sales",
-        source_type="Sale",
-        source=sale,
+    event, _ = register_event(
+        source_module="sales", source_type="Sale", source=sale,
         event_type="sale_finalized",
         payload={
-            "invoice": str(invoice),
-            "final_amount": str(final_amount),
-            "vat_amount": str(vat_amount),
-            "cogs": str(cogs),
+            "invoice": str(invoice), "final_amount": str(final_amount),
+            "vat_amount": str(vat), "cogs": str(cogs),
         },
         occurred_at=sale.sold_at,
     )
-    journal = issue_event_draft(
-        event,
-        lines=lines,
-        entry_type="sale",
-        description=description,
-        entry_date=sale.sold_at,
-        user=user,
-        sale=sale,
-        branch=sale.branch,
+    return issue_event_draft(
+        event, lines=lines, entry_type="sale", description=description,
+        entry_date=sale.sold_at, user=user, sale=sale, branch=sale.branch,
+        ledger=LEGAL_LEDGER,
     )
-    logger.info("سند فروش %s برای فاکتور %s صادر شد", journal.document_code, invoice)
-    return journal
 
 
 def journal_line_to_dict(line):
@@ -244,7 +203,9 @@ def sale_journals_payload(sale):
 
 @transaction.atomic
 def finalize_sale_invoice(sale, user):
-    """وضعیت فاکتور را به تایید نهایی می‌برد و در صورت نبود سند، آن را صادر می‌کند."""
+    """Finalize through physical delivery and its idempotent revenue event."""
+    from logic.delivery import deliver_sale, is_unified_delivery_candidate
+    from logic.feature_flags import UNIFIED_DELIVERY, is_enabled
     from logic.sales import is_order_cancelled, is_pre_invoice_pending
 
     sale = Sale.objects.select_for_update().select_related("customer", "branch").get(pk=sale.pk)
@@ -253,17 +214,26 @@ def finalize_sale_invoice(sale, user):
     if is_pre_invoice_pending(sale):
         raise ValueError("پیش‌فاکتور تا قبل از تایید، قابل تایید نهایی نیست.")
 
-    journal = _live_sale_journal(sale)
-    already_issued = journal is not None
-    if journal is None:
-        journal = _issue_sale_journal(sale, user)
-    elif journal.status != JournalEntry.STATUS_POSTED:
-        DocumentIssuanceService().retire_draft(
-            journal,
-            user=user,
-            reason="جایگزینی پیش‌نویس با سند کامل فروش، مالیات و بهای تمام‌شده",
-        )
-        journal = _issue_sale_journal(sale, user)
+    unified_delivery = (
+        is_enabled(UNIFIED_DELIVERY)
+        and is_unified_delivery_candidate(sale)
+    )
+    already_issued = hasattr(sale, "delivery_document") if unified_delivery else bool(_live_sale_journal(sale))
+    if unified_delivery:
+        delivery = deliver_sale(sale, user=user)
+        journal = delivery.sale_event.journal
+    else:
+        delivery = None
+        journal = _live_sale_journal(sale)
+        if journal is None:
+            journal = _issue_sale_journal(sale, user)
+        elif journal.status != JournalEntry.STATUS_POSTED:
+            DocumentIssuanceService().retire_draft(
+                journal,
+                user=user,
+                reason="Replaced by complete legacy sale/VAT/COGS draft",
+            )
+            journal = _issue_sale_journal(sale, user)
 
     if sale.order_status != Sale.ORDER_STATUS_FINAL:
         _ensure_final_status()
@@ -280,5 +250,7 @@ def finalize_sale_invoice(sale, user):
         "order_status_display": sale.get_order_status_display(),
         "issued": True,
         "already_issued": already_issued,
+        "delivery_uuid": str(delivery.uuid) if delivery else None,
+        "actual_cogs": str(delivery.total_actual_cogs) if delivery else None,
         "journal": journal_to_dict(journal, "sale"),
     }

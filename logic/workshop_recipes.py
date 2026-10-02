@@ -13,7 +13,7 @@ from backend.models import (
     WorkshopRecipe,
     WorkshopRecipeMaterial,
 )
-from logic.dynamic_choices import choice_dict, fabric_countries, paint_units
+from logic.dynamic_choices import choice_dict, fabric_countries
 from logic.lookups import create_lookup, get_lookup_choices
 
 RECIPE_KINDS = choice_dict("workshop_recipe_kind") or dict(WorkshopRecipe.KIND_CHOICES)
@@ -31,7 +31,7 @@ PIPELINE_END_ASSEMBLY = "assembly"
 PIPELINE_ENDS = {PIPELINE_END_UPHOLSTERY, PIPELINE_END_ASSEMBLY}
 
 PAINT_CATEGORIES = choice_dict("workshop_paint_category") or dict(WorkshopRecipe.PAINT_CATEGORY_CHOICES)
-PAINT_UNITS = paint_units() or set(WorkshopRecipe.PAINT_UNITS)
+PAINT_UNITS = set(WorkshopRecipe.PAINT_UNITS)
 PAINT_ITEM_CATEGORY = "paint_item"
 STOCK_STATUS_ZERO = "zero"
 STOCK_STATUS_LOW = "low"
@@ -90,6 +90,28 @@ def _stock_status(stock, minimum):
     if stock <= minimum:
         return STOCK_STATUS_LOW
     return STOCK_STATUS_OK
+
+
+def _shared_inventory_stock(recipe):
+    """Derive integrated recipe capacity from the shared material ledger."""
+    integrated = any(
+        getattr(recipe, related).exists()
+        for related in (
+            "products_paint", "products_fabric", "products_foam",
+            "products_cushion", "products_webbing",
+        )
+    )
+    if not integrated:
+        return Decimal(recipe.current_stock or 0), False
+    lines = list(recipe.materials.select_related("material").all())
+    if not lines:
+        return Decimal("0"), True
+    capacities = [
+        Decimal(line.material.stock or 0) / Decimal(line.quantity)
+        for line in lines
+        if Decimal(line.quantity or 0) > 0
+    ]
+    return (min(capacities) if capacities else Decimal("0")), True
 
 
 def _next_prefixed_code(prefix):
@@ -613,6 +635,7 @@ def recipe_material_to_dict(row):
 
 
 def recipe_to_dict(recipe, include_materials=True):
+    shared_stock, inventory_derived = _shared_inventory_stock(recipe)
     data = {
         "id": recipe.id,
         "kind": recipe.kind,
@@ -625,7 +648,8 @@ def recipe_to_dict(recipe, include_materials=True):
         "paint_category_display": paint_category_labels().get(recipe.paint_category, ""),
         "brand": recipe.brand or "",
         "stock_unit": recipe.stock_unit or "",
-        "current_stock": _as_number(recipe.current_stock),
+        "current_stock": _as_number(shared_stock),
+        "inventory_derived": inventory_derived,
         "min_stock": _as_number(recipe.min_stock),
         "storage_shelf": recipe.storage_shelf or "",
         "unit_cost": _as_number(recipe.unit_cost),
@@ -655,8 +679,8 @@ def recipe_to_dict(recipe, include_materials=True):
         "roll_count": int(recipe.roll_count or 0),
         "image_url": recipe.image_url or "",
         "gallery_urls": list(recipe.gallery_urls or []),
-        "stock_value": _as_number((recipe.current_stock or 0) * (recipe.unit_cost or 0)),
-        "stock_status": _stock_status(recipe.current_stock or 0, recipe.min_stock or 0),
+        "stock_value": _as_number(shared_stock * (recipe.unit_cost or 0)),
+        "stock_status": _stock_status(shared_stock, recipe.min_stock or 0),
         "is_active": recipe.is_active,
         "created_at": recipe.created_at.isoformat() if recipe.created_at else None,
         "updated_at": recipe.updated_at.isoformat() if recipe.updated_at else None,
@@ -894,72 +918,204 @@ def _chosen_fabric_snapshot(original, fabric, meters):
     return snap
 
 
+def _piece_key(piece):
+    return (
+        str((piece or {}).get("piece_kind") or ""),
+        str((piece or {}).get("arm_style") or ""),
+    )
+
+
+def _sale_piece_recipe_id(piece, kind, fallback=None):
+    value = (piece or {}).get(f"{kind}_recipe_id")
+    if value in (None, ""):
+        value = fallback
+    return _optional_int(value)
+
+
+def _normalize_sale_pieces(product, item):
+    """Build an order snapshot from catalog pieces without trusting client snapshots."""
+    base = build_workset_from_product(product)
+    catalog_pieces = list(base.get("pieces") or [])
+    incoming_config = item.get("workset_config") if isinstance(item.get("workset_config"), dict) else {}
+    incoming_pieces = incoming_config.get("pieces")
+    explicit_mode = item.get("sale_mode") or incoming_config.get("sale_mode")
+    mode = (
+        explicit_mode
+        or (
+            "custom_set"
+            if _sale_choice_id(item, "fabric_recipe_id") or _sale_choice_id(item, "paint_recipe_id")
+            else "full_set"
+        )
+    ).strip()
+    if mode not in ("full_set", "custom_set"):
+        raise ValueError("نوع ثبت دست نامعتبر است.")
+    configuration_mode = incoming_config.get("configuration_mode")
+    if mode == "full_set":
+        configuration_mode = "full"
+    elif configuration_mode in (None, ""):
+        configuration_mode = "custom"
+    elif configuration_mode not in ("custom", "modular"):
+        raise ValueError("حالت پیکربندی دست نامعتبر است.")
+    if not catalog_pieces:
+        return base, [], mode
+
+    requested = {}
+    if mode == "custom_set" and isinstance(incoming_pieces, list):
+        for raw in incoming_pieces:
+            if not isinstance(raw, dict):
+                continue
+            key = _piece_key(raw)
+            if not all(key) or key in requested:
+                raise ValueError("ترکیب قطعات سفارش نامعتبر است.")
+            requested[key] = raw
+
+    fabric_fallback = _optional_int(_sale_choice_id(item, "fabric_recipe_id"))
+    paint_fallback = _optional_int(_sale_choice_id(item, "paint_recipe_id"))
+    next_pieces = []
+    known_keys = {_piece_key(piece) for piece in catalog_pieces}
+    unknown = set(requested) - known_keys
+    if unknown:
+        raise ValueError("قطعه‌ای خارج از دست انتخاب‌شده ارسال شده است.")
+
+    for catalog_piece in catalog_pieces:
+        key = _piece_key(catalog_piece)
+        raw = requested.get(key, {}) if mode == "custom_set" else {}
+        try:
+            quantity = int(raw.get("quantity", catalog_piece.get("quantity") or 1))
+        except (TypeError, ValueError):
+            raise ValueError("تعداد قطعه نامعتبر است.")
+        if quantity < 0:
+            raise ValueError("تعداد قطعه نمی‌تواند منفی باشد.")
+        if quantity == 0:
+            continue
+
+        updated = dict(catalog_piece)
+        updated["quantity"] = quantity
+        fabric_id = _sale_piece_recipe_id(
+            raw,
+            "fabric",
+            fabric_fallback
+            or catalog_piece.get("fabric_recipe_id")
+            or (catalog_piece.get("fabric") or {}).get("id"),
+        )
+        paint_id = _sale_piece_recipe_id(
+            raw,
+            "paint",
+            paint_fallback
+            or catalog_piece.get("paint_recipe_id")
+            or (catalog_piece.get("paint") or {}).get("id"),
+        )
+        if not fabric_id:
+            raise ValueError(f"پارچهٔ «{catalog_piece.get('piece_label') or 'قطعه'}» را انتخاب کنید.")
+        fabric = resolve_recipe(fabric_id, kind=WorkshopRecipe.KIND_FABRIC)
+        meters = fabric_consumption_meters(catalog_piece.get("fabric"))
+        if meters <= 0:
+            raise ValueError(
+                f"متراژ مصرف در تعریف کار نیست: {catalog_piece.get('piece_label') or 'قطعه'}"
+            )
+        rate = Decimal(fabric.unit_cost or 0)
+        if rate <= 0 and mode == "custom_set":
+            raise ValueError(f"نرخ پارچهٔ «{fabric.name}» ثبت نشده است.")
+        updated["fabric_recipe_id"] = fabric.id
+        updated["fabric"] = _chosen_fabric_snapshot(catalog_piece.get("fabric"), fabric, meters)
+        updated["fabric"]["line_price"] = int((meters * rate * quantity).quantize(Decimal("1")))
+
+        if catalog_piece.get("needs_paint", True) is not False:
+            if not paint_id:
+                raise ValueError(f"رنگ بدنهٔ «{catalog_piece.get('piece_label') or 'قطعه'}» را انتخاب کنید.")
+            paint = resolve_recipe(paint_id, kind=WorkshopRecipe.KIND_PAINT)
+            updated["paint_recipe_id"] = paint.id
+            updated["paint"] = snapshot_recipe(paint)
+        else:
+            updated["paint_recipe_id"] = None
+            updated["paint"] = None
+        next_pieces.append(updated)
+
+    if not next_pieces:
+        raise ValueError("دست سفارشی باید حداقل یک قطعه داشته باشد.")
+    result = dict(base)
+    result["pieces"] = next_pieces
+    result["sale_mode"] = mode
+    result["configuration_mode"] = configuration_mode
+    return result, next_pieces, mode
+
+
 def sale_finish_quote(product, item):
-    """قیمت سرویس = متراژ قفل‌شده × نرخ پارچهٔ انتخاب‌شده. اسفنج و متراژ از کار می‌مانند."""
-    fabric_id = _optional_int(_sale_choice_id(item, "fabric_recipe_id"))
-    paint_id = _optional_int(_sale_choice_id(item, "paint_recipe_id"))
-    if not fabric_id and not paint_id:
+    """Server-side bundle quote with quantity and finish choices per piece."""
+    incoming_config = item.get("workset_config") if isinstance(item.get("workset_config"), dict) else {}
+    has_bundle_request = bool(
+        item.get("sale_mode")
+        or incoming_config.get("sale_mode")
+        or incoming_config.get("pieces")
+        or _sale_choice_id(item, "fabric_recipe_id")
+        or _sale_choice_id(item, "paint_recipe_id")
+    )
+    if not has_bundle_request:
         return None
 
-    base = build_workset_from_product(product)
-    pieces = list(base.get("pieces") or [])
+    config, pieces, mode = _normalize_sale_pieces(product, item)
     if not pieces:
         raise ValueError("این محصول قطعهٔ کار ندارد؛ قیمت از متراژ پارچه حساب نمی‌شود.")
-    if not fabric_id:
-        raise ValueError("پارچه را انتخاب کنید.")
-
-    needs_paint = any(piece.get("needs_paint", True) is not False for piece in pieces)
-    if needs_paint and not paint_id:
-        raise ValueError("رنگ بدنه را انتخاب کنید.")
-
-    fabric = resolve_recipe(fabric_id, kind=WorkshopRecipe.KIND_FABRIC)
-    paint = resolve_recipe(paint_id, kind=WorkshopRecipe.KIND_PAINT) if needs_paint else None
-    rate = Decimal(fabric.unit_cost or 0)
-    if rate <= 0:
-        raise ValueError("نرخ هر متر پارچهٔ انتخاب‌شده ثبت نشده است.")
 
     total_meters = Decimal(0)
-    missing = []
-    next_pieces = []
+    unit_price = Decimal(0)
+    fabric_names = []
+    paint_names = []
     for piece in pieces:
         meters = fabric_consumption_meters(piece.get("fabric"))
         qty = Decimal(int(piece.get("quantity") or 1))
-        if meters <= 0:
-            missing.append(piece.get("piece_label") or "قطعه")
         total_meters += meters * qty
-        updated = dict(piece)
-        updated["fabric"] = _chosen_fabric_snapshot(piece.get("fabric"), fabric, meters)
-        updated["fabric_recipe_id"] = fabric.id
-        if piece.get("needs_paint", True) is not False and paint:
-            updated["paint"] = snapshot_recipe(paint)
-            updated["paint_recipe_id"] = paint.id
-        next_pieces.append(updated)
-    if missing:
-        raise ValueError("متراژ مصرف در تعریف کار نیست: " + "، ".join(missing))
+        fabric_block = piece.get("fabric") or {}
+        unit_price += meters * Decimal(str(fabric_block.get("unit_cost") or 0)) * qty
+        if fabric_block.get("name"):
+            fabric_names.append(fabric_block.get("name"))
+        paint_block = piece.get("paint") or {}
+        if paint_block.get("name"):
+            paint_names.append(paint_block.get("color_name") or paint_block.get("name"))
+    if mode == "full_set":
+        if Decimal(product.default_price or 0) <= 0:
+            raise ValueError("قیمت این دست هنوز توسط اداری ثبت نشده است.")
+        unit_price = Decimal(product.default_price)
+    elif mode == "custom_set" and (
+        getattr(product, "cost_override", None) is not None
+        or getattr(product, "target_margin_percent", None) is not None
+        or Decimal(getattr(product, "target_profit_amount", 0) or 0) > 0
+    ):
+        from logic.materials import compute_product_material_cost, resolve_material_requirements
 
-    unit_price = (total_meters * rate).quantize(Decimal("1"))
-    config = dict(base)
-    config["pieces"] = next_pieces
-    config["fabric"] = _chosen_fabric_snapshot(None, fabric, total_meters)
-    if paint:
-        config["paint"] = snapshot_recipe(paint)
+        custom_cost = sum(
+            (Decimal(str(row.get("line_cost") or 0)) for row in resolve_material_requirements(
+                product=product, workset_config=config, quantity=1
+            )),
+            Decimal(0),
+        )
+        calculated_full = compute_product_material_cost(product)
+        if getattr(product, "cost_override", None) is not None and calculated_full > 0:
+            custom_cost = custom_cost * Decimal(product.cost_override) / calculated_full
+        if getattr(product, "profit_mode", "percent") == "fixed":
+            unit_price = custom_cost + Decimal(getattr(product, "target_profit_amount", 0) or 0)
+        else:
+            unit_price = custom_cost * (
+                Decimal(1)
+                + Decimal(getattr(product, "target_margin_percent", 0) or 0) / Decimal(100)
+            )
+    unit_price = unit_price.quantize(Decimal("1"))
+    unique_fabrics = list(dict.fromkeys(fabric_names))
+    unique_paints = list(dict.fromkeys(paint_names))
     config["sale_choices"] = {
-        "fabric_recipe_id": fabric.id,
-        "paint_recipe_id": paint.id if paint else None,
+        "mode": mode,
+        "configuration_mode": config.get("configuration_mode", "full"),
         "meters": float(total_meters),
-        "price_per_meter": int(rate),
         "unit_price": int(unit_price),
+        "piece_count": sum(int(piece.get("quantity") or 0) for piece in pieces),
     }
-    fabric_label = fabric.name
-    if fabric.color_name and fabric.color_name != fabric.name:
-        fabric_label = f"{fabric.name} ({fabric.color_name})"
     return {
         "workset_config": config,
         "unit_price": unit_price,
-        "fabric_label": fabric_label,
-        "paint_label": (paint.color_name or paint.name) if paint else "",
+        "fabric_label": "، ".join(unique_fabrics),
+        "paint_label": "، ".join(unique_paints),
         "meters": total_meters,
-        "price_per_meter": rate,
+        "price_per_meter": None,
     }
 
 
@@ -1195,7 +1351,7 @@ def compute_workset_recipe_requirements(line_items):
         recipe = recipes.get(recipe_id)
         if not recipe:
             continue
-        stock = Decimal(recipe.current_stock or 0)
+        stock, _inventory_derived = _shared_inventory_stock(recipe)
         results.append(
             {
                 "recipe_id": recipe.id,

@@ -98,6 +98,7 @@ def approve_office_order(
     warehouse_id=None,
     source_branch=None,
     merchant_user_id=None,
+    fulfillment_plans=None,
 ):
     from logic.check_accounting import (
         _resolve_account,
@@ -132,6 +133,44 @@ def approve_office_order(
         merchant_user_id=merchant_user_id,
     )
     route = fields["fulfillment_route"]
+    from logic.feature_flags import FULFILLMENT, is_enabled
+
+    if is_enabled(FULFILLMENT):
+        from backend.models import FulfillmentPlanLine
+        from logic.fulfillment import save_fulfillment_plan
+
+        supplied = {
+            int(row.get("sale_line_id")): row.get("lines") or []
+            for row in (fulfillment_plans or [])
+            if row.get("sale_line_id")
+        }
+        for sale_line in sale.line_items.select_related("variant").all():
+            specs = supplied.get(sale_line.pk)
+            if specs is None:
+                if route == ROUTE_FACTORY:
+                    specs = [{"route_kind": FulfillmentPlanLine.ROUTE_FACTORY, "quantity": sale_line.quantity}]
+                elif route == "merchant":
+                    specs = [{"route_kind": FulfillmentPlanLine.ROUTE_MERCHANT, "quantity": sale_line.quantity}]
+                elif route == "warehouse":
+                    if fields["fulfillment_source_branch"]:
+                        specs = [{
+                            "route_kind": FulfillmentPlanLine.ROUTE_BRANCH,
+                            "quantity": sale_line.quantity,
+                            "branch": fields["fulfillment_source_branch"].code,
+                        }]
+                    else:
+                        specs = [{
+                            "route_kind": FulfillmentPlanLine.ROUTE_WAREHOUSE,
+                            "quantity": sale_line.quantity,
+                            "warehouse_id": fields["fulfillment_warehouse"].pk,
+                        }]
+                else:
+                    specs = [{
+                        "route_kind": FulfillmentPlanLine.ROUTE_BRANCH,
+                        "quantity": sale_line.quantity,
+                        "branch": sale.branch_id,
+                    }]
+            save_fulfillment_plan(sale_line, specs, user=user)
     note = fulfillment_note(
         route,
         warehouse=fields["fulfillment_warehouse"],
@@ -153,10 +192,18 @@ def approve_office_order(
 
     if sale.accounting_mode == Sale.ACCOUNTING_MODE_AUTOMATIC:
         if not sale.journal_links.exists():
-            _create_sale_accounting(sale, outstanding)
+            # Kept as an explicitly disposable preview. Revenue is recognized
+            # only by the immutable delivery service after physical issue.
+            _create_sale_accounting(sale, outstanding, is_approved=False)
         from logic.accounting import approve_sale_accounting_entries
+        from logic.delivery import is_unified_delivery_candidate
+        from logic.feature_flags import UNIFIED_DELIVERY
 
-        approve_sale_accounting_entries(sale)
+        if (
+            not is_enabled(UNIFIED_DELIVERY)
+            or not is_unified_delivery_candidate(sale)
+        ):
+            approve_sale_accounting_entries(sale)
 
     if has_checks:
         reg_account = _resolve_account(check_registration_account_id, "collection_at_bank")
@@ -361,6 +408,9 @@ def recall_factory_order_to_office(office_order, user, reason=""):
     if office_order.workflow_stage_id not in allowed:
         raise ValueError("این سفارش در مرحله‌ای نیست که بتوان آن را به اداری برگرداند.")
 
+    from logic.fulfillment import release_sale_fulfillment
+
+    release_sale_fulfillment(office_order, user=user, cancel=True)
     sale = transition_order(
         office_order,
         STAGE_BRANCH_APPROVED,
@@ -402,6 +452,12 @@ def rollback_factory_receive(factory_order, user, reason=""):
 def rollback_factory_production_done(factory_order, user, reason=""):
     if factory_order.workflow_stage_id != factory_order.WORKFLOW_STAGE_PRODUCTION_DONE:
         raise ValueError("این سفارش آماده باربری نیست.")
+    from backend.models import ProductionRun
+
+    if ProductionRun.objects.filter(
+        sale_id=factory_order.pk, status=ProductionRun.STATUS_COMPLETED
+    ).exists():
+        raise ValueError("Completed production runs and actual-cost lots are immutable; use explicit return/correction events.")
     from logic.materials import restore_materials_for_factory_order
     from logic.order_queues import as_factory_order, transition_order
 
@@ -491,6 +547,9 @@ def reject_office_order(office_order, user, reason=""):
         status_ref_id=JournalEntry.STATUS_DRAFT,
     ).delete()
 
+    from logic.fulfillment import release_sale_fulfillment
+
+    release_sale_fulfillment(sale, user=user, cancel=True)
     return transition_order(
         sale,
         STAGE_PENDING_BRANCH,
@@ -511,6 +570,9 @@ def receive_factory_order(factory_order, user):
     }
     if factory_order.workflow_stage_id not in allowed:
         raise ValueError("این سفارش هنوز برای کارخانه ارسال نشده است.")
+    from logic.fulfillment import assert_factory_fulfillment_ready
+
+    assert_factory_fulfillment_ready(factory_order)
     from logic.order_queues import as_factory_order, transition_order
 
     sale = transition_order(
@@ -532,11 +594,27 @@ def receive_factory_order(factory_order, user):
 def complete_factory_production(factory_order, user):
     if factory_order.workflow_stage_id != factory_order.WORKFLOW_STAGE_IN_PRODUCTION:
         raise ValueError("این سفارش در مرحله ساخت کارخانه نیست.")
+    from backend.models import ProductionRun
     from logic.materials import deduct_materials_for_factory_order
     from logic.order_queues import as_factory_order, transition_order
     from logic.receive_kinds import destination_stage
 
-    deduct_materials_for_factory_order(factory_order)
+    runs = list(
+        ProductionRun.objects.filter(sale_id=factory_order.pk).prefetch_related("requirements")
+    )
+    if runs:
+        from logic.production import complete_run, consume_requirement
+
+        for run in runs:
+            for requirement in run.requirements.select_related("reservation", "material"):
+                consume_requirement(requirement, user=user)
+            complete_run(run, user=user)
+        # Compatibility marker prevents legacy callers from attempting a second issue.
+        if not factory_order.materials_deducted_at:
+            factory_order.materials_deducted_at = timezone.now()
+            factory_order.save(update_fields=["materials_deducted_at"])
+    else:
+        deduct_materials_for_factory_order(factory_order)
     next_stage = destination_stage(getattr(factory_order, "receive_kind", None) or "customer")
     extra = {"production_done_at": timezone.now()}
     if next_stage == STAGE_IN_WAREHOUSE:
@@ -566,8 +644,12 @@ def complete_factory_freight(factory_order, user):
         raise ValueError("فقط سفارش‌های با تاریخ تحویل امروز قابل تکمیل هستند.")
     if factory_order.workflow_stage_id != factory_order.WORKFLOW_STAGE_IN_FREIGHT:
         raise ValueError("این سفارش در مرحله باربری نیست.")
+    from logic.delivery import deliver_sale, is_unified_delivery_candidate
+    from logic.feature_flags import UNIFIED_DELIVERY, is_enabled
     from logic.order_queues import as_factory_order, transition_order
 
+    if is_enabled(UNIFIED_DELIVERY) and is_unified_delivery_candidate(factory_order):
+        deliver_sale(factory_order, user=user)
     sale = transition_order(
         factory_order,
         STAGE_COMPLETED,
@@ -579,10 +661,14 @@ def complete_factory_freight(factory_order, user):
 
 @transaction.atomic
 def complete_warehouse_order(sale, user):
+    from logic.delivery import deliver_sale, is_unified_delivery_candidate
+    from logic.feature_flags import UNIFIED_DELIVERY, is_enabled
     from logic.order_queues import transition_order
 
     if sale.workflow_stage_id != STAGE_IN_WAREHOUSE:
         raise ValueError("این سفارش در مرحله انبار نیست.")
+    if is_enabled(UNIFIED_DELIVERY) and is_unified_delivery_candidate(sale):
+        deliver_sale(sale, user=user)
     return transition_order(
         sale,
         STAGE_COMPLETED,
@@ -594,10 +680,14 @@ def complete_warehouse_order(sale, user):
 
 @transaction.atomic
 def complete_pickup_order(sale, user):
+    from logic.delivery import deliver_sale, is_unified_delivery_candidate
+    from logic.feature_flags import UNIFIED_DELIVERY, is_enabled
     from logic.order_queues import transition_order
 
     if sale.workflow_stage_id != STAGE_READY_FOR_PICKUP:
         raise ValueError("این سفارش آماده تحویل حضوری نیست.")
+    if is_enabled(UNIFIED_DELIVERY) and is_unified_delivery_candidate(sale):
+        deliver_sale(sale, user=user)
     return transition_order(
         sale,
         STAGE_COMPLETED,

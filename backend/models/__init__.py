@@ -11,8 +11,10 @@ from .accounting import (
     FactorySubsidiaryAccount,
     CostCenter,
     AccountingOrigin,
+    AccountingSourceReference,
     JournalEntry,
     JournalLine,
+    PostingAccountMapping,
     Transaction,
     TransactionSource,
     JournalOrderLink,
@@ -20,6 +22,7 @@ from .accounting import (
     FinancialEvent,
     AccountingPeriod,
     LedgerMigrationAudit,
+    ReconciliationQueue,
     Ledger,
     OverheadAllocationLine,
     OverheadPeriod,
@@ -36,6 +39,33 @@ from .payables import (
     PayableSettlement,
     PurchaseInvoice,
     PurchaseInvoiceLine,
+)
+from .procurement import (
+    GoodsReceipt,
+    GoodsReceiptLine,
+    ProcurementAdjustment,
+    PurchaseOrder,
+    PurchaseOrderLine,
+    PurchaseRequest,
+    PurchaseRequestLine,
+)
+from .fulfillment import (
+    DeliveryDocument,
+    DeliveryLine,
+    FulfillmentPlan,
+    FulfillmentPlanLine,
+    MerchantSupplyDemand,
+    SalesReturn,
+    SalesReturnLine,
+    StockTransfer,
+)
+from .production import (
+    BOMLine,
+    BOMVersion,
+    MaterialRequirement,
+    ProductionEvent,
+    ProductionRun,
+    ProductLot,
 )
 from .audit import (
     AuditAttendanceTarget,
@@ -58,7 +88,11 @@ from .audit import (
     AuditUserTarget,
 )
 from .catalog import (
+    DocumentAttachment,
+    InventoryAllocation,
+    InventoryConsumption,
     InventoryCostLayer,
+    InventoryReservation,
     InventoryTransaction,
     Material,
     MaterialStocktake,
@@ -171,6 +205,9 @@ from .activities import (
 )
 from .dashboard import (
     DashboardWidget,
+)
+from .crm_workbook import (
+    CrmWorkbookRow,
 )
 from .people import (
     Customer,

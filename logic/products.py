@@ -13,7 +13,6 @@ from logic.stock_locations import (
     format_stock_summary,
     list_stock_locations,
     location_from_sale,
-    location_transaction_kwargs,
     parse_location,
     stock_breakdown_for_variant,
     stock_for_variant_at,
@@ -134,29 +133,39 @@ def product_to_dict(p, include_variants=True, *, audience="sales"):
     if show_sales_price:
         data["default_price"] = int(p.default_price)
         data["display_price"] = int(p.display_price)
-        margin = getattr(p, "target_margin_percent", None)
-        if margin is not None:
-            material_cost = compute_product_material_cost(p)
-            data["target_margin_percent"] = float(margin)
-            data["target_min_price"] = int(
-                Decimal(material_cost) * (Decimal(1) + Decimal(margin) / Decimal(100))
-            )
 
     if show_materials:
         materials = [
-            product_material_to_dict(pm)
+            product_material_to_dict(pm, include_cost=audience == "full")
             for pm in p.product_materials.select_related("material").filter(
                 material__is_deleted=False,
                 material__is_active=True,
                 material__approval_status_ref_id=Material.APPROVAL_APPROVED,
             ).order_by("sort_order", "material_id")
         ]
-        material_cost = compute_product_material_cost(p)
         data["materials"] = materials
-        data["material_cost_total"] = int(material_cost)
+        if audience == "full":
+            pricing = product_cost_pricing(p)
+            material_cost = pricing["calculated_cost"]
+            data["material_cost_total"] = int(material_cost)
+            data["calculated_cost"] = int(pricing["calculated_cost"])
+            data["cost_override"] = (
+                int(p.cost_override) if p.cost_override is not None else None
+            )
+            data["effective_cost"] = int(pricing["effective_cost"])
+            data["profit_mode"] = p.profit_mode
+            data["target_margin_percent"] = (
+                float(p.target_margin_percent) if p.target_margin_percent is not None else None
+            )
+            data["target_profit_amount"] = int(p.target_profit_amount or 0)
+            data["profit_amount"] = int(pricing["profit"])
+            data["suggested_sales_price"] = int(pricing["sales_price"])
         if audience == "full" and show_sales_price:
             sales_price = Decimal(p.default_price or 0)
-            data["profit_margin"] = int(sales_price - material_cost)
+            data["pricing_status"] = "priced" if sales_price > 0 else "pending"
+            data["profit_margin"] = (
+                int(sales_price - pricing["effective_cost"]) if sales_price > 0 else None
+            )
 
     return data
 
@@ -246,12 +255,15 @@ def _sync_variants(product, variants_data):
                 continue
             if stock_locked:
                 raise ValueError(MANUAL_STOCK_LOCKED_MESSAGE)
-            InventoryTransaction.objects.create(
-                variant=locked,
-                quantity=stock_delta,
+            from logic.inventory_costing import adjust_stock
+
+            adjust_stock(
+                locked,
+                stock_delta,
+                unit_cost=0,
+                location=location,
                 reason="catalog_stock_adjustment",
                 reference=f"product:{product.pk}",
-                **location_transaction_kwargs(location),
             )
         keep_ids.append(variant.id)
     product.variants.exclude(pk__in=keep_ids).update(is_active=False)
@@ -313,17 +325,226 @@ def _parse_target_margin(data):
     return value, True
 
 
-def create_product(data, *, allow_sales_price=True, allow_materials=False):
+def _parse_non_negative_money(data, key, label, *, nullable=False):
+    if key not in data:
+        return None, False
+    raw = data.get(key)
+    if nullable and raw in (None, ""):
+        return None, True
+    try:
+        value = Decimal(str(raw or 0))
+    except (InvalidOperation, TypeError):
+        raise ValueError(f"{label} نامعتبر است.")
+    if value < 0:
+        raise ValueError(f"{label} نمی‌تواند منفی باشد.")
+    return value, True
+
+
+def product_cost_pricing(product):
+    calculated_cost = compute_product_material_cost(product)
+    effective_cost = (
+        Decimal(product.cost_override)
+        if getattr(product, "cost_override", None) is not None
+        else calculated_cost
+    )
+    if getattr(product, "profit_mode", Product.PROFIT_PERCENT) == Product.PROFIT_FIXED:
+        profit = Decimal(getattr(product, "target_profit_amount", 0) or 0)
+    else:
+        profit = (
+            effective_cost
+            * Decimal(getattr(product, "target_margin_percent", 0) or 0)
+            / Decimal(100)
+        )
+    return {
+        "calculated_cost": calculated_cost,
+        "effective_cost": effective_cost,
+        "profit": profit,
+        "sales_price": (effective_cost + profit).quantize(Decimal("1")),
+    }
+
+
+def apply_admin_cost_pricing(product, data):
+    pricing_keys = {
+        "cost_override",
+        "profit_mode",
+        "target_margin_percent",
+        "target_profit_amount",
+    }
+    if not pricing_keys.intersection(data):
+        return product
+    cost_override, has_override = _parse_non_negative_money(
+        data, "cost_override", "بهای تمام‌شده اصلاحی", nullable=True
+    )
+    profit_amount, has_profit_amount = _parse_non_negative_money(
+        data, "target_profit_amount", "مبلغ سود"
+    )
+    margin, has_margin = _parse_target_margin(data)
+    mode = data.get("profit_mode", product.profit_mode or Product.PROFIT_PERCENT)
+    if mode not in {Product.PROFIT_PERCENT, Product.PROFIT_FIXED}:
+        raise ValueError("روش محاسبه سود نامعتبر است.")
+    product.profit_mode = mode
+    if has_override:
+        product.cost_override = cost_override
+    if has_profit_amount:
+        product.target_profit_amount = profit_amount
+    if has_margin:
+        product.target_margin_percent = margin
+    pricing = product_cost_pricing(product)
+    product.default_price = pricing["sales_price"]
+    return product
+
+
+FACTORY_CATALOG_KEYS = frozenset({
+    "frame_id",
+    "furniture_workset_id",
+    "suite_config",
+    "pieces",
+    "pipeline_end",
+    "build_model",
+    "needs_paint",
+    "materials",
+})
+
+COST_PRICING_KEYS = frozenset({
+    "cost_override",
+    "profit_mode",
+    "target_margin_percent",
+    "target_profit_amount",
+})
+
+FACTORY_RECIPE_FIELDS = frozenset({
+    "paint_recipe",
+    "fabric_recipe",
+    "foam_recipe",
+    "cushion_recipe",
+    "webbing_recipe",
+})
+
+OFFICE_SUITE_PIECE_KEYS = frozenset({
+    "piece_kind",
+    "arm_style",
+    "quantity",
+    "unit_price",
+})
+
+_FACTORY_PAYLOAD_DENIED = (
+    "تعریف شکل محصول، دست، کلاف و دستور کار فقط در کارخانه مجاز است."
+)
+
+
+def _piece_identity(piece):
+    if not isinstance(piece, dict):
+        return None
+    kind = (piece.get("piece_kind") or "").strip()
+    style = (piece.get("arm_style") or "").strip()
+    if not kind:
+        return None
+    return (kind, style)
+
+
+def _is_pricing_only_suite_payload(product, raw_pieces):
+    if not product or not (getattr(product, "suite_config", None) or []):
+        return False
+    if not isinstance(raw_pieces, list) or not raw_pieces:
+        return False
+    for item in raw_pieces:
+        if not isinstance(item, dict):
+            return False
+        if set(item.keys()) - OFFICE_SUITE_PIECE_KEYS:
+            return False
+    existing_keys = {_piece_identity(p) for p in product.suite_config if _piece_identity(p)}
+    incoming_keys = {_piece_identity(p) for p in raw_pieces if _piece_identity(p)}
+    return incoming_keys and incoming_keys <= existing_keys
+
+
+def _factory_fields_present(data, *, ignore_keys=None):
+    ignore = ignore_keys or frozenset()
+    for key, val in data.items():
+        if key in ignore:
+            continue
+        if key in FACTORY_CATALOG_KEYS:
+            if key == "materials":
+                if val:
+                    return True
+            elif val not in (None, "", [], {}):
+                return True
+        if key.endswith("_recipe_id") and val not in (None, ""):
+            return True
+        if key in FACTORY_RECIPE_FIELDS and val not in (None, "", {}):
+            return True
+    return False
+
+
+def _assert_factory_payload_allowed(data, allow_materials, *, product=None):
+    if allow_materials:
+        return
+    ignore = frozenset()
+    if product and ("suite_config" in data or "pieces" in data):
+        raw = data.get("suite_config") if "suite_config" in data else data.get("pieces")
+        if _is_pricing_only_suite_payload(product, raw):
+            ignore = frozenset({"suite_config", "pieces"})
+    if _factory_fields_present(data, ignore_keys=ignore):
+        raise ValueError(_FACTORY_PAYLOAD_DENIED)
+
+
+def apply_office_suite_pricing(product, data):
+    """اداری فقط unit_price قطعات سرویس موجود را به‌روز می‌کند."""
+    from logic.furniture_worksets import suite_price
+
+    raw = data.get("suite_config") if "suite_config" in data else data.get("pieces")
+    if raw is None:
+        return product
+    if not _is_pricing_only_suite_payload(product, raw):
+        raise ValueError("به‌روزرسانی قیمت سرویس فقط برای قطعات تعریف‌شده در کارخانه مجاز است.")
+    by_key = {}
+    order = []
+    for piece in product.suite_config or []:
+        key = _piece_identity(piece)
+        if not key:
+            continue
+        by_key[key] = dict(piece)
+        order.append(key)
+    for item in raw:
+        key = _piece_identity(item)
+        if key not in by_key:
+            raise ValueError("قطعه سرویس با تعریف کارخانه مطابقت ندارد.")
+        if "unit_price" in item:
+            try:
+                price = Decimal(str(item.get("unit_price") or 0))
+            except (InvalidOperation, TypeError):
+                raise ValueError("قیمت قطعه نامعتبر است.")
+            if price < 0:
+                raise ValueError("قیمت قطعه نمی‌تواند منفی باشد.")
+            by_key[key]["unit_price"] = str(int(price))
+    product.suite_config = [by_key[key] for key in order]
+    product.default_price = suite_price(product.suite_config)
+    return product
+
+
+def create_product(
+    data, *, allow_sales_price=True, allow_materials=False, allow_cost_pricing=False
+):
     name = (data.get("name") or "").strip()
     if not name:
         raise ValueError("نام محصول الزامی است.")
+    if COST_PRICING_KEYS.intersection(data) and not allow_cost_pricing:
+        raise ValueError("ثبت بهای تمام‌شده و سود فقط در بخش اداری مجاز است.")
+    _assert_factory_payload_allowed(data, allow_materials)
     default_price = Decimal(0)
     if allow_sales_price and "default_price" in data:
         try:
             default_price = Decimal(str(data.get("default_price") or 0))
         except (InvalidOperation, TypeError):
             raise ValueError("قیمت نامعتبر است.")
-    target_margin, _has_margin = _parse_target_margin(data)
+    elif allow_materials and "default_price" in data and not (data.get("suite_config") or data.get("pieces")):
+        try:
+            default_price = Decimal(str(data.get("default_price") or 0))
+        except (InvalidOperation, TypeError):
+            raise ValueError("قیمت نامعتبر است.")
+    if allow_cost_pricing:
+        target_margin, _has_margin = _parse_target_margin(data)
+    else:
+        target_margin = None
 
     category = None
     category_id = data.get("category_id")
@@ -358,16 +579,33 @@ def create_product(data, *, allow_sales_price=True, allow_materials=False):
     if allow_materials and "materials" in data:
         sync_product_materials(product, data.get("materials"))
 
-    from logic.workshop_recipes import apply_product_workset
+    if allow_materials:
+        from logic.workshop_recipes import apply_product_workset
 
-    apply_product_workset(product, data)
+        apply_product_workset(product, data)
+    if allow_cost_pricing:
+        apply_admin_cost_pricing(product, data)
     product.save()
 
     return product
 
 
 @transaction.atomic
-def update_product(product, data, *, allow_sales_price=True, allow_materials=False):
+def update_product(
+    product, data, *, allow_sales_price=True, allow_materials=False, allow_cost_pricing=False
+):
+    if COST_PRICING_KEYS.intersection(data) and not allow_cost_pricing:
+        raise ValueError("ثبت بهای تمام‌شده و سود فقط در بخش اداری مجاز است.")
+    factory_product = bool(
+        getattr(product, "furniture_workset_id", None)
+        or getattr(product, "frame_id", None)
+        or (getattr(product, "suite_config", None) or [])
+    )
+    if factory_product and not allow_materials and not allow_cost_pricing and (
+        "default_price" in data or "suite_config" in data or "pieces" in data
+    ):
+        raise ValueError("قیمت محصول کارخانه فقط توسط اداری و از بهای تمام‌شده ثبت می‌شود.")
+    _assert_factory_payload_allowed(data, allow_materials, product=product)
     if "name" in data:
         name = (data.get("name") or "").strip()
         if not name:
@@ -395,9 +633,6 @@ def update_product(product, data, *, allow_sales_price=True, allow_materials=Fal
             product.default_price = Decimal(str(data.get("default_price") or 0))
         except (InvalidOperation, TypeError):
             raise ValueError("قیمت نامعتبر است.")
-    margin, has_margin = _parse_target_margin(data)
-    if has_margin:
-        product.target_margin_percent = margin
     if "is_active" in data:
         product.is_active = bool(data.get("is_active"))
     if "category_id" in data:
@@ -422,9 +657,14 @@ def update_product(product, data, *, allow_sales_price=True, allow_materials=Fal
     if allow_materials and "materials" in data:
         sync_product_materials(product, data.get("materials"))
 
-    from logic.workshop_recipes import apply_product_workset
+    if allow_sales_price and not allow_materials and ("suite_config" in data or "pieces" in data):
+        apply_office_suite_pricing(product, data)
+    elif allow_materials:
+        from logic.workshop_recipes import apply_product_workset
 
-    apply_product_workset(product, data)
+        apply_product_workset(product, data)
+    if allow_cost_pricing:
+        apply_admin_cost_pricing(product, data)
     product.save()
 
     return product
@@ -639,7 +879,6 @@ def deduct_variant_stock_for_sale(sale, *, recorded_by=None):
         return
 
     locked = _lock_variants(pending_by_variant)
-    loc_kwargs = location_transaction_kwargs(location)
     for variant_id, variant_lines in pending_by_variant.items():
         variant = locked.get(variant_id)
         if variant is None:
@@ -657,13 +896,16 @@ def deduct_variant_stock_for_sale(sale, *, recorded_by=None):
             qty = Decimal(line.quantity or 0)
             if qty <= 0:
                 continue
-            InventoryTransaction.objects.create(
-                variant=variant,
-                quantity=-qty,
+            from logic.inventory_costing import consume_stock
+
+            consume_stock(
+                variant,
+                qty,
+                location=location,
                 reason=SALE_STOCK_REASON,
                 reference=_sale_line_stock_reference(sale, line),
-                recorded_by=recorded_by,
-                **loc_kwargs,
+                user=recorded_by,
+                sale=sale,
             )
 
 
@@ -694,13 +936,21 @@ def restore_variant_stock_for_sale(sale, *, recorded_by=None):
         variant = locked.get(tx.variant_id)
         if variant is None:
             continue
-        InventoryTransaction.objects.create(
-            variant=variant,
-            quantity=-tx.quantity,
+        from logic.inventory_costing import adjust_stock
+
+        location = {
+            "kind": tx.location_kind,
+            "warehouse": tx.warehouse,
+            "warehouse_id": tx.warehouse_id,
+            "branch": tx.branch,
+            "branch_id": tx.branch_id,
+        }
+        adjust_stock(
+            variant,
+            -tx.quantity,
+            unit_cost=tx.unit_cost,
+            location=location,
             reason=SALE_STOCK_ROLLBACK_REASON,
             reference=tx.reference,
-            recorded_by=recorded_by,
-            location_kind=tx.location_kind,
-            warehouse_id=tx.warehouse_id,
-            branch_id=tx.branch_id,
+            user=recorded_by,
         )

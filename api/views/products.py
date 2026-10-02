@@ -12,6 +12,7 @@ from auth.permissions import (
     VIEW_FACTORY_PRODUCTS,
     VIEW_MATERIALS,
     VIEW_PRODUCTS,
+    can_view_costs,
     has_permission,
 )
 from backend.models import Product, ProductCategory, ProductVariant
@@ -54,7 +55,7 @@ def _can_manage(user):
 
 
 def _product_audience(user):
-    if _can_view_sales(user) and has_permission(user, VIEW_MATERIALS):
+    if _can_view_sales(user) and can_view_costs(user):
         return "full"
     if _can_view_sales(user):
         return "sales"
@@ -66,7 +67,8 @@ def _product_audience(user):
 def _product_write_flags(user):
     allow_sales_price = _can_manage_sales(user)
     allow_materials = _can_manage_factory(user) or has_permission(user, MANAGE_MATERIALS)
-    return allow_sales_price, allow_materials
+    allow_cost_pricing = can_view_costs(user) and _can_manage_sales(user)
+    return allow_sales_price, allow_materials, allow_cost_pricing
 
 
 def _serialize_product(user, product):
@@ -174,12 +176,13 @@ def product_list(request):
     if not _can_manage(request.user):
         return fail("Permission denied", status=403)
 
-    allow_sales_price, allow_materials = _product_write_flags(request.user)
+    allow_sales_price, allow_materials, allow_cost_pricing = _product_write_flags(request.user)
     try:
         product = create_product(
             parse_json(request),
             allow_sales_price=allow_sales_price,
             allow_materials=allow_materials,
+            allow_cost_pricing=allow_cost_pricing,
         )
     except ValueError as exc:
         return fail(str(exc), status=400)
@@ -215,13 +218,14 @@ def product_detail(request, pk):
         log_action(request.user, "delete", f"حذف محصول: {product.name}", entity_type="Product", entity_id=product.id)
         return success({"deleted": True})
 
-    allow_sales_price, allow_materials = _product_write_flags(request.user)
+    allow_sales_price, allow_materials, allow_cost_pricing = _product_write_flags(request.user)
     try:
         product = update_product(
             product,
             parse_json(request),
             allow_sales_price=allow_sales_price,
             allow_materials=allow_materials,
+            allow_cost_pricing=allow_cost_pricing,
         )
     except ValueError as exc:
         return fail(str(exc), status=400)

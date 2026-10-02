@@ -12,8 +12,11 @@ import { navigateToRoute, parseRoute, resolvePage } from './utils/routing'
 import { preventNumberInputWheel } from './utils/numberInputs'
 import Dashboard from './pages/Dashboard'
 import Customers from './pages/Customers'
+import CrmWorkbook from './pages/CrmWorkbook'
 import Products from './pages/Products'
 import Materials from './pages/Materials'
+import Procurement from './pages/Procurement'
+import ProductionRuns from './pages/ProductionRuns'
 import Shop from './pages/Shop'
 import Office from './pages/Office'
 import OfficeOrders from './pages/OfficeOrders'
@@ -63,11 +66,14 @@ const PAGES = {
   'factory-built': FactoryBuilt,
   freight: FreightOrders,
   customers: Customers,
+  'crm-workbook': CrmWorkbook,
   rfm: Rfm,
   levels: Rfm,
   sms: Rfm,
   products: Products,
+  production: ProductionRuns,
   materials: Materials,
+  procurement: Procurement,
   accounting: Accounting,
   users: Users,
   roles: Roles,

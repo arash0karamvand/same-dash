@@ -404,6 +404,15 @@ PORTAL_MODULE_SPECS = [
                 [P.APPROVE_MATERIALS, P.VIEW_MATERIALS, P.MANAGE_MATERIALS],
                 nav_group="مالی",
             ),
+            _mod(
+                "office_procurement",
+                "تدارکات و خرید",
+                "🛒",
+                "procurement",
+                [P.VIEW_PROCUREMENT],
+                [P.VIEW_PROCUREMENT, P.MANAGE_PROCUREMENT, P.APPROVE_PROCUREMENT],
+                nav_group="مالی",
+            ),
         ],
     },
     {
@@ -529,6 +538,15 @@ PORTAL_MODULE_SPECS = [
                 "materials",
                 [P.VIEW_MATERIALS],
                 [P.VIEW_MATERIALS, P.CREATE_MATERIALS, P.MANAGE_MATERIALS],
+                nav_group="کاتالوگ و مواد",
+            ),
+            _mod(
+                "factory_procurement",
+                "تدارکات و خرید",
+                "🛒",
+                "procurement",
+                [P.VIEW_PROCUREMENT],
+                [P.VIEW_PROCUREMENT, P.MANAGE_PROCUREMENT, P.APPROVE_PROCUREMENT],
                 nav_group="کاتالوگ و مواد",
             ),
             _mod(

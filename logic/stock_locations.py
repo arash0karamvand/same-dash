@@ -220,20 +220,23 @@ def transfer_variant_stock(variant, source, destination, quantity, *, recorded_b
     if available < qty:
         raise ValueError("موجودی مبدأ برای انتقال کافی نیست.")
     reference = f"transfer:variant:{locked.pk}"
-    InventoryTransaction.objects.create(
-        variant=locked,
-        quantity=-qty,
+    from logic.inventory_costing import adjust_stock, consume_stock
+
+    consumed = consume_stock(
+        locked,
+        qty,
+        location=source,
         reason=TRANSFER_REASON,
         reference=reference,
-        recorded_by=recorded_by,
-        **location_transaction_kwargs(source),
+        user=recorded_by,
     )
-    InventoryTransaction.objects.create(
-        variant=locked,
-        quantity=qty,
+    adjust_stock(
+        locked,
+        qty,
+        unit_cost=consumed["unit_cost"],
+        location=destination,
         reason=TRANSFER_REASON,
         reference=reference,
-        recorded_by=recorded_by,
-        **location_transaction_kwargs(destination),
+        user=recorded_by,
     )
     return locked

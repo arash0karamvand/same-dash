@@ -6,6 +6,7 @@ from auth.permissions import (
     CREATE_MATERIALS,
     MANAGE_MATERIALS,
     VIEW_MATERIALS,
+    can_view_costs,
     has_permission,
 )
 from backend.models import Material, MaterialStocktake
@@ -17,6 +18,7 @@ from logic.materials import (
     create_material,
     filter_materials,
     material_to_dict,
+    mask_cost_fields,
     reject_material,
     update_material,
 )
@@ -38,12 +40,17 @@ def _can_approve(user):
     return has_permission(user, APPROVE_MATERIALS) or has_permission(user, MANAGE_MATERIALS)
 
 
+def _serialize(material, user):
+    return material_to_dict(material, include_cost=can_view_costs(user))
+
+
 @api_view("GET")
 def material_reports(request):
     if not _can_view(request.user):
         return fail("Permission denied", status=403)
     try:
-        return success(warehouse_report(request.GET))
+        payload = warehouse_report(request.GET)
+        return success(payload if can_view_costs(request.user) else mask_cost_fields(payload))
     except ValueError as exc:
         return fail(str(exc), status=400)
 
@@ -85,7 +92,7 @@ def material_list(request):
         from logic.pagination import paginate
 
         page, meta = paginate(qs, request.GET)
-        return success({"results": [material_to_dict(m) for m in page], **meta})
+        return success({"results": [_serialize(m, request.user) for m in page], **meta})
 
     if not _can_create(request.user):
         return fail("Permission denied", status=403)
@@ -109,7 +116,7 @@ def material_list(request):
         entity_type="Material",
         entity_id=material.id,
     )
-    return success(material_to_dict(material), status=201)
+    return success(_serialize(material, request.user), status=201)
 
 
 @api_view("GET", "PUT", "DELETE")
@@ -125,7 +132,7 @@ def material_detail(request, pk):
         return fail("Permission denied", status=403)
 
     if request.method == "GET":
-        return success(material_to_dict(material))
+        return success(_serialize(material, request.user))
 
     if request.method == "DELETE":
         if not _can_approve(request.user):
@@ -157,7 +164,7 @@ def material_detail(request, pk):
         entity_type="Material",
         entity_id=material.id,
     )
-    return success(material_to_dict(material))
+    return success(_serialize(material, request.user))
 
 
 @api_view("POST")
@@ -169,7 +176,7 @@ def material_approve(request, pk):
     except Material.DoesNotExist:
         return fail("Material not found", status=404)
     if material.approval_status == Material.APPROVAL_APPROVED:
-        return success(material_to_dict(material))
+        return success(_serialize(material, request.user))
     material = approve_material(material, request.user)
     log_action(
         request.user,
@@ -178,7 +185,7 @@ def material_approve(request, pk):
         entity_type="Material",
         entity_id=material.id,
     )
-    return success(material_to_dict(material))
+    return success(_serialize(material, request.user))
 
 
 @api_view("POST")
@@ -198,7 +205,7 @@ def material_reject(request, pk):
         entity_type="Material",
         entity_id=material.id,
     )
-    return success(material_to_dict(material))
+    return success(_serialize(material, request.user))
 
 
 def _stocktake_or_404(pk):

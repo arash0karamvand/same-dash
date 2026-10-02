@@ -23,6 +23,12 @@ OPERATOR_PERMISSIONS = sorted([
     "self_check_in",
 ])
 
+OFFICE_CATALOG_PERMISSIONS = sorted([
+    "view_products",
+    "manage_products",
+    "view_dashboard",
+])
+
 SALES_MANAGER_PERMISSIONS = sorted([
     "view_customers",
     "create_customer",
@@ -46,7 +52,6 @@ SALES_MANAGER_PERMISSIONS = sorted([
     "manage_installments",
     "manage_staff",
     "view_products",
-    "manage_products",
     "view_employee_ranking",
     "self_check_in",
 ])
@@ -94,5 +99,6 @@ def ensure_test_role(slug, permissions, *, label=None, needs_branch=False, depar
 def ensure_legacy_test_roles():
     ensure_test_role(roles.OPERATOR, OPERATOR_PERMISSIONS, label="فروشنده", needs_branch=True)
     ensure_test_role(roles.SALES_MANAGER, SALES_MANAGER_PERMISSIONS, label="مدیر فروش", needs_branch=True)
+    ensure_test_role(roles.CATALOG_OFFICE, OFFICE_CATALOG_PERMISSIONS, label="کاتالوگ اداری")
     ensure_test_role(roles.ACCOUNTANT, ACCOUNTANT_PERMISSIONS, label="حسابدار", needs_branch=True)
     Group.objects.get_or_create(name=roles.PENDING)

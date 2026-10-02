@@ -6,7 +6,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from backend.models import Account, Sale, SaleInstallment, UserAccountingPreference
-from logic.accounting import create_journal
+from logic.accounting_events import issue_event_draft, register_event
 from logic.accounting_accounts import get_account
 from logic.chart_of_accounts import ACCOUNT_SLUGS, CHECK_ACCOUNT_SLUGS, code_for_slug
 from logic.posting import build_journal_lines
@@ -161,13 +161,30 @@ def register_sale_checks(sale, registration_account, deposit_account, user=None)
             accounts={"registration_account": registration_account},
             description=desc,
         )
-        journal = create_journal(
+        event, _ = register_event(
+            source_module="treasury",
+            source_type="SaleInstallment",
+            source=inst,
+            event_type="check_registered",
+            payload={
+                "sale_uuid": str(sale.uuid),
+                "delivery_uuid": (
+                    str(sale.delivery_document.uuid)
+                    if hasattr(sale, "delivery_document") else None
+                ),
+                "installment_id": inst.pk,
+                "amount": str(amount),
+            },
+            occurred_at=sale.sold_at,
+        )
+        journal = issue_event_draft(
+            event,
             lines=lines,
             entry_type="payment",
             description=desc,
             sale=sale,
-            is_approved=False,
             entry_date=sale.sold_at,
+            user=user,
             branch=sale.branch,
         )
         inst.registration_account = registration_account
@@ -196,7 +213,7 @@ def clear_registered_check(installment, recorded_by=None):
     if installment.payment_method != "check":
         raise ValueError("این قسط چک نیست.")
     if installment.status == "paid":
-        raise ValueError("این قسط قبلاً پرداخت شده است.")
+        return installment
     if installment.status == "cancelled":
         raise ValueError("قسط لغوشده قابل پرداخت نیست.")
     if not installment.accounting_registered_at:
@@ -223,12 +240,28 @@ def clear_registered_check(installment, recorded_by=None):
         },
         description=desc,
     )
-    create_journal(
+    event, _ = register_event(
+        source_module="treasury",
+        source_type="SaleInstallment",
+        source=installment,
+        event_type="check_cleared",
+        payload={
+            "sale_uuid": str(sale.uuid),
+            "delivery_uuid": (
+                str(sale.delivery_document.uuid)
+                if hasattr(sale, "delivery_document") else None
+            ),
+            "installment_id": installment.pk,
+            "amount": str(amount),
+        },
+    )
+    issue_event_draft(
+        event,
         lines=lines,
         entry_type="payment",
         description=desc,
         sale=sale,
-        is_approved=False,
+        user=recorded_by,
         branch=sale.branch,
     )
 

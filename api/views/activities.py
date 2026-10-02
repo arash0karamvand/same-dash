@@ -8,7 +8,7 @@ from api.helpers import api_view, success, fail, parse_json
 from backend.models import Activity, Task, Customer, Sale
 
 
-@api_view(["GET", "POST"])
+@api_view("GET", "POST")
 def activities_list(request):
     """
     GET: لیست فعالیت‌ها با فیلتر
@@ -94,7 +94,7 @@ def activities_list(request):
     )
 
 
-@api_view(["GET", "POST"])
+@api_view("GET", "POST")
 def tasks_list(request):
     """
     GET: لیست وظایف با فیلتر
@@ -206,7 +206,7 @@ def tasks_list(request):
     )
 
 
-@api_view(["PUT", "DELETE"])
+@api_view("PUT", "DELETE")
 def task_detail(request, task_id):
     """
     PUT: ویرایش وظیفه
@@ -267,7 +267,7 @@ def task_detail(request, task_id):
     return success({})
 
 
-@api_view(["POST"])
+@api_view("POST")
 def task_complete(request, task_id):
     """علامت‌گذاری وظیفه به عنوان انجام شده"""
     try:
@@ -293,7 +293,7 @@ def task_complete(request, task_id):
     return success({"id": task.id, "status": task.status})
 
 
-@api_view(["POST"])
+@api_view("POST")
 def task_pin(request, task_id):
     """پین/آنپین کردن وظیفه"""
     try:

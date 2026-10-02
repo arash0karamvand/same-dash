@@ -6,6 +6,7 @@ import { resultList } from '../api/accounting'
 import { useConfirm } from '../context/ConfirmContext'
 import AccountTreeView from '../components/accounting/AccountTreeView'
 import AccountFormModal from '../components/accounting/AccountFormModal'
+import AccountMappingsPanel from '../components/accounting/AccountMappingsPanel'
 import { AccountingDataPanel, AccountingPageHeader, AccountingToolbar } from '../components/accounting/AccountingERP'
 import { Button } from '../components/ui'
 import Icon from '../components/icons/Icon'
@@ -288,6 +289,8 @@ export default function AccountingChart() {
           />
         </AccountingDataPanel>
       )}
+
+      <AccountMappingsPanel api={api} accounts={postableAccounts} />
 
       <AccountFormModal
         open={showForm}

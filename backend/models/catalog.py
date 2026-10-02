@@ -113,9 +113,20 @@ class Product(SoftDeleteModel):
     unit = models.CharField(max_length=20, default="عدد")
     attributes = models.JSONField(default=dict, blank=True)
     default_price = models.DecimalField(default=0, **MONEY_KWARGS)
+    PROFIT_PERCENT = "percent"
+    PROFIT_FIXED = "fixed"
+    PROFIT_MODE_CHOICES = [
+        (PROFIT_PERCENT, "درصدی"),
+        (PROFIT_FIXED, "مبلغ ثابت"),
+    ]
+    cost_override = models.DecimalField(null=True, blank=True, **MONEY_KWARGS)
+    profit_mode = models.CharField(
+        max_length=12, choices=PROFIT_MODE_CHOICES, default=PROFIT_PERCENT
+    )
     target_margin_percent = models.DecimalField(
         null=True, blank=True, max_digits=6, decimal_places=2
     )
+    target_profit_amount = models.DecimalField(default=0, **MONEY_KWARGS)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -124,6 +135,15 @@ class Product(SoftDeleteModel):
         ordering = ["name"]
         constraints = [
             models.CheckConstraint(condition=models.Q(default_price__gte=0), name="ck_product_price"),
+            models.CheckConstraint(
+                condition=models.Q(cost_override__isnull=True)
+                | models.Q(cost_override__gte=0),
+                name="ck_product_cost_override",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(target_profit_amount__gte=0),
+                name="ck_product_profit_amount",
+            ),
             models.CheckConstraint(
                 condition=models.Q(target_margin_percent__isnull=True)
                 | models.Q(target_margin_percent__gte=0, target_margin_percent__lte=100),
@@ -496,22 +516,488 @@ class MaterialStocktakeLine(models.Model):
         ]
 
 
+class InventoryCostLayerQuerySet(models.QuerySet):
+    def update(self, **kwargs):
+        if set(kwargs) - {"qty_remaining"}:
+            raise ValueError("Only a FIFO lot's remaining quantity is mutable.")
+        return super().update(**kwargs)
+
+    def delete(self):
+        raise ValueError("Inventory cost layers are immutable.")
+
+
+class InventoryCostLayerManager(models.Manager.from_queryset(InventoryCostLayerQuerySet)):
+    pass
+
+
 class InventoryCostLayer(models.Model):
-    material = models.ForeignKey(Material, on_delete=models.CASCADE, related_name="cost_layers")
+    """Immutable receipt identity with a mutable FIFO balance."""
+
+    objects = InventoryCostLayerManager()
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    material = models.ForeignKey(
+        Material, null=True, blank=True, on_delete=models.PROTECT, related_name="cost_layers"
+    )
+    variant = models.ForeignKey(
+        ProductVariant, null=True, blank=True, on_delete=models.PROTECT, related_name="cost_layers"
+    )
     source_transaction = models.ForeignKey(
         InventoryTransaction,
         null=True,
         blank=True,
-        on_delete=models.SET_NULL,
+        on_delete=models.PROTECT,
         related_name="cost_layers",
     )
+    supplier = models.ForeignKey(
+        "backend.MaterialSupplier",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="inventory_lots",
+    )
+    purchase_invoice = models.ForeignKey(
+        "backend.PurchaseInvoice",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="inventory_lots",
+    )
+    invoice_number = models.CharField(max_length=80, blank=True, default="")
+    location_kind = models.CharField(
+        max_length=16, choices=InventoryTransaction.LOCATION_KIND_CHOICES, blank=True, default=""
+    )
+    warehouse = models.ForeignKey(
+        "backend.Warehouse",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="inventory_cost_layers",
+    )
+    branch = models.ForeignKey(
+        Branch,
+        to_field="code",
+        db_column="cost_layer_branch",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="inventory_cost_layers",
+    )
     unit_cost = models.DecimalField(default=0, **MONEY_KWARGS)
+    original_qty = models.DecimalField(default=0, **QUANTITY_KWARGS)
     qty_remaining = models.DecimalField(default=0, **QUANTITY_KWARGS)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["created_at", "id"]
+        constraints = [
+            models.CheckConstraint(condition=models.Q(unit_cost__gte=0), name="ck_cost_layer_unit"),
+            models.CheckConstraint(condition=models.Q(qty_remaining__gte=0), name="ck_cost_layer_qty"),
+            models.CheckConstraint(condition=models.Q(original_qty__gte=0), name="ck_cost_layer_original"),
+            models.CheckConstraint(
+                condition=models.Q(qty_remaining__lte=models.F("original_qty")),
+                name="ck_cost_layer_remaining_original",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(material__isnull=False, variant__isnull=True)
+                    | models.Q(material__isnull=True, variant__isnull=False)
+                ),
+                name="ck_cost_layer_one_item",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(location_kind="", warehouse__isnull=True, branch__isnull=True)
+                    | models.Q(
+                        location_kind=InventoryTransaction.LOCATION_WAREHOUSE,
+                        warehouse__isnull=False,
+                        branch__isnull=True,
+                    )
+                    | models.Q(
+                        location_kind=InventoryTransaction.LOCATION_BRANCH,
+                        warehouse__isnull=True,
+                        branch__isnull=False,
+                    )
+                ),
+                name="ck_cost_layer_location",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["material", "location_kind", "created_at"], name="ix_cost_lot_material"),
+            models.Index(fields=["variant", "location_kind", "created_at"], name="ix_cost_lot_variant"),
+        ]
+
+    def save(self, *args, **kwargs):
+        if self.pk:
+            original = type(self).objects.filter(pk=self.pk).values().first()
+            if original and any(
+                original[field.attname] != getattr(self, field.attname)
+                for field in self._meta.concrete_fields
+                if field.name not in {"qty_remaining"}
+            ):
+                raise ValueError("Only a FIFO lot's remaining quantity is mutable.")
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        raise ValueError("Inventory cost layers are immutable.")
+
+
+class InventoryReservation(models.Model):
+    STATUS_ACTIVE = "active"
+    STATUS_RELEASED = "released"
+    STATUS_CONSUMED = "consumed"
+    STATUS_CANCELLED = "cancelled"
+    STATUS_CHOICES = [
+        (STATUS_ACTIVE, "فعال"),
+        (STATUS_RELEASED, "آزادشده"),
+        (STATUS_CONSUMED, "مصرف‌شده"),
+        (STATUS_CANCELLED, "لغوشده"),
+    ]
+
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    material = models.ForeignKey(
+        Material, null=True, blank=True, on_delete=models.PROTECT, related_name="reservations"
+    )
+    variant = models.ForeignKey(
+        ProductVariant, null=True, blank=True, on_delete=models.PROTECT, related_name="reservations"
+    )
+    location_kind = models.CharField(max_length=16, choices=InventoryTransaction.LOCATION_KIND_CHOICES)
+    warehouse = models.ForeignKey(
+        "backend.Warehouse", null=True, blank=True, on_delete=models.PROTECT, related_name="reservations"
+    )
+    branch = models.ForeignKey(
+        Branch,
+        to_field="code",
+        db_column="reservation_branch",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="inventory_reservations",
+    )
+    quantity = models.DecimalField(**QUANTITY_KWARGS)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=STATUS_ACTIVE)
+    sale = models.ForeignKey(
+        "backend.Sale", null=True, blank=True, on_delete=models.PROTECT, related_name="inventory_reservations"
+    )
+    order_line = models.ForeignKey(
+        "backend.SaleLineItem",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="inventory_reservations",
+    )
+    production_order = models.ForeignKey(
+        "backend.ProductionOrder",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="inventory_reservations",
+    )
+    reference = models.CharField(max_length=120, blank=True, default="")
+    reason = models.CharField(max_length=300, blank=True, default="")
+    reserved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="inventory_reservations",
+    )
+    released_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="released_inventory_reservations",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    released_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        constraints = [
+            models.CheckConstraint(condition=models.Q(quantity__gt=0), name="ck_reservation_qty"),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(material__isnull=False, variant__isnull=True)
+                    | models.Q(material__isnull=True, variant__isnull=False)
+                ),
+                name="ck_reservation_one_item",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        location_kind=InventoryTransaction.LOCATION_WAREHOUSE,
+                        warehouse__isnull=False,
+                        branch__isnull=True,
+                    )
+                    | models.Q(
+                        location_kind=InventoryTransaction.LOCATION_BRANCH,
+                        warehouse__isnull=True,
+                        branch__isnull=False,
+                    )
+                ),
+                name="ck_reservation_location",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["material", "status", "location_kind"], name="ix_reserve_material"),
+            models.Index(fields=["variant", "status", "location_kind"], name="ix_reserve_variant"),
+        ]
+
+
+class InventoryConsumption(AppendOnlyModel):
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    material = models.ForeignKey(
+        Material, null=True, blank=True, on_delete=models.PROTECT, related_name="consumptions"
+    )
+    variant = models.ForeignKey(
+        ProductVariant, null=True, blank=True, on_delete=models.PROTECT, related_name="consumptions"
+    )
+    quantity = models.DecimalField(**QUANTITY_KWARGS)
+    total_cost = models.DecimalField(default=0, **MONEY_KWARGS)
+    movement = models.OneToOneField(
+        InventoryTransaction, on_delete=models.PROTECT, related_name="consumption"
+    )
+    reservation = models.ForeignKey(
+        InventoryReservation,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="consumptions",
+    )
+    sale = models.ForeignKey(
+        "backend.Sale", null=True, blank=True, on_delete=models.PROTECT, related_name="inventory_consumptions"
+    )
+    order_line = models.ForeignKey(
+        "backend.SaleLineItem",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="inventory_consumptions",
+    )
+    production_order = models.ForeignKey(
+        "backend.ProductionOrder",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="inventory_consumptions",
+    )
+    reference = models.CharField(max_length=120, blank=True, default="")
+    override_reason = models.CharField(max_length=500, blank=True, default="")
+    overridden_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="inventory_consumption_overrides",
+    )
+    recorded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="inventory_consumptions",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        constraints = [
+            models.CheckConstraint(condition=models.Q(quantity__gt=0), name="ck_consumption_qty"),
+            models.CheckConstraint(condition=models.Q(total_cost__gte=0), name="ck_consumption_cost"),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(material__isnull=False, variant__isnull=True)
+                    | models.Q(material__isnull=True, variant__isnull=False)
+                ),
+                name="ck_consumption_one_item",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(overridden_by__isnull=True, override_reason="")
+                    | (models.Q(overridden_by__isnull=False) & ~models.Q(override_reason=""))
+                ),
+                name="ck_consumption_override_audit",
+            ),
+        ]
+
+
+class InventoryAllocation(AppendOnlyModel):
+    consumption = models.ForeignKey(
+        InventoryConsumption, on_delete=models.PROTECT, related_name="allocations"
+    )
+    cost_layer = models.ForeignKey(
+        InventoryCostLayer, on_delete=models.PROTECT, related_name="allocations"
+    )
+    quantity = models.DecimalField(**QUANTITY_KWARGS)
+    unit_cost = models.DecimalField(**MONEY_KWARGS)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ["id"]
         constraints = [
-            models.CheckConstraint(condition=models.Q(unit_cost__gte=0), name="ck_cost_layer_unit"),
-            models.CheckConstraint(condition=models.Q(qty_remaining__gte=0), name="ck_cost_layer_qty"),
+            models.UniqueConstraint(fields=["consumption", "cost_layer"], name="uq_consumption_layer"),
+            models.CheckConstraint(condition=models.Q(quantity__gt=0), name="ck_allocation_qty"),
+            models.CheckConstraint(condition=models.Q(unit_cost__gte=0), name="ck_allocation_cost"),
+        ]
+
+
+def document_attachment_path(instance, filename):
+    safe_name = filename.rsplit("/", 1)[-1].rsplit("\\", 1)[-1]
+    return f"documents/{instance.uuid}/{safe_name}"
+
+
+class DocumentAttachment(models.Model):
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    file = models.FileField(upload_to=document_attachment_path, max_length=300)
+    original_name = models.CharField(max_length=255)
+    content_type = models.CharField(max_length=120)
+    size = models.PositiveBigIntegerField()
+    description = models.CharField(max_length=300, blank=True, default="")
+    journal = models.ForeignKey(
+        "backend.JournalEntry", null=True, blank=True, on_delete=models.PROTECT, related_name="attachments"
+    )
+    sale = models.ForeignKey(
+        "backend.Sale", null=True, blank=True, on_delete=models.PROTECT, related_name="attachments"
+    )
+    production_order = models.ForeignKey(
+        "backend.ProductionOrder",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="attachments",
+    )
+    purchase_invoice = models.ForeignKey(
+        "backend.PurchaseInvoice",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="attachments",
+    )
+    goods_receipt = models.ForeignKey(
+        "backend.GoodsReceipt",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="attachments",
+    )
+    inventory_transaction = models.ForeignKey(
+        InventoryTransaction,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="attachments",
+    )
+    reservation = models.ForeignKey(
+        InventoryReservation,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="attachments",
+    )
+    consumption = models.ForeignKey(
+        InventoryConsumption,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="attachments",
+    )
+    uploaded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="document_attachments",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+        constraints = [
+            models.CheckConstraint(condition=models.Q(size__gt=0), name="ck_attachment_size"),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(
+                        journal__isnull=False,
+                        sale__isnull=True,
+                        production_order__isnull=True,
+                        purchase_invoice__isnull=True,
+                        inventory_transaction__isnull=True,
+                        reservation__isnull=True,
+                        consumption__isnull=True,
+                        goods_receipt__isnull=True,
+                    )
+                    | models.Q(
+                        journal__isnull=True,
+                        sale__isnull=False,
+                        production_order__isnull=True,
+                        purchase_invoice__isnull=True,
+                        inventory_transaction__isnull=True,
+                        reservation__isnull=True,
+                        consumption__isnull=True,
+                        goods_receipt__isnull=True,
+                    )
+                    | models.Q(
+                        journal__isnull=True,
+                        sale__isnull=True,
+                        production_order__isnull=False,
+                        purchase_invoice__isnull=True,
+                        inventory_transaction__isnull=True,
+                        reservation__isnull=True,
+                        consumption__isnull=True,
+                        goods_receipt__isnull=True,
+                    )
+                    | models.Q(
+                        journal__isnull=True,
+                        sale__isnull=True,
+                        production_order__isnull=True,
+                        purchase_invoice__isnull=False,
+                        inventory_transaction__isnull=True,
+                        reservation__isnull=True,
+                        consumption__isnull=True,
+                        goods_receipt__isnull=True,
+                    )
+                    | models.Q(
+                        journal__isnull=True,
+                        sale__isnull=True,
+                        production_order__isnull=True,
+                        purchase_invoice__isnull=True,
+                        inventory_transaction__isnull=False,
+                        reservation__isnull=True,
+                        consumption__isnull=True,
+                        goods_receipt__isnull=True,
+                    )
+                    | models.Q(
+                        journal__isnull=True,
+                        sale__isnull=True,
+                        production_order__isnull=True,
+                        purchase_invoice__isnull=True,
+                        inventory_transaction__isnull=True,
+                        reservation__isnull=False,
+                        consumption__isnull=True,
+                        goods_receipt__isnull=True,
+                    )
+                    | models.Q(
+                        journal__isnull=True,
+                        sale__isnull=True,
+                        production_order__isnull=True,
+                        purchase_invoice__isnull=True,
+                        inventory_transaction__isnull=True,
+                        reservation__isnull=True,
+                        consumption__isnull=False,
+                        goods_receipt__isnull=True,
+                    )
+                    | models.Q(
+                        journal__isnull=True,
+                        sale__isnull=True,
+                        production_order__isnull=True,
+                        purchase_invoice__isnull=True,
+                        inventory_transaction__isnull=True,
+                        reservation__isnull=True,
+                        consumption__isnull=True,
+                        goods_receipt__isnull=False,
+                    )
+                ),
+                name="ck_attachment_one_source",
+            ),
         ]

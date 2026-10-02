@@ -14,6 +14,14 @@ staticfiles/
 # خروجی‌های بکاپ (نباید در ریپازیتوری باشند)
 backup/exports/
 
+# اسناد تجاری محلی و خروجی‌های موقت تحلیل (نباید در GitHub باشند)
+/agents/*
+/_factory_purchases*.json
+/_query_result*.json
+/testing/_crm_xlsb_structure.json
+/testing/_inspect_out.txt
+/testing/_sample_*_report.json
+
 # فرانت‌اند
 ui/node_modules/
 ui/dist/

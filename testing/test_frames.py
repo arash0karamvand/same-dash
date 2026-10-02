@@ -9,6 +9,7 @@ from django.test import Client, TestCase
 from auth import roles
 from backend.models import (
     Customer,
+    Frame,
     FrameServiceComponent,
     Material,
     Product,
@@ -18,6 +19,7 @@ from backend.models import (
 )
 from logic.frame_materials import compute_frame_line_requirements, preview_frame_requirements
 from logic.frames import create_frame, frame_to_dict
+from logic.furniture_worksets import create_workset
 from logic.materials import compute_factory_order_material_requirements
 from testing.role_helpers import ensure_legacy_test_roles
 
@@ -208,3 +210,31 @@ class FrameCatalogTests(TestCase):
         data = frame_to_dict(frame)
         self.assertEqual(data["design_style_display"], "مدرن")
         self.assertEqual(data["wood_type_display"], "راش گرجستان درجه ۱")
+
+    def test_frame_create_product_api(self):
+        workset = create_workset({
+            "name": "سرویس API",
+            "seat_count": 4,
+            "pieces": [
+                {"piece_kind": Frame.PIECE_POUF, "arm_style": Frame.ARM_NONE, "quantity": 1},
+            ],
+        })
+        frame = Frame.objects.create(
+            name="پوف API",
+            workset=workset,
+            piece_kind=Frame.PIECE_POUF,
+            arm_style=Frame.ARM_NONE,
+            is_active=True,
+        )
+        resp = self.client.post(
+            f"/api/frames/{frame.id}/create-product/",
+            data=json.dumps({"name": "محصول از کلاف", "default_price": 2500000}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 201, resp.content)
+        data = resp.json()["data"]
+        self.assertEqual(data["name"], "محصول از کلاف")
+        self.assertEqual(data["frame_id"], frame.id)
+        self.assertEqual(data["furniture_workset_id"], workset.id)
+        self.assertEqual(data["pipeline_end"], "upholstery")
+        self.assertEqual(data["default_price"], 2500000)

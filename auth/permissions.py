@@ -86,6 +86,9 @@ VIEW_MATERIALS = "view_materials"
 CREATE_MATERIALS = "create_materials"
 APPROVE_MATERIALS = "approve_materials"
 MANAGE_MATERIALS = "manage_materials"
+VIEW_PROCUREMENT = "view_procurement"
+MANAGE_PROCUREMENT = "manage_procurement"
+APPROVE_PROCUREMENT = "approve_procurement"
 VIEW_FRAMES = "view_frames"
 MANAGE_FRAMES = "manage_frames"
 VIEW_BETA_CARPENTRY = "view_beta_carpentry"
@@ -182,6 +185,9 @@ PERMISSION_LABELS = {
     CREATE_MATERIALS: "ثبت متریال (کارخانه)",
     APPROVE_MATERIALS: "تایید و حذف متریال (اداری)",
     MANAGE_MATERIALS: "مدیریت کامل متریال",
+    VIEW_PROCUREMENT: "مشاهده تدارکات",
+    MANAGE_PROCUREMENT: "ثبت درخواست، سفارش و رسید خرید",
+    APPROVE_PROCUREMENT: "تایید درخواست و رسید خرید",
     VIEW_FRAMES: "مشاهده کلاف‌ها",
     MANAGE_FRAMES: "مدیریت کلاف‌ها",
     VIEW_BETA_CARPENTRY: "مشاهده نجاری (بتا)",
@@ -279,6 +285,9 @@ ALL_PERMISSIONS = {
     CREATE_MATERIALS,
     APPROVE_MATERIALS,
     MANAGE_MATERIALS,
+    VIEW_PROCUREMENT,
+    MANAGE_PROCUREMENT,
+    APPROVE_PROCUREMENT,
     VIEW_FRAMES,
     MANAGE_FRAMES,
     VIEW_BETA_CARPENTRY,
@@ -345,6 +354,9 @@ PERMISSION_GROUPS = [
             MANAGE_FACTORY_ORDERS,
             VIEW_WAREHOUSE_ORDERS,
             MANAGE_WAREHOUSE_ORDERS,
+            VIEW_PROCUREMENT,
+            MANAGE_PROCUREMENT,
+            APPROVE_PROCUREMENT,
             VIEW_PICKUP_ORDERS,
             MANAGE_PICKUP_ORDERS,
             VIEW_CYCLE_WATCH,
@@ -379,6 +391,9 @@ PERMISSION_GROUPS = [
             EDIT_FACTORY_ACCOUNTING,
             DELETE_FACTORY_ACCOUNTING,
             APPROVE_FACTORY_ACCOUNTING,
+            VIEW_PROCUREMENT,
+            MANAGE_PROCUREMENT,
+            APPROVE_PROCUREMENT,
             TRANSFER_FACTORY_ACCOUNTING_TO_OFFICE,
             VIEW_REPORTS,
             VIEW_INSTALLMENTS,
@@ -409,6 +424,9 @@ PERMISSION_GROUPS = [
             CREATE_MATERIALS,
             APPROVE_MATERIALS,
             MANAGE_MATERIALS,
+            VIEW_PROCUREMENT,
+            MANAGE_PROCUREMENT,
+            APPROVE_PROCUREMENT,
             VIEW_FRAMES,
             MANAGE_FRAMES,
         ],
@@ -703,6 +721,11 @@ def has_permission(user, permission):
     if has_full_access(user):
         return True
     return permission in get_effective_user_permissions(user)
+
+
+def can_view_costs(user):
+    """Cost/COGS is administrative reporting data, not factory catalog data."""
+    return has_permission(user, VIEW_ACCOUNTING) and has_permission(user, VIEW_REPORTS)
 
 
 def can_edit_sale(user, sale):

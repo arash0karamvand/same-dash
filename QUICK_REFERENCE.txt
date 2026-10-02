@@ -1,0 +1,159 @@
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║                   ACCOUNTING UI - QUICK REFERENCE CARD                         ║
+║                          Modern Design System                                  ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 📊 TABLE CLASSES                                                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ <table className="acct-modern-table">                  → Base table          │
+│ <table className="acct-modern-table acct-table--compact"> → Compact mode   │
+│                                                                               │
+│ <th className="col-code">                              → Code column         │
+│ <th className="col-numeric">                           → Number column       │
+│ <td className="acct-number">                           → Monospaced number   │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 💰 FINANCIAL COLORS                                                          │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ <span className="acct-debit">5,000,000</span>         → Red debit text      │
+│ <span className="acct-credit">3,000,000</span>        → Green credit text   │
+│                                                                               │
+│ <td className="acct-debit-cell">                       → Red cell bg         │
+│ <td className="acct-credit-cell">                      → Green cell bg       │
+│                                                                               │
+│ <span className="acct-balance-badge acct-balance-badge--debit">بد</span>    │
+│ <span className="acct-balance-badge acct-balance-badge--credit">بس</span>   │
+│ <span className="acct-balance-badge acct-balance-badge--balanced">متعادل</span> │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 📝 FORM CLASSES                                                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ <form className="acct-form">                           → Form container      │
+│ <div className="acct-form-row">                        → Responsive row      │
+│ <div className="acct-form-field">                      → Field container     │
+│                                                                               │
+│ <label className="acct-form-label">                    → Label text          │
+│ <label className="acct-form-label acct-form-label--required"> → Required   │
+│                                                                               │
+│ <input className="acct-input">                         → Text input          │
+│ <input className="acct-input acct-input--numeric">    → Number input        │
+│ <select className="acct-select">                       → Dropdown            │
+│ <textarea className="acct-textarea">                   → Text area           │
+│                                                                               │
+│ <input className="acct-input--error">                 → Error state          │
+│ <input className="acct-input--success">               → Success state        │
+│                                                                               │
+│ <span className="acct-form-error">                    → Error message        │
+│ <span className="acct-form-hint">                     → Hint text            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 🔘 BUTTON CLASSES                                                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ <button className="acct-btn acct-btn--primary">       → Blue button          │
+│ <button className="acct-btn acct-btn--secondary">     → Gray button          │
+│ <button className="acct-btn acct-btn--success">       → Green button         │
+│ <button className="acct-btn acct-btn--danger">        → Red button           │
+│                                                                               │
+│ <button className="acct-btn acct-btn--sm">            → Small size           │
+│ <button className="acct-btn acct-btn--lg">            → Large size           │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ✨ GLASS EFFECTS                                                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ <div className="acct-glass-modal">                     → Modal with blur     │
+│ <div className="acct-glass-panel">                     → Panel with blur     │
+│ <div className="acct-glass-dropdown">                  → Dropdown with blur  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 📐 SPACING VARIABLES (use in style={{ }})                                   │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ var(--acct-space-xs)                                   → 4px                 │
+│ var(--acct-space-sm)                                   → 8px                 │
+│ var(--acct-space-md)                                   → 16px                │
+│ var(--acct-space-lg)                                   → 24px                │
+│ var(--acct-space-xl)                                   → 32px                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ⌨️  KEYBOARD NAVIGATION PATTERN                                              │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ <tr                                                                           │
+│   onClick={handleClick}                                                       │
+│   tabIndex={0}                                                                │
+│   role="button"                                                               │
+│   onKeyDown={(e) => {                                                         │
+│     if (e.key === 'Enter' || e.key === ' ') {                               │
+│       e.preventDefault()                                                      │
+│       handleClick()                                                           │
+│     }                                                                         │
+│   }}                                                                          │
+│ >                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 🎨 COLOR PALETTE (CSS Variables)                                             │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ DEBITS:                                                                       │
+│   --acct-debit-text: #991B1B                                                 │
+│   --acct-debit-bg: #FEE2E2                                                   │
+│   --acct-debit-border: #FCA5A5                                               │
+│                                                                               │
+│ CREDITS:                                                                      │
+│   --acct-credit-text: #14532D                                                │
+│   --acct-credit-bg: #DCFCE7                                                  │
+│   --acct-credit-border: #86EFAC                                              │
+│                                                                               │
+│ FOCUS:                                                                        │
+│   --acct-focus-color: #3B82F6                                                │
+│   --acct-focus-ring: 0 0 0 3px rgba(59, 130, 246, 0.3)                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 🚀 COMPONENT IMPORTS                                                         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ import AccountingTable from './components/accounting/AccountingTable'        │
+│                                                                               │
+│ <AccountingTable                                                              │
+│   columns={[                                                                  │
+│     { id: 'code', label: 'کد', type: 'code' },                             │
+│     { id: 'debit', label: 'بدهکار', type: 'numeric' }                      │
+│   ]}                                                                          │
+│   data={rows}                                                                 │
+│   onRowClick={handleClick}                                                    │
+│   compact={false}                                                             │
+│ />                                                                            │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 💡 PRO TIPS                                                                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ ✓ Always wrap numbers in <span className="acct-number">                     │
+│ ✓ Use var(--acct-space-*) instead of arbitrary spacing                      │
+│ ✓ Add tabIndex={0} to clickable elements                                     │
+│ ✓ Add tabIndex={-1} to disabled elements                                     │
+│ ✓ Use 0.01 threshold for float comparisons (Math.abs(x) < 0.01)            │
+│ ✓ Color debits red, credits green consistently                               │
+│ ✓ Add icons to buttons for clarity                                           │
+│ ✓ Test keyboard navigation (Tab, Enter, Space)                               │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ 📚 DOCUMENTATION FILES                                                       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ • UI_UX_REFACTORING_COMPLETE.md   → Comprehensive guide                     │
+│ • MIGRATION_GUIDE.md               → Before/after examples                   │
+│ • COMPONENT_EXAMPLES.js            → 10+ code examples                       │
+│ • PROJECT_SUMMARY.md               → Executive summary                       │
+│ • accounting-modern.css            → Full design system                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║  🎯 Remember: Consistency is key. Follow the patterns, use the classes,       ║
+║     and maintain keyboard accessibility throughout.                            ║
+╚═══════════════════════════════════════════════════════════════════════════════╝

@@ -505,9 +505,8 @@ def record_sale(
                 unit_price=price,
                 line_total=price * qty,
             )
-        from logic.products import deduct_variant_stock_for_sale
-
-        deduct_variant_stock_for_sale(sale, recorded_by=recorded_by)
+        # Stock is reserved later by the office fulfillment plan. Sale creation
+        # deliberately has no inventory movement.
 
     if order_kind == Sale.ORDER_KIND_PRE_INVOICE:
         if not defer_accounting:
@@ -550,6 +549,8 @@ def record_sale(
 @transaction.atomic
 def delete_sale(sale, user=None):
     """حذف فروش و بازگرداندن اثرات آن روی مشتری، کیف پول، اقساط و حسابداری."""
+    if hasattr(sale, "delivery_document"):
+        raise ValueError("A delivered sale cannot be cancelled or deleted; create a sales return.")
     from logic.accounting import delete_entries_for_sale
 
     customer = sale.customer
@@ -569,8 +570,11 @@ def delete_sale(sale, user=None):
 
     reverse_sale_cashback(customer, sale, user=user)
 
+    from logic.fulfillment import release_sale_fulfillment
     from logic.products import restore_variant_stock_for_sale
 
+    release_sale_fulfillment(sale, user=user, cancel=True)
+    # Backward compatibility for sales created before fulfillment planning.
     restore_variant_stock_for_sale(sale, recorded_by=user)
 
     _reverse_purchase_from_customer(customer, paid_amount)
@@ -598,6 +602,21 @@ def record_payment(
     idempotency_key="",
 ):
     """ثبت پرداخت/قسط جدید روی فروش — کاهش مطالبات و به‌روزرسانی سطح مشتری."""
+    from backend.models import FinancialEvent
+
+    explicit_key = (idempotency_key or "").strip()
+    if explicit_key:
+        existing = FinancialEvent.objects.filter(
+            source_module="treasury",
+            source_type="SalePayment",
+            source_key=explicit_key,
+            event_type="payment_received",
+        ).first()
+        if existing:
+            if Decimal(existing.payload.get("amount") or 0) != Decimal(amount):
+                raise ValueError("Payment idempotency key was already used with another amount.")
+            sale.refresh_from_db()
+            return sale
     if is_order_cancelled(sale):
         raise ValueError("این سفارش لغو شده و قابل پرداخت نیست.")
 
@@ -637,7 +656,7 @@ def record_payment(
     )
     from logic.accounting_events import issue_event_draft, register_event
 
-    event_key = (idempotency_key or f"{sale.uuid}:{before_paid}:{sale.paid_amount}").strip()
+    event_key = explicit_key or f"{sale.uuid}:{before_paid}:{sale.paid_amount}"
     event, _created = register_event(
         source_module="treasury",
         source_type="SalePayment",
@@ -645,6 +664,10 @@ def record_payment(
         event_type="payment_received",
         payload={
             "sale_uuid": str(sale.uuid),
+            "delivery_uuid": (
+                str(sale.delivery_document.uuid)
+                if hasattr(sale, "delivery_document") else None
+            ),
             "amount": str(amount),
             "resulting_paid": str(sale.paid_amount),
         },
@@ -738,6 +761,8 @@ def confirm_pre_invoice(sale, recorded_by=None):
 @transaction.atomic
 def cancel_order(sale, recorded_by=None):
     """لغو پیش‌فاکتور یا بیعانیه."""
+    if hasattr(sale, "delivery_document"):
+        raise ValueError("A delivered sale requires a return/correction and cannot be cancelled.")
     if sale.order_status == Sale.ORDER_STATUS_CANCELLED:
         raise ValueError("این سفارش قبلاً لغو شده است.")
     if sale.order_kind not in (Sale.ORDER_KIND_PRE_INVOICE, Sale.ORDER_KIND_DEPOSIT):
@@ -777,8 +802,10 @@ def cancel_order(sale, recorded_by=None):
 
     sale.order_status = Sale.ORDER_STATUS_CANCELLED
     sale.save(update_fields=["order_status"])
+    from logic.fulfillment import release_sale_fulfillment
     from logic.products import restore_variant_stock_for_sale
 
+    release_sale_fulfillment(sale, user=recorded_by, cancel=True)
     restore_variant_stock_for_sale(sale, recorded_by=recorded_by)
     from logic.cashback import reverse_sale_cashback
 
@@ -790,11 +817,7 @@ def cancel_order(sale, recorded_by=None):
 def _replace_sale_line_items(sale, line_items):
     """جایگزینی اقلام فاکتور — مبلغ جدید از جمع ردیف‌ها."""
     from backend.models import SaleLineItem
-    from logic.products import (
-        deduct_variant_stock_for_sale,
-        resolve_line_item_from_catalog,
-        restore_variant_stock_for_sale,
-    )
+    from logic.products import resolve_line_item_from_catalog, restore_variant_stock_for_sale
 
     resolved_items = []
     amount = Decimal(0)
@@ -805,6 +828,8 @@ def _replace_sale_line_items(sale, line_items):
         resolved_items.append(resolved)
         amount += Decimal(resolved["unit_price"]) * resolved["quantity"]
 
+    if sale.line_items.filter(fulfillment_plan__isnull=False).exists():
+        raise ValueError("Fulfillment plans must be released before editing sale lines.")
     restore_variant_stock_for_sale(sale, recorded_by=sale.recorded_by)
     sale.line_items.all().delete()
     for resolved in resolved_items:
@@ -828,7 +853,6 @@ def _replace_sale_line_items(sale, line_items):
             unit_price=price,
             line_total=price * qty,
         )
-    deduct_variant_stock_for_sale(sale, recorded_by=sale.recorded_by)
     return amount
 
 

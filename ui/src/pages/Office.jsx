@@ -1,7 +1,7 @@
 // اداری — تایید، اصلاح کامل فاکتور و ارسال به کارخانه
 
 import { useEffect, useState } from 'react'
-import { cycleApi, officeApi, salesApi } from '../api/client'
+import { cycleApi, fulfillmentApi, officeApi, salesApi } from '../api/client'
 import { useAuth } from '../context/AuthContext'
 import { useConfig } from '../context/ConfigContext'
 import CheckAccountPicker from '../components/CheckAccountPicker'
@@ -85,6 +85,7 @@ function mapLineItemsFromSale(items = []) {
     unit_price: i.unit_price != null ? String(i.unit_price) : '',
     fabric_recipe_id: i.fabric_recipe_id || i.workset_config?.sale_choices?.fabric_recipe_id || '',
     paint_recipe_id: i.paint_recipe_id || i.workset_config?.sale_choices?.paint_recipe_id || '',
+    sale_mode: i.workset_config?.sale_mode || 'full_set',
   }))
 }
 
@@ -124,6 +125,8 @@ export default function Office() {
   const [sourceBranch, setSourceBranch] = useState('')
   const [merchantUserId, setMerchantUserId] = useState('')
   const [warehouseSourceKind, setWarehouseSourceKind] = useState('warehouse')
+  const [linePlans, setLinePlans] = useState([])
+  const [lineAvailability, setLineAvailability] = useState({})
   const [listFilterQuery, setListFilterQuery] = useState(() =>
     buildOfficeListQuery({ ...OFFICE_QUEUE_FILTER_DEFAULTS, model: 'office_order' }),
   )
@@ -228,6 +231,7 @@ export default function Office() {
         frame_id: i.frame_id || null,
         furniture_workset_id: i.furniture_workset_id || null,
         workset_config: i.workset_config || {},
+        sale_mode: i.sale_mode || i.workset_config?.sale_mode || null,
         fabric_recipe_id: i.fabric_recipe_id || i.workset_config?.sale_choices?.fabric_recipe_id || null,
         paint_recipe_id: i.paint_recipe_id || i.workset_config?.sale_choices?.paint_recipe_id || null,
       }))
@@ -311,18 +315,53 @@ export default function Office() {
     setSourceBranch('')
     setMerchantUserId('')
     setWarehouseSourceKind('warehouse')
+    setLinePlans([])
+    setLineAvailability({})
     const routes = cycleMe.enabled_routes?.length ? cycleMe.enabled_routes : ['factory']
     setFulfillmentRoute(routes.includes('factory') ? 'factory' : routes[0])
     setApproveOrder(order)
-    setApproveDetail(order.has_pending_checks ? null : order)
-    if (order?.has_pending_checks) {
-      try {
-        const detail = await officeApi.get(order.id)
-        setApproveDetail(detail)
-      } catch (err) {
-        setApproveError(err.message)
-      }
+    setApproveDetail(null)
+    try {
+      const detail = await officeApi.get(order.id)
+      setApproveDetail(detail)
+      const plans = (detail.line_items || []).map((line) => ({
+        sale_line_id: line.id,
+        product_name: line.product_name,
+        quantity: Number(line.quantity),
+        lines: [{ route_kind: 'factory', quantity: Number(line.quantity), warehouse_id: '', branch: '' }],
+      }))
+      setLinePlans(plans)
+      const balances = await Promise.all(
+        (detail.line_items || []).map(async (line) => [line.id, await fulfillmentApi.availability(line.id)]),
+      )
+      setLineAvailability(Object.fromEntries(balances))
+    } catch (err) {
+      setApproveError(err.message)
     }
+  }
+
+  const updatePlanRoute = (saleLineId, index, patch) => {
+    setLinePlans((plans) => plans.map((plan) => (
+      plan.sale_line_id !== saleLineId
+        ? plan
+        : { ...plan, lines: plan.lines.map((line, i) => (i === index ? { ...line, ...patch } : line)) }
+    )))
+  }
+
+  const addPlanSplit = (saleLineId) => {
+    setLinePlans((plans) => plans.map((plan) => (
+      plan.sale_line_id !== saleLineId
+        ? plan
+        : { ...plan, lines: [...plan.lines, { route_kind: 'factory', quantity: 0, warehouse_id: '', branch: '' }] }
+    )))
+  }
+
+  const removePlanSplit = (saleLineId, index) => {
+    setLinePlans((plans) => plans.map((plan) => (
+      plan.sale_line_id !== saleLineId
+        ? plan
+        : { ...plan, lines: plan.lines.filter((_, i) => i !== index) }
+    )))
   }
 
   const confirmApprove = async (e) => {
@@ -346,10 +385,26 @@ export default function Office() {
       setApproveError('همکار بازرگان را انتخاب کنید.')
       return
     }
+    for (const plan of linePlans) {
+      const total = plan.lines.reduce((sum, line) => sum + Number(line.quantity || 0), 0)
+      if (!plan.lines.length || total <= 0 || total > plan.quantity) {
+        setApproveError(`جمع مسیرهای «${plan.product_name}» باید مثبت و حداکثر ${plan.quantity} باشد.`)
+        return
+      }
+      if (plan.lines.some((line) => line.route_kind === 'warehouse_stock' && !line.warehouse_id)) {
+        setApproveError(`برای مسیر انبار «${plan.product_name}» انبار را انتخاب کنید.`)
+        return
+      }
+      if (plan.lines.some((line) => line.route_kind === 'branch_stock' && !line.branch)) {
+        setApproveError(`برای مسیر شعبه «${plan.product_name}» شعبه را انتخاب کنید.`)
+        return
+      }
+    }
     setApproveLoading(true)
     setApproveError('')
     try {
       const payload = { fulfillment_route: fulfillmentRoute }
+      payload.fulfillment_plans = linePlans.map(({ sale_line_id, lines }) => ({ sale_line_id, lines }))
       if (approveOrder.has_pending_checks) {
         payload.check_registration_account_id = Number(regAccountId)
         if (depAccountId) payload.check_deposit_account_id = Number(depAccountId)
@@ -402,6 +457,7 @@ export default function Office() {
           quantity: Number(i.quantity) || 1,
           frame_id: i.frame_id || null,
           workset_config: i.workset_config || {},
+          sale_mode: i.sale_mode || i.workset_config?.sale_mode || null,
           furniture_workset_id: i.furniture_workset_id || null,
           fabric_recipe_id: i.fabric_recipe_id || i.workset_config?.sale_choices?.fabric_recipe_id || null,
           paint_recipe_id: i.paint_recipe_id || i.workset_config?.sale_choices?.paint_recipe_id || null,
@@ -745,6 +801,81 @@ export default function Office() {
                 />
               </Field>
             )}
+            <div className={fromLegacy("fulfillment-line-plans")}>
+              <h4>برنامه تأمین هر ردیف</h4>
+              {linePlans.map((plan) => (
+                <div key={plan.sale_line_id} className={fromLegacy("card")}>
+                  <strong>{plan.product_name}</strong>
+                  <span className={fromLegacy("muted")}> — تعداد سفارش: {plan.quantity}</span>
+                  {(lineAvailability[plan.sale_line_id]?.locations || []).length > 0 && (
+                    <p className={fromLegacy("muted small")}>
+                      موجودی قابل تخصیص: {lineAvailability[plan.sale_line_id].locations
+                        .map((loc) => `${loc.label}: ${loc.available}`)
+                        .join(' · ')}
+                    </p>
+                  )}
+                  {plan.lines.map((line, index) => (
+                    <div key={`${plan.sale_line_id}-${index}`} className={fromLegacy("form-row")}>
+                      <Field label="مسیر">
+                        <Select
+                          value={line.route_kind}
+                          onChange={(route_kind) => updatePlanRoute(plan.sale_line_id, index, {
+                            route_kind, warehouse_id: '', branch: '',
+                          })}
+                          options={[
+                            { value: 'branch_stock', label: 'موجودی شعبه' },
+                            { value: 'warehouse_stock', label: 'موجودی انبار' },
+                            { value: 'factory', label: 'تولید کارخانه' },
+                            { value: 'merchant', label: 'خرید بازرگان' },
+                          ]}
+                        />
+                      </Field>
+                      <Field label="تعداد">
+                        <input
+                          type="number"
+                          min="0.001"
+                          step="0.001"
+                          value={line.quantity}
+                          onChange={(e) => updatePlanRoute(plan.sale_line_id, index, { quantity: e.target.value })}
+                        />
+                      </Field>
+                      {line.route_kind === 'warehouse_stock' && (
+                        <Field label="انبار مبدأ">
+                          <Select
+                            value={String(line.warehouse_id || '')}
+                            onChange={(warehouse_id) => updatePlanRoute(plan.sale_line_id, index, { warehouse_id })}
+                            options={[
+                              { value: '', label: 'انتخاب انبار…' },
+                              ...(cycleMe.warehouses || []).map((w) => ({ value: String(w.id), label: w.label })),
+                            ]}
+                          />
+                        </Field>
+                      )}
+                      {line.route_kind === 'branch_stock' && (
+                        <Field label="شعبه مبدأ">
+                          <Select
+                            value={line.branch || ''}
+                            onChange={(branch) => updatePlanRoute(plan.sale_line_id, index, { branch })}
+                            options={[
+                              { value: '', label: 'انتخاب شعبه…' },
+                              ...(branches || []).map((b) => ({ value: b.code, label: b.label })),
+                            ]}
+                          />
+                        </Field>
+                      )}
+                      {plan.lines.length > 1 && (
+                        <Button type="button" variant="ghost" onClick={() => removePlanSplit(plan.sale_line_id, index)}>
+                          حذف بخش
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                  <Button type="button" variant="ghost" onClick={() => addPlanSplit(plan.sale_line_id)}>
+                    تقسیم در مسیر دیگر
+                  </Button>
+                </div>
+              ))}
+            </div>
             {checkItems.length > 0 && (
               <div className={fromLegacy("check-approve-list")}>
                 <h4>چک‌های سفارش</h4>

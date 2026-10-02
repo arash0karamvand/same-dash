@@ -482,6 +482,16 @@ def _price_lines(data):
 @transaction.atomic
 def post_purchase_invoice(data, *, user=None):
     """ثبت فاکتور خرید همزمان با رسید انبار و صدور سند موجودی / تامین‌کننده."""
+    procurement_receipt_uuid = data.get("goods_receipt_uuid")
+    if procurement_receipt_uuid:
+        from backend.models import GoodsReceipt
+        from logic.procurement import approve_goods_receipt
+
+        receipt = GoodsReceipt.objects.filter(uuid=procurement_receipt_uuid).first()
+        if receipt is None:
+            raise ValueError("رسید تدارکات پیدا نشد.")
+        receipt = approve_goods_receipt(receipt, user=user)
+        return invoice_to_dict(receipt.purchase_invoice)
     supplier = _locked_supplier(data.get("supplier_id"))
     if not supplier.is_active:
         raise ValueError("این تامین‌کننده غیرفعال است.")
@@ -560,6 +570,9 @@ def post_purchase_invoice(data, *, user=None):
             reason="purchase",
             reference=f"ap:{invoice_number}",
             recorded_by=actor,
+            supplier=supplier,
+            purchase_invoice=invoice,
+            invoice_number=invoice_number,
         )
         PurchaseInvoiceLine.objects.create(
             invoice=invoice,

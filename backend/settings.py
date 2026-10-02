@@ -144,6 +144,8 @@ USE_TZ = True
 
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
@@ -162,6 +164,15 @@ FRONTEND_ORIGIN = os.environ.get("FRONTEND_ORIGIN", "http://localhost:5173")
 SMS_GATEWAY = os.environ.get("SMS_GATEWAY", "logic.sms.MockSmsGateway")
 SMS_API_KEY = os.environ.get("SMS_API_KEY", "")
 SMS_SENDER = os.environ.get("SMS_SENDER", "")
+
+# Phase 1-6 server-side rollout gates. New installations use the safe unified
+# paths by default; existing deployments can disable each path independently
+# before migrating and reconciling legacy data.
+FEATURE_ACCOUNTING_GATEWAY = _env_bool("FEATURE_ACCOUNTING_GATEWAY", True)
+FEATURE_UNIFIED_PROCUREMENT = _env_bool("FEATURE_UNIFIED_PROCUREMENT", True)
+FEATURE_FULFILLMENT_RESERVATIONS = _env_bool("FEATURE_FULFILLMENT_RESERVATIONS", True)
+FEATURE_ACTUAL_COST_PRODUCTION = _env_bool("FEATURE_ACTUAL_COST_PRODUCTION", True)
+FEATURE_UNIFIED_DELIVERY = _env_bool("FEATURE_UNIFIED_DELIVERY", True)
 
 # در تولید با HTTPS مقدار true بگذارید؛ برای Docker/HTTP محلی false.
 SESSION_COOKIE_SECURE = _env_bool("SESSION_COOKIE_SECURE", not DEBUG)

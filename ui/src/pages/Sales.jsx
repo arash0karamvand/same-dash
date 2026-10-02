@@ -99,6 +99,9 @@ const EMPTY_EDIT = {
 }
 
 function lineFromSale(item) {
+  const configurationMode = item.workset_config?.configuration_mode
+    || item.workset_config?.sale_choices?.configuration_mode
+    || (item.workset_config?.sale_mode === 'custom_set' ? 'custom' : 'full')
   return {
     product_id: item.product_id || '',
     variant_id: item.variant_id || '',
@@ -117,6 +120,10 @@ function lineFromSale(item) {
     unit_price: item.unit_price != null ? String(item.unit_price) : '',
     fabric_recipe_id: item.fabric_recipe_id || item.workset_config?.sale_choices?.fabric_recipe_id || '',
     paint_recipe_id: item.paint_recipe_id || item.workset_config?.sale_choices?.paint_recipe_id || '',
+    sale_mode: item.workset_config?.sale_mode || 'full_set',
+    configuration_mode: configurationMode,
+    catalog_pieces: (item.workset_config?.pieces || []).map((piece) => ({ ...piece })),
+    quote_status: 'ready',
     price_note: '',
   }
 }
@@ -130,6 +137,7 @@ function linePayload(items) {
     frame_model_id: item.frame_model_id || null,
     frame_config: item.frame_config || {},
     workset_config: item.workset_config || {},
+    sale_mode: item.sale_mode || item.workset_config?.sale_mode || null,
     furniture_workset_id: item.furniture_workset_id || null,
     fabric_recipe_id: item.fabric_recipe_id || item.workset_config?.sale_choices?.fabric_recipe_id || null,
     paint_recipe_id: item.paint_recipe_id || item.workset_config?.sale_choices?.paint_recipe_id || null,
@@ -198,6 +206,32 @@ function validateSaleSubmit({
   stockLocations,
 }) {
   if (!editing && saleGate?.blocked) return saleGate.reason
+
+  if (form.line_items?.length) {
+    for (const line of form.line_items) {
+      const pieces = line.workset_config?.pieces || []
+      const mode = line.configuration_mode || line.workset_config?.configuration_mode || 'full'
+      if (line.quote_status === 'loading') {
+        return `محاسبه قیمت «${line.product_name || 'سرویس'}» هنوز تمام نشده است.`
+      }
+      if (pieces.length && mode === 'modular' && !pieces.some((piece) => Number(piece.quantity || 0) > 0)) {
+        return `در سرویس «${line.product_name || ''}» حداقل یک قطعه را فعال نگه دارید.`
+      }
+      if (pieces.length && mode !== 'full') {
+        const activePieces = pieces.filter((piece) => Number(piece.quantity || 0) > 0)
+        const missingFabric = activePieces.find((piece) => !piece.fabric_recipe_id)
+        if (missingFabric) {
+          return `پارچه «${missingFabric.piece_label || 'قطعه'}» را انتخاب کنید.`
+        }
+        const missingPaint = activePieces.find(
+          (piece) => piece.needs_paint !== false && !piece.paint_recipe_id,
+        )
+        if (missingPaint) {
+          return `رنگ بدنه «${missingPaint.piece_label || 'قطعه'}» را انتخاب کنید.`
+        }
+      }
+    }
+  }
 
   if (editing) {
     if (!Number(form.amount) || Number(form.amount) <= 0) {
@@ -414,6 +448,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
   const [selectedCustomer, setSelectedCustomer] = useState(null)
 
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [loadingMore, setLoadingMore] = useState(false)
   const [salesTotal, setSalesTotal] = useState(0)
   const [salesOffset, setSalesOffset] = useState(0)
@@ -438,6 +473,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
 
   const [invoiceSale, setInvoiceSale] = useState(null)
   const [journalsModal, setJournalsModal] = useState(null)
+  const [traceModal, setTraceModal] = useState(null)
   const [invoiceLoadingId, setInvoiceLoadingId] = useState(null)
   const [excelLoadingId, setExcelLoadingId] = useState(null)
 
@@ -723,6 +759,15 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
     }
   }
 
+  const openTrace = async (sale) => {
+    setError('')
+    try {
+      setTraceModal(await salesApi.trace(sale.id))
+    } catch (e) {
+      setError(e.message)
+    }
+  }
+
   const downloadExcel = async (sale) => {
     setExcelLoadingId(sale.id)
     setError('')
@@ -854,6 +899,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
     }
 
     try {
+      setSaving(true)
       setFormError('')
       if (editing) {
         const pending = !editing.workflow_stage || editing.workflow_stage === 'pending_branch'
@@ -968,6 +1014,8 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
       load()
     } catch (err) {
       setFormError(err.message)
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -1336,6 +1384,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
                       <button type="button" className={fromLegacy("link")} onClick={() => openEdit(s)}>ویرایش</button>
                       
                       <button type="button" className={fromLegacy("link")} onClick={() => setJournalsModal(s)}>سندها</button>
+                      <button type="button" className={fromLegacy("link")} onClick={() => openTrace(s)}>رهگیری</button>
 
                       {s.balance_due > 0 && s.order_status !== 'cancelled' && !s.amounts_masked && (
                         <button type="button" className={fromLegacy("link link-success")} onClick={() => { setPayModal(s); setPayAmount(String(s.balance_due)) }}>پرداخت</button>
@@ -1548,7 +1597,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
 
 
 
-      <Modal title={editing ? 'ویرایش فروش' : 'ثبت فروش'} open={modalOpen} onClose={() => { setModalOpen(false); setEditing(null); setFormError('') }}>
+      <Modal title={editing ? 'ویرایش فروش' : 'ثبت فروش'} open={modalOpen} onClose={() => { setModalOpen(false); setEditing(null); setFormError('') }} wide className={fromLegacy('sale-order-modal')}>
 
         <form onSubmit={save} className={fromLegacy("form")} noValidate>
 
@@ -1570,13 +1619,17 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
                   <ProductLines
                     lines={form.line_items}
                     seatCount={form.seat_count}
-                    onSeatCountChange={(seat_count) => setForm({ ...form, seat_count })}
+                    onSeatCountChange={(seat_count) => setForm((current) => ({ ...current, seat_count }))}
                     onChange={(line_items) => {
                       const amount = line_items.reduce(
                         (sum, item) => sum + Number(item.unit_price || 0) * Number(item.quantity || 1),
                         0,
                       )
-                      setForm({ ...form, line_items, amount: amount ? String(amount) : form.amount })
+                      setForm((current) => ({
+                        ...current,
+                        line_items,
+                        amount: amount ? String(amount) : current.amount,
+                      }))
                     }}
                   />
                 </FormSection>
@@ -1716,7 +1769,7 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
               <ProductLines
                 lines={form.line_items}
                 seatCount={form.seat_count}
-                onSeatCountChange={(seat_count) => setForm({ ...form, seat_count })}
+                onSeatCountChange={(seat_count) => setForm((current) => ({ ...current, seat_count }))}
                 stockSourceLabel={
                   (stockLocations || []).find((item) => item.key === (
                     form.stock_source_kind === 'warehouse' && form.stock_source_warehouse_id
@@ -1731,7 +1784,11 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
                     (s, i) => s + Number(i.unit_price || 0) * Number(i.quantity || 1),
                     0,
                   )
-                  setForm({ ...form, line_items, amount: amount ? String(amount) : form.amount })
+                  setForm((current) => ({
+                    ...current,
+                    line_items,
+                    amount: amount ? String(amount) : current.amount,
+                  }))
                 }}
               />
 
@@ -1849,8 +1906,10 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
           {formError ? (
             <div ref={formErrorRef} className={fromLegacy("alert-error")} role="alert">{formError}</div>
           ) : null}
-          <FormFooter>
-            <Button type="submit" disabled={!editing && Boolean(saleGate?.blocked)}>{editing ? 'ذخیره تغییرات' : 'ثبت'}</Button>
+          <FormFooter className={fromLegacy('sale-order-footer')}>
+            <Button type="submit" disabled={saving || (!editing && Boolean(saleGate?.blocked))}>
+              {saving ? 'در حال ثبت…' : editing ? 'ذخیره تغییرات' : 'ثبت سفارش'}
+            </Button>
           </FormFooter>
 
         </form>
@@ -1892,6 +1951,33 @@ export default function Sales({ portal = 'sales', pageKey = 'shop' }) {
               <p className="text-sm"><strong>مبلغ نهایی:</strong> {formatMoney(journalsModal.final_amount)}</p>
             </div>
             <SaleJournals saleId={journalsModal.id} />
+          </div>
+        )}
+      </Modal>
+
+      <Modal title="رهگیری تحویل و اسناد" open={!!traceModal} onClose={() => setTraceModal(null)}>
+        {traceModal && (
+          <div className="p-2 space-y-3">
+            {traceModal.plans.map((plan) => (
+              <Card key={plan.sale_line_id}>
+                <strong>ردیف فروش #{plan.sale_line_id}</strong>
+                {plan.routes.map((route) => (
+                  <p key={route.uuid} className="text-sm">
+                    {route.kind} — {route.quantity} — {route.status}
+                    {route.product_lot_uuid ? ` — لات ${route.product_lot_uuid}` : ''}
+                  </p>
+                ))}
+              </Card>
+            ))}
+            {traceModal.delivery ? (
+              <Card>
+                <p><strong>تحویل:</strong> {traceModal.delivery.uuid}</p>
+                <p><strong>بهای واقعی:</strong> {formatMoney(traceModal.delivery.total_actual_cogs)}</p>
+                <p><strong>رویداد فروش / COGS:</strong> {traceModal.delivery.sale_event_id} / {traceModal.delivery.cogs_event_id}</p>
+                <p><strong>برگشت‌ها:</strong> {traceModal.delivery.returns.length}</p>
+              </Card>
+            ) : <EmptyState title="تحویل هنوز ثبت نشده است" />}
+            <p className="text-sm">پرداخت‌ها و چک‌ها: {traceModal.payments.length}</p>
           </div>
         )}
       </Modal>

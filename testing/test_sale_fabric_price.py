@@ -90,3 +90,106 @@ class SaleFabricPriceTests(TestCase):
         plain = Product.objects.create(name="میز", default_price=50000)
         resolved = resolve_line_item_from_catalog({"product_id": plain.id, "quantity": 1})
         self.assertEqual(resolved["unit_price"], Decimal("50000"))
+
+    def test_custom_set_prices_each_piece_finish_and_quantity(self):
+        premium = WorkshopRecipe.objects.create(
+            kind=WorkshopRecipe.KIND_FABRIC,
+            name="پارچه ممتاز",
+            unit_cost=100000,
+            is_active=True,
+        )
+        first = dict(self.product.suite_config[0])
+        first.update(
+            piece_kind="sofa_3",
+            arm_style="two",
+            quantity=1,
+            fabric_recipe_id=self.job_fabric.id,
+            paint_recipe_id=self.paint.id,
+        )
+        second = dict(first)
+        second.update(piece_kind="armchair", arm_style="none", piece_label="تک‌نفره", quantity=2)
+        second["fabric"] = {
+            **first["fabric"],
+            "materials": [{"material_id": self.cloth.id, "quantity": 2, "unit": "متر"}],
+        }
+        self.product.suite_config = [first, second]
+        self.product.save(update_fields=["suite_config"])
+
+        resolved = resolve_line_item_from_catalog({
+            "product_id": self.product.id,
+            "sale_mode": "custom_set",
+            "workset_config": {
+                "pieces": [
+                    {
+                        "piece_kind": "sofa_3",
+                        "arm_style": "two",
+                        "quantity": 1,
+                        "fabric_recipe_id": self.sale_fabric.id,
+                        "paint_recipe_id": self.paint.id,
+                    },
+                    {
+                        "piece_kind": "armchair",
+                        "arm_style": "none",
+                        "quantity": 3,
+                        "fabric_recipe_id": premium.id,
+                        "paint_recipe_id": self.paint.id,
+                    },
+                ]
+            },
+        })
+        self.assertEqual(resolved["unit_price"], Decimal("800000"))
+        pieces = resolved["workset_config"]["pieces"]
+        self.assertEqual([piece["quantity"] for piece in pieces], [1, 3])
+        self.assertEqual(pieces[0]["fabric_recipe_id"], self.sale_fabric.id)
+        self.assertEqual(pieces[1]["fabric_recipe_id"], premium.id)
+
+    def test_custom_set_rejects_piece_outside_catalog_bundle(self):
+        self.product.suite_config[0].update(piece_kind="sofa_3", arm_style="two")
+        self.product.save(update_fields=["suite_config"])
+        with self.assertRaises(ValueError) as caught:
+            resolve_line_item_from_catalog({
+                "product_id": self.product.id,
+                "sale_mode": "custom_set",
+                "workset_config": {
+                    "pieces": [{
+                        "piece_kind": "unknown",
+                        "arm_style": "none",
+                        "quantity": 1,
+                    }]
+                },
+            })
+        self.assertIn("خارج از دست", str(caught.exception))
+
+    def test_custom_set_preserves_valid_configuration_mode_metadata(self):
+        resolved = resolve_line_item_from_catalog({
+            "product_id": self.product.id,
+            "sale_mode": "custom_set",
+            "fabric_recipe_id": self.sale_fabric.id,
+            "paint_recipe_id": self.paint.id,
+            "workset_config": {"configuration_mode": "modular"},
+        })
+        config = resolved["workset_config"]
+        self.assertEqual(config["configuration_mode"], "modular")
+        self.assertEqual(config["sale_choices"]["configuration_mode"], "modular")
+
+    def test_custom_set_rejects_unknown_configuration_mode(self):
+        with self.assertRaisesRegex(ValueError, "حالت پیکربندی"):
+            resolve_line_item_from_catalog({
+                "product_id": self.product.id,
+                "sale_mode": "custom_set",
+                "fabric_recipe_id": self.sale_fabric.id,
+                "paint_recipe_id": self.paint.id,
+                "workset_config": {"configuration_mode": "free_form"},
+            })
+
+    def test_full_set_requires_administrative_price(self):
+        self.product.default_price = 0
+        self.product.save(update_fields=["default_price"])
+        with self.assertRaisesRegex(ValueError, "توسط اداری"):
+            resolve_line_item_from_catalog({
+                "product_id": self.product.id,
+                "sale_mode": "full_set",
+                "fabric_recipe_id": self.job_fabric.id,
+                "paint_recipe_id": self.paint.id,
+                "workset_config": {"pieces": self.product.suite_config},
+            })

@@ -4,6 +4,8 @@ from decimal import Decimal
 
 from django.test import TestCase
 
+from testing.sale_test_mixin import OfficeLedgerTestMixin
+
 from backend.models import (
     BetaCarpentryWorkshop,
     BetaCushionJob,
@@ -41,8 +43,9 @@ from logic.workshop_recipes import (
 )
 
 
-class WorkshopLineTests(TestCase):
+class WorkshopLineTests(OfficeLedgerTestMixin, TestCase):
     def setUp(self):
+        self.seed_office_chart()
         self.user = self._user()
         self.customer = Customer.objects.create(full_name="مشتری خط", phone="09121112233")
         self.paint_material = Material.objects.create(

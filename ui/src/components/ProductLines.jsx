@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { furnitureWorksetsApi, salesApi } from '../api/client'
 import Select from './Select'
 import { Button, Field, Modal } from './ui'
@@ -24,7 +24,37 @@ const EMPTY_LINE = {
   unit_price: '',
   fabric_recipe_id: '',
   paint_recipe_id: '',
+  sale_mode: '',
+  configuration_mode: 'full',
+  catalog_pieces: [],
+  quote_status: 'idle',
   price_note: '',
+}
+
+const ORDER_MODES = [
+  {
+    value: 'full',
+    title: 'دست کامل',
+    description: 'ترکیب کارخانه و قیمت مصوب اداری، بدون تغییر قطعات',
+  },
+  {
+    value: 'custom',
+    title: 'کاستوم',
+    description: 'ترکیب ثابت؛ رنگ و پارچه را برای کل دست یا هر قطعه تغییر دهید',
+  },
+  {
+    value: 'modular',
+    title: 'ماژولار',
+    description: 'تعداد قطعات را کم‌وزیاد کنید و مشخصات هر قطعه را جدا بسازید',
+  },
+]
+
+function uiMode(line) {
+  if (line?.sale_mode !== 'custom_set') return 'full'
+  return line.configuration_mode
+    || line.workset_config?.configuration_mode
+    || line.workset_config?.sale_choices?.configuration_mode
+    || 'custom'
 }
 
 function catalogPrice(product) {
@@ -86,70 +116,15 @@ function lockedSpecs(pieces) {
   })
 }
 
-function applyFinish(line, fabricRecipe, paintRecipe) {
-  const pieces = line.workset_config?.pieces || []
-  const needsPaint = pieces.some((piece) => piece.needs_paint !== false)
-  const missing = missingMeterPieces(pieces)
-  const meters = serviceMeters(pieces)
-  const rate = Number(fabricRecipe?.unit_cost || 0)
-  let priceNote = ''
-  if (!fabricRecipe) priceNote = 'پارچه را انتخاب کنید.'
-  else if (needsPaint && !paintRecipe) priceNote = 'رنگ بدنه را انتخاب کنید.'
-  else if (missing.length) priceNote = `متراژ مصرف در تعریف کار نیست: ${missing.join('، ')}`
-  else if (rate <= 0) priceNote = 'نرخ هر متر این پارچه ثبت نشده است.'
-  const unitPrice = !priceNote && meters > 0 ? Math.round(meters * rate) : ''
-  const nextPieces = pieces.map((piece) => {
-    const pieceMeters = consumptionMeters(piece.fabric)
-    const next = { ...piece }
-    if (fabricRecipe) {
-      next.fabric = {
-        ...(piece.fabric || {}),
-        id: fabricRecipe.id,
-        name: fabricRecipe.name,
-        color_name: fabricRecipe.color_name || '',
-        kind: 'fabric',
-        unit_cost: rate,
-        materials: piece.fabric?.materials || [],
-        consumption_meters: pieceMeters,
-      }
-      next.fabric_recipe_id = fabricRecipe.id
-    }
-    if (paintRecipe && piece.needs_paint !== false) {
-      next.paint = {
-        id: paintRecipe.id,
-        name: paintRecipe.name,
-        color_name: paintRecipe.color_name || paintRecipe.name,
-        kind: 'paint',
-      }
-      next.paint_recipe_id = paintRecipe.id
-    }
-    return next
-  })
-  return {
-    ...line,
-    fabric_recipe_id: fabricRecipe?.id || '',
-    paint_recipe_id: paintRecipe?.id || '',
-    fabric: fabricRecipe ? recipeLabel(fabricRecipe) : line.fabric,
-    color_name: paintRecipe ? (paintRecipe.color_name || paintRecipe.name) : line.color_name,
-    unit_price: unitPrice === '' ? '' : String(unitPrice),
-    price_note: priceNote,
-    workset_config: {
-      ...(line.workset_config || {}),
-      pieces: nextPieces,
-      sale_choices: {
-        fabric_recipe_id: fabricRecipe?.id || null,
-        paint_recipe_id: paintRecipe?.id || null,
-        meters,
-        price_per_meter: rate,
-        unit_price: unitPrice || 0,
-      },
-    },
-  }
-}
-
-function lineFromProduct(product, quantity = 1) {
+function lineFromProduct(product, quantity = 1, saleMode = 'full_set') {
   const variant = product.variants?.[0]
   const pieces = jobPieces(product)
+  const configurationMode = saleMode === 'full_set' || saleMode === 'full'
+    ? 'full'
+    : saleMode === 'custom_set'
+      ? 'custom'
+      : saleMode
+  const apiSaleMode = configurationMode === 'full' ? 'full_set' : 'custom_set'
   const base = {
     ...EMPTY_LINE,
     product_id: product.id,
@@ -157,7 +132,13 @@ function lineFromProduct(product, quantity = 1) {
     frame_id: product.frame_id || '',
     furniture_workset_id: product.furniture_workset_id || '',
     furniture_workset_name: product.furniture_workset?.name || '',
-    workset_config: product.workset || { pieces },
+    workset_config: {
+      ...(product.workset || {}),
+      pieces,
+      sale_mode: apiSaleMode,
+      configuration_mode: configurationMode,
+    },
+    catalog_pieces: pieces.map((piece) => ({ ...piece })),
     product_name: product.name,
     product_model: product.furniture_workset?.name || product.product_model || '',
     fabric: fabricSummary(product),
@@ -166,7 +147,10 @@ function lineFromProduct(product, quantity = 1) {
     unit_price: pieces.length ? '' : String(catalogPrice(product)),
     target_min_price: product.target_min_price || '',
     quantity,
-    price_note: pieces.length ? 'رنگ بدنه و پارچه را انتخاب کنید.' : '',
+    sale_mode: pieces.length ? apiSaleMode : '',
+    configuration_mode: configurationMode,
+    quote_status: pieces.length ? 'loading' : 'ready',
+    price_note: pieces.length ? 'در حال محاسبه قیمت…' : '',
   }
   return pieces.length ? base : base
 }
@@ -183,10 +167,24 @@ export default function ProductLines({
   const [selectedWorkset, setSelectedWorkset] = useState(null)
   const [worksetProducts, setWorksetProducts] = useState([])
   const [qtys, setQtys] = useState({})
+  const [pickModes, setPickModes] = useState({})
   const [loading, setLoading] = useState(false)
   const [search, setSearch] = useState('')
+  const [productSearch, setProductSearch] = useState('')
+  const [productLimit, setProductLimit] = useState(24)
   const [paints, setPaints] = useState([])
   const [fabrics, setFabrics] = useState([])
+  const linesRef = useRef(lines)
+  const quoteTokens = useRef({})
+  const quoteTimers = useRef({})
+
+  useEffect(() => {
+    linesRef.current = lines
+  }, [lines])
+
+  useEffect(() => () => {
+    Object.values(quoteTimers.current).forEach(clearTimeout)
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -225,6 +223,8 @@ export default function ProductLines({
 
   const openWorkset = async (workset) => {
     setSelectedWorkset(workset)
+    setProductSearch('')
+    setProductLimit(24)
     setLoading(true)
     try {
       const data = await furnitureWorksetsApi.products(workset.id)
@@ -233,6 +233,7 @@ export default function ProductLines({
       const next = {}
       results.forEach((p) => { next[p.id] = 0 })
       setQtys(next)
+      setPickModes(Object.fromEntries(results.map((p) => [p.id, 'full'])))
       if (onSeatCountChange && !seatCount && workset.seat_count) {
         onSeatCountChange(String(workset.seat_count))
       }
@@ -248,36 +249,182 @@ export default function ProductLines({
     () => worksetProducts.filter((p) => Number(qtys[p.id] || 0) > 0 && canAdd(p)),
     [worksetProducts, qtys],
   )
+  const filteredProducts = useMemo(() => {
+    const needle = productSearch.trim().toLocaleLowerCase('fa')
+    if (!needle) return worksetProducts
+    return worksetProducts.filter((product) => (
+      [product.name, product.sku, product.product_model]
+        .filter(Boolean)
+        .some((value) => String(value).toLocaleLowerCase('fa').includes(needle))
+    ))
+  }, [productSearch, worksetProducts])
+  const visibleProducts = filteredProducts.slice(0, productLimit)
   const pickTotal = picked.reduce((sum, product) => {
     if (jobPieces(product).length) return sum
     return sum + catalogPrice(product) * Number(qtys[product.id] || 0)
   }, 0)
 
-  const confirmPick = () => {
+  const quoteLine = async (line) => {
+    if (!(line.workset_config?.pieces || []).length) return line
+    try {
+      const quote = await salesApi.bundleQuote({
+        product_id: line.product_id,
+        sale_mode: line.sale_mode || 'full_set',
+        workset_config: {
+          ...(line.workset_config || {}),
+          sale_mode: line.sale_mode || 'full_set',
+        },
+      })
+      const quotedConfig = quote.workset_config || line.workset_config
+      const worksetConfig = uiMode(line) === 'modular'
+        ? {
+            ...quotedConfig,
+            pieces: (line.workset_config?.pieces || []).map((piece) => {
+              const quotedPiece = (quotedConfig?.pieces || []).find(
+                (candidate) => candidate.piece_kind === piece.piece_kind
+                  && candidate.arm_style === piece.arm_style,
+              )
+              return quotedPiece ? { ...piece, ...quotedPiece } : piece
+            }),
+          }
+        : quotedConfig
+      return {
+        ...line,
+        workset_config: worksetConfig,
+        unit_price: String(quote.unit_price),
+        fabric: quote.fabric_label || line.fabric,
+        color_name: quote.paint_label || line.color_name,
+        quote_status: 'ready',
+        price_note: '',
+      }
+    } catch (err) {
+      return {
+        ...line,
+        unit_price: '',
+        quote_status: 'error',
+        price_note: err.message || 'محاسبه قیمت ناموفق بود.',
+      }
+    }
+  }
+
+  const confirmPick = async () => {
     if (!picked.length) return
-    const newLines = picked.map((p) => lineFromProduct(p, Number(qtys[p.id] || 1)))
-    onChange([...lines.filter((l) => l.product_id), ...newLines])
+    const candidates = picked.map((p) => lineFromProduct(
+      p,
+      Number(qtys[p.id] || 1),
+      pickModes[p.id] || 'full',
+    ))
+    const newLines = await Promise.all(candidates.map(quoteLine))
+    commitLines([...linesRef.current.filter((l) => l.product_id), ...newLines])
     setPickerOpen(false)
     setSelectedWorkset(null)
     setWorksetProducts([])
     setQtys({})
+    setPickModes({})
+  }
+
+  const commitLines = (next) => {
+    linesRef.current = next
+    onChange(next)
   }
 
   const updateLine = (idx, patch) => {
-    onChange(lines.map((row, i) => (i === idx ? { ...row, ...patch } : row)))
+    commitLines(linesRef.current.map((row, i) => (i === idx ? { ...row, ...patch } : row)))
   }
-  const removeLine = (idx) => onChange(lines.filter((_, i) => i !== idx))
+  const removeLine = (idx) => {
+    Object.keys(quoteTimers.current).forEach((key) => {
+      clearTimeout(quoteTimers.current[key])
+      quoteTokens.current[key] = (quoteTokens.current[key] || 0) + 1
+    })
+    commitLines(linesRef.current.filter((_, i) => i !== idx))
+  }
 
-  const chooseFinish = (idx, line, key, value) => {
-    const fabricId = key === 'fabric' ? value : line.fabric_recipe_id
-    const paintId = key === 'paint' ? value : line.paint_recipe_id
-    const fabricRecipe = fabrics.find((row) => String(row.id) === String(fabricId))
-    const paintRecipe = paints.find((row) => String(row.id) === String(paintId))
-    updateLine(idx, applyFinish(
-      { ...line, fabric_recipe_id: fabricId, paint_recipe_id: paintId },
-      fabricRecipe,
-      paintRecipe,
+  const scheduleQuote = (idx, draft, immediate = false) => {
+    const token = (quoteTokens.current[idx] || 0) + 1
+    quoteTokens.current[idx] = token
+    clearTimeout(quoteTimers.current[idx])
+    updateLine(idx, { ...draft, quote_status: 'loading', price_note: 'در حال محاسبه قیمت…' })
+    quoteTimers.current[idx] = setTimeout(async () => {
+      const quoted = await quoteLine(draft)
+      if (quoteTokens.current[idx] !== token) return
+      const current = linesRef.current[idx]
+      if (!current || current.product_id !== draft.product_id) return
+      updateLine(idx, quoted)
+    }, immediate ? 0 : 320)
+  }
+
+  const updateBundlePiece = (idx, line, pieceIdx, patch) => {
+    const pieces = (line.workset_config?.pieces || []).map((piece, i) => (
+      i === pieceIdx ? { ...piece, ...patch } : piece
     ))
+    const draft = {
+      ...line,
+      sale_mode: 'custom_set',
+      configuration_mode: uiMode(line) === 'full' ? 'custom' : uiMode(line),
+      workset_config: {
+        ...(line.workset_config || {}),
+        sale_mode: 'custom_set',
+        configuration_mode: uiMode(line) === 'full' ? 'custom' : uiMode(line),
+        pieces,
+      },
+      quote_status: 'loading',
+      unit_price: '',
+      price_note: 'در حال محاسبه قیمت…',
+    }
+    scheduleQuote(idx, draft)
+  }
+
+  const setLineMode = (idx, line, mode) => {
+    const saleMode = mode === 'full' ? 'full_set' : 'custom_set'
+    const sourcePieces = mode === 'modular'
+      ? (line.workset_config?.pieces || [])
+      : (line.catalog_pieces?.length ? line.catalog_pieces : line.workset_config?.pieces || [])
+    const currentByKey = new Map((line.workset_config?.pieces || []).map((piece) => [
+      `${piece.piece_kind}:${piece.arm_style}`,
+      piece,
+    ]))
+    const pieces = sourcePieces.map((piece) => {
+      const current = currentByKey.get(`${piece.piece_kind}:${piece.arm_style}`) || {}
+      return {
+        ...piece,
+        fabric_recipe_id: current.fabric_recipe_id || piece.fabric_recipe_id || '',
+        paint_recipe_id: current.paint_recipe_id || piece.paint_recipe_id || '',
+      }
+    })
+    const draft = {
+      ...line,
+      sale_mode: saleMode,
+      configuration_mode: mode,
+      unit_price: '',
+      workset_config: {
+        ...(line.workset_config || {}),
+        sale_mode: saleMode,
+        configuration_mode: mode,
+        pieces,
+      },
+    }
+    scheduleQuote(idx, draft, true)
+  }
+
+  const applyFinishToAll = (idx, line, kind, value) => {
+    const key = `${kind}_recipe_id`
+    const pieces = (line.workset_config?.pieces || []).map((piece) => (
+      kind === 'paint' && piece.needs_paint === false
+        ? piece
+        : { ...piece, [key]: value }
+    ))
+    const draft = {
+      ...line,
+      sale_mode: 'custom_set',
+      unit_price: '',
+      workset_config: {
+        ...(line.workset_config || {}),
+        sale_mode: 'custom_set',
+        configuration_mode: uiMode(line),
+        pieces,
+      },
+    }
+    scheduleQuote(idx, draft)
   }
 
   const grouped = useMemo(() => {
@@ -315,50 +462,142 @@ export default function ProductLines({
           {name !== 'سایر' && <p className={fromLegacy('muted small')}>سرویس: {name}</p>}
           {rows.map(({ line, idx }) => {
             const pieces = line.workset_config?.pieces || []
+            const mode = uiMode(line)
+            const activePieces = pieces.filter((piece) => Number(piece.quantity || 0) > 0)
             const meters = Number(line.workset_config?.sale_choices?.meters || serviceMeters(pieces))
             const rate = Number(line.workset_config?.sale_choices?.price_per_meter || 0)
-            const needsPaint = pieces.some((piece) => piece.needs_paint !== false)
             return (
-              <div key={idx} className={fromLegacy('sale-line-card')}>
+              <div key={idx} className={fromLegacy(`sale-line-card order-builder-line mode-${mode}`)}>
                 <div className={fromLegacy('sale-line-head')}>
-                  <strong>{line.product_name}</strong>
+                  <div>
+                    <strong>{line.product_name}</strong>
+                    {line.product_model ? <span className={fromLegacy('muted small')}>{line.product_model}</span> : null}
+                  </div>
                   <Button type="button" variant="ghost" size="sm" className={fromLegacy('sale-line-remove')} onClick={() => removeLine(idx)}>
                     حذف
                   </Button>
                 </div>
                 <div className={fromLegacy('sale-line-body')}>
-                  <div className={fromLegacy('sale-line-meta-grid')}>
-                    {pieces.length > 0 ? (
-                      lockedSpecs(pieces).map((text) => <span key={text}>{text}</span>)
-                    ) : line.product_model ? (
-                      <span><em className={fromLegacy('muted')}>مدل:</em> {line.product_model}</span>
-                    ) : null}
-                    {!pieces.length && line.fabric ? <span><em className={fromLegacy('muted')}>پارچه:</em> {line.fabric}</span> : null}
-                  </div>
                   {pieces.length > 0 && (
-                    <>
-                      {needsPaint && (
-                        <Field label="رنگ بدنه">
-                          <Select
-                            value={line.paint_recipe_id ? String(line.paint_recipe_id) : ''}
-                            onChange={(value) => chooseFinish(idx, line, 'paint', value)}
-                            options={paintOptions}
-                          />
-                        </Field>
+                    <div className={fromLegacy('order-builder')}>
+                      <div className={fromLegacy('order-mode-grid')} role="radiogroup" aria-label="نوع سفارش سرویس">
+                        {ORDER_MODES.map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            role="radio"
+                            aria-checked={mode === option.value}
+                            className={fromLegacy(`order-mode-card${mode === option.value ? ' active' : ''}`)}
+                            onClick={() => setLineMode(idx, line, option.value)}
+                          >
+                            <strong>{option.title}</strong>
+                            <span>{option.description}</span>
+                          </button>
+                        ))}
+                      </div>
+
+                      {mode === 'full' ? (
+                        <div className={fromLegacy('order-locked-specs')}>
+                          {lockedSpecs(pieces).map((text) => <span key={text}>{text}</span>)}
+                        </div>
+                      ) : (
+                        <>
+                          <div className={fromLegacy('order-finish-all')}>
+                            <div>
+                              <strong>اعمال مشخصات به همه قطعات</strong>
+                              <span className={fromLegacy('muted small')}>بعداً می‌توانید هر قطعه را جدا تغییر دهید.</span>
+                            </div>
+                            <Field label="پارچه همه">
+                              <Select
+                                value=""
+                                onChange={(value) => applyFinishToAll(idx, line, 'fabric', value)}
+                                options={fabricOptions}
+                              />
+                            </Field>
+                            <Field label="رنگ همه">
+                              <Select
+                                value=""
+                                onChange={(value) => applyFinishToAll(idx, line, 'paint', value)}
+                                options={paintOptions}
+                              />
+                            </Field>
+                          </div>
+                          <div className={fromLegacy('order-piece-grid')}>
+                            {pieces.map((piece, pieceIdx) => {
+                              const disabled = mode === 'modular' && Number(piece.quantity || 0) === 0
+                              return (
+                                <div
+                                  key={`${piece.piece_kind}-${piece.arm_style}-${pieceIdx}`}
+                                  className={fromLegacy(`order-piece-card${disabled ? ' disabled' : ''}`)}
+                                >
+                                  <div className={fromLegacy('order-piece-head')}>
+                                    <strong>{piece.piece_label || 'قطعه'}</strong>
+                                    {mode === 'modular' && (
+                                      <span className={fromLegacy(disabled ? 'text-danger small' : 'text-success small')}>
+                                        {disabled ? 'حذف‌شده' : 'فعال'}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <Field label={mode === 'modular' ? 'تعداد قطعه' : 'تعداد ثابت'}>
+                                    <input
+                                      className={fromLegacy('ltr')}
+                                      type="number"
+                                      min="0"
+                                      value={piece.quantity ?? 1}
+                                      disabled={mode !== 'modular'}
+                                      onChange={(e) => updateBundlePiece(idx, line, pieceIdx, { quantity: Number(e.target.value) })}
+                                    />
+                                  </Field>
+                                  {!disabled && piece.needs_paint !== false && (
+                                    <Field label="رنگ بدنه">
+                                      <Select
+                                        value={piece.paint_recipe_id ? String(piece.paint_recipe_id) : ''}
+                                        onChange={(value) => updateBundlePiece(idx, line, pieceIdx, { paint_recipe_id: value })}
+                                        options={paintOptions}
+                                      />
+                                    </Field>
+                                  )}
+                                  {!disabled && (
+                                    <Field label="پارچه">
+                                      <Select
+                                        value={piece.fabric_recipe_id ? String(piece.fabric_recipe_id) : ''}
+                                        onChange={(value) => updateBundlePiece(idx, line, pieceIdx, { fabric_recipe_id: value })}
+                                        options={fabricOptions}
+                                      />
+                                    </Field>
+                                  )}
+                                  {mode === 'modular' && (
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => updateBundlePiece(idx, line, pieceIdx, { quantity: disabled ? 1 : 0 })}
+                                    >
+                                      {disabled ? 'بازگردانی قطعه' : 'حذف از دست'}
+                                    </Button>
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                          {mode === 'modular' && (
+                            <p className={fromLegacy('order-modular-summary')}>
+                              {toPersianDigits(activePieces.length)} نوع قطعه فعال · {' '}
+                              {toPersianDigits(activePieces.reduce((sum, piece) => sum + Number(piece.quantity || 0), 0))} قطعه در هر سرویس
+                            </p>
+                          )}
+                        </>
                       )}
-                      <Field label="پارچه">
-                        <Select
-                          value={line.fabric_recipe_id ? String(line.fabric_recipe_id) : ''}
-                          onChange={(value) => chooseFinish(idx, line, 'fabric', value)}
-                          options={fabricOptions}
-                        />
-                      </Field>
-                    </>
+                    </div>
                   )}
                   <Field label="تعداد سرویس">
                     <input className={fromLegacy('ltr')} type="number" min="1" value={line.quantity} onChange={(e) => updateLine(idx, { quantity: e.target.value })} />
                   </Field>
-                  {line.price_note ? <p className={fromLegacy('alert-error')}>{line.price_note}</p> : null}
+                  {line.quote_status === 'loading' ? (
+                    <p className={fromLegacy('order-quote-state')} aria-live="polite">در حال محاسبه قیمت نهایی…</p>
+                  ) : line.price_note ? (
+                    <p className={fromLegacy('alert-error')} role="alert">{line.price_note}</p>
+                  ) : null}
                   {line.unit_price && meters > 0 && rate > 0 && (
                     <p className={fromLegacy('muted small')}>
                       قیمت نهایی: {formatMoney(Number(line.unit_price) * Number(line.quantity || 1))}
@@ -434,13 +673,21 @@ export default function ProductLines({
                 ترکیب سرویس: {selectedWorkset.pieces.map((piece) => `${toPersianDigits(piece.quantity)}× ${piece.piece_label}`).join('، ')}
               </p>
             )}
+            <input
+              className={fromLegacy('search-input')}
+              value={productSearch}
+              onChange={(e) => { setProductSearch(e.target.value); setProductLimit(24) }}
+              placeholder="جستجوی محصول در این سرویس…"
+            />
             {loading ? (
               <p className={fromLegacy('muted')}>در حال بارگذاری…</p>
-            ) : worksetProducts.length === 0 ? (
-              <p className={fromLegacy('muted')}>برای این سرویس محصولی تعریف نشده.</p>
+            ) : filteredProducts.length === 0 ? (
+              <p className={fromLegacy('muted')}>
+                {worksetProducts.length ? 'محصولی با این جستجو پیدا نشد.' : 'برای این سرویس محصولی تعریف نشده.'}
+              </p>
             ) : (
               <div className={fromLegacy('product-picker-grid')}>
-                {worksetProducts.map((p) => {
+                {visibleProducts.map((p) => {
                   const pieces = jobPieces(p)
                   const price = catalogPrice(p)
                   const missing = missingMeterPieces(pieces)
@@ -469,10 +716,32 @@ export default function ProductLines({
                           disabled={!canAdd(p)}
                         />
                       </Field>
+                      {pieces.length > 0 && (
+                        <div className={fromLegacy('product-picker-modes')}>
+                          {ORDER_MODES.map((mode) => (
+                            <button
+                              key={mode.value}
+                              type="button"
+                              className={fromLegacy(`product-picker-mode${pickModes[p.id] === mode.value ? ' active' : ''}`)}
+                              onClick={() => {
+                                setPickModes((m) => ({ ...m, [p.id]: mode.value }))
+                                setQtys((q) => ({ ...q, [p.id]: Number(q[p.id] || 1) }))
+                              }}
+                            >
+                              {mode.title}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )
                 })}
               </div>
+            )}
+            {visibleProducts.length < filteredProducts.length && (
+              <Button type="button" variant="ghost" onClick={() => setProductLimit((limit) => limit + 24)}>
+                نمایش محصولات بیشتر ({toPersianDigits(filteredProducts.length - visibleProducts.length)})
+              </Button>
             )}
             {picked.length > 0 && (
               <p className={fromLegacy('muted')}>

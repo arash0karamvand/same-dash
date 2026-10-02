@@ -20,6 +20,7 @@ SALES_EXPERT = "sales_expert"
 FACTORY_SUPERVISOR = "factory_supervisor"
 FREIGHT_SUPERVISOR = "freight_supervisor"
 ACCOUNTANT = "accountant"
+CATALOG_OFFICE = "catalog_office"
 SALES_MANAGER = "sales_manager"
 OPERATOR = "operator"
 PENDING = "pending"
@@ -39,6 +40,7 @@ ROLE_LABELS = {
     FACTORY_SUPERVISOR: "سرپرست کارخانه",
     FREIGHT_SUPERVISOR: "سرپرست باربری",
     ACCOUNTANT: "حسابدار",
+    CATALOG_OFFICE: "کاتالوگ اداری",
     SALES_MANAGER: "مدیر فروش",
     OPERATOR: "فروشنده",
     PENDING: "در انتظار تایید",

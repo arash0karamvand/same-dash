@@ -182,6 +182,21 @@ export default function WorkflowOrdersPage({
         {li.workset_config?.foam?.name ? ` — اسفنج ${li.workset_config.foam.name}` : ''}
         {li.workset_config?.webbing?.name ? ` — تسمه ${li.workset_config.webbing.name}` : ''}
         {li.workset_config?.cushion?.name ? ` — کوسن ${li.workset_config.cushion.name}` : ''}
+        {(li.fulfillment_plan?.lines || []).map((route) => (
+          <div key={route.uuid} className={fromLegacy("muted small")}>
+            تأمین {route.quantity}: {{
+              branch_stock: 'موجودی شعبه',
+              warehouse_stock: 'موجودی انبار',
+              factory: 'تولید کارخانه',
+              merchant: 'خرید بازرگان',
+            }[route.route_kind] || route.route_kind}
+            {' — '}{route.status}
+            {route.shortages?.length ? ` — کسری ${route.shortages.length} قلم` : ''}
+            {route.production_order_id ? ` — تولید #${route.production_order_id}` : ''}
+            {route.purchase_request_uuid ? ` — درخواست خرید ${route.purchase_request_uuid.slice(0, 8)}` : ''}
+            {route.merchant_demand_uuid ? ` — تقاضای بازرگان ${route.merchant_demand_uuid.slice(0, 8)}` : ''}
+          </div>
+        ))}
       </div>
     ))
 

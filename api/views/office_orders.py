@@ -117,6 +117,7 @@ def office_order_approve(request, pk):
             warehouse_id=body.get("warehouse_id"),
             source_branch=body.get("source_branch") or body.get("fulfillment_source_branch"),
             merchant_user_id=body.get("merchant_user_id"),
+            fulfillment_plans=body.get("fulfillment_plans"),
         )
     except ValueError as exc:
         return fail(str(exc), status=400)

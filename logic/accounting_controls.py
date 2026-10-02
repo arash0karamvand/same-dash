@@ -12,12 +12,21 @@ from django.utils.dateparse import parse_date
 
 from backend.models import (
     AccountingPeriod,
+    DeliveryDocument,
     FinancialEvent,
+    GoodsReceipt,
+    InventoryConsumption,
+    InventoryCostLayer,
+    InventoryReservation,
+    InventoryTransaction,
     JournalEntry,
     JournalLine,
     Material,
     MaterialSupplier,
+    PostingAccountMapping,
+    ProductionEvent,
     PurchaseInvoice,
+    ReconciliationQueue,
     Sale,
 )
 from logic.accounting_accounts import get_account
@@ -58,7 +67,10 @@ def _account_balance(slug, as_of=None):
     return (totals["debit"] or Decimal(0)) - (totals["credit"] or Decimal(0))
 
 
-SCAN_DOMAINS = {"journal", "event", "inventory", "receivable", "payable"}
+SCAN_DOMAINS = {
+    "journal", "event", "inventory", "production", "procurement",
+    "delivery", "reconciliation", "receivable", "payable",
+}
 SEVERITY_ORDER = {"critical": 0, "warning": 1, "info": 2}
 JOURNAL_SOURCE_LABELS = {
     "sales": "فروش",
@@ -394,6 +406,248 @@ def _scan_inventory(config):
     return rows, control
 
 
+def _scan_inventory_invariants(config):
+    rows = []
+    from logic.inventory_costing import availability
+
+    reservations = InventoryReservation.objects.filter(
+        status=InventoryReservation.STATUS_ACTIVE
+    ).select_related("material", "variant", "warehouse", "branch")
+    for reservation in reservations.iterator(chunk_size=500):
+        item = reservation.material or reservation.variant
+        location = {
+            "kind": reservation.location_kind,
+            "warehouse": reservation.warehouse,
+            "warehouse_id": reservation.warehouse_id,
+            "branch": reservation.branch,
+            "branch_id": reservation.branch_id,
+        }
+        balance = availability(item, location=location)
+        if balance["available"] < 0:
+            rows.append(_issue(
+                f"inventory:negative-available:{reservation.id}",
+                "inventory", "inventory_negative_available",
+                "موجودی قابل تخصیص منفی",
+                "رزروهای فعال از موجودی واقعی این کالا/محل بیشتر است.",
+                severity="critical", blocking=True,
+                difference=balance["available"],
+                refs={"reservation_id": reservation.id},
+                details={
+                    "on_hand": str(balance["on_hand"]),
+                    "reserved": str(balance["reserved"]),
+                    "item_id": item.pk,
+                    "item_type": type(item).__name__,
+                },
+            ))
+
+    layers = InventoryCostLayer.objects.annotate(
+        allocated=Sum("allocations__quantity")
+    ).select_related("material", "variant")
+    for layer in layers.iterator(chunk_size=500):
+        allocated = Decimal(layer.allocated or 0)
+        expected = Decimal(layer.original_qty or 0) - allocated
+        remaining = Decimal(layer.qty_remaining or 0)
+        if remaining < 0 or expected != remaining:
+            rows.append(_issue(
+                f"inventory:lot-balance:{layer.id}",
+                "inventory", "inventory_lot_remaining_mismatch",
+                "مغایرت مانده لات",
+                "مانده لات با مقدار اولیه منهای تخصیص‌های ثبت‌شده برابر نیست.",
+                severity="critical", blocking=True,
+                difference=remaining - expected,
+                refs={"cost_layer_id": layer.id, "lot_uuid": str(layer.uuid)},
+                details={
+                    "original_qty": str(layer.original_qty),
+                    "allocated_qty": str(allocated),
+                    "remaining_qty": str(remaining),
+                },
+            ))
+
+    consumptions = InventoryConsumption.objects.annotate(
+        allocated=Sum("allocations__quantity"),
+        allocated_cost=Sum(
+            F("allocations__quantity") * F("allocations__unit_cost")
+        ),
+    ).select_related("movement")
+    for consumption in consumptions.iterator(chunk_size=500):
+        allocated = Decimal(consumption.allocated or 0)
+        allocated_cost = Decimal(consumption.allocated_cost or 0)
+        quantity = Decimal(consumption.quantity or 0)
+        if allocated != quantity or allocated_cost != Decimal(consumption.total_cost or 0):
+            rows.append(_issue(
+                f"inventory:allocation:{consumption.id}",
+                "inventory", "inventory_allocation_sum_mismatch",
+                "مغایرت تخصیص مصرف",
+                "جمع مقدار/بهای تخصیص‌های FIFO با مصرف ثبت‌شده برابر نیست.",
+                severity="critical", blocking=True,
+                difference=allocated - quantity,
+                refs={"consumption_id": consumption.id},
+                details={
+                    "consumption_quantity": str(quantity),
+                    "allocation_quantity": str(allocated),
+                    "consumption_cost": str(consumption.total_cost),
+                    "allocation_cost": str(allocated_cost),
+                },
+            ))
+        movement = consumption.movement
+        if (
+            Decimal(movement.quantity or 0) != -quantity
+            or movement.material_id != consumption.material_id
+            or movement.variant_id != consumption.variant_id
+        ):
+            rows.append(_issue(
+                f"inventory:movement:{consumption.id}",
+                "inventory", "inventory_consumption_movement_mismatch",
+                "مغایرت حرکت و مصرف",
+                "حرکت خروجی متصل با کالا یا مقدار مصرف هم‌خوان نیست.",
+                severity="critical", blocking=True,
+                difference=Decimal(movement.quantity or 0) + quantity,
+                refs={
+                    "consumption_id": consumption.id,
+                    "inventory_transaction_id": movement.id,
+                },
+            ))
+    return rows
+
+
+def _scan_production_invariants(config):
+    rows = []
+    consumptions = InventoryConsumption.objects.filter(
+        Q(production_order__isnull=False)
+        | Q(movement__reason__startswith="production_")
+    ).select_related("production_order")
+    for consumption in consumptions.iterator(chunk_size=500):
+        if not hasattr(consumption, "production_event"):
+            rows.append(_issue(
+                f"production:orphan-consumption:{consumption.id}",
+                "production", "production_consumption_without_event",
+                "مصرف تولید بدون رویداد",
+                "مصرف مواد تولیدی به رویداد تغییرناپذیر تولید متصل نیست.",
+                severity="critical", blocking=True,
+                refs={"consumption_id": consumption.id},
+            ))
+    events = ProductionEvent.objects.select_related("run__bom_version", "consumption")
+    for event in events.filter(
+        event_type__in=[
+            ProductionEvent.TYPE_CONSUMPTION,
+            ProductionEvent.TYPE_EXTRA_CONSUMPTION,
+        ]
+    ).iterator(chunk_size=500):
+        if not event.run_id or not event.run.bom_version_id or not event.consumption_id:
+            rows.append(_issue(
+                f"production:trace:{event.id}",
+                "production", "production_consumption_without_bom_run",
+                "زنجیره ناقص مصرف تولید",
+                "رویداد مصرف فاقد اجرای تولید، نسخه BOM یا مصرف انبار است.",
+                severity="critical", blocking=True,
+                refs={"production_event_id": event.id},
+            ))
+    return rows
+
+
+def _scan_delivery_procurement(config):
+    rows = []
+    deliveries = DeliveryDocument.objects.filter(
+        status=DeliveryDocument.STATUS_POSTED
+    ).select_related("sale_event__journal", "cogs_event__journal")
+    for delivery in deliveries.iterator(chunk_size=500):
+        if (
+            not delivery.sale_event_id
+            or not delivery.cogs_event_id
+            or not delivery.sale_event.journal_id
+            or not delivery.cogs_event.journal_id
+        ):
+            rows.append(_issue(
+                f"delivery:events:{delivery.id}",
+                "delivery", "delivered_sale_missing_accounting_event",
+                "تحویل بدون رویداد فروش/بهای تمام‌شده",
+                "تحویل قطعی باید هر دو رویداد فروش و بهای تمام‌شده را داشته باشد.",
+                severity="critical", blocking=True,
+                refs={"delivery_id": delivery.id, "sale_id": delivery.sale_id},
+            ))
+    receipts = GoodsReceipt.objects.filter(
+        status=GoodsReceipt.STATUS_APPROVED
+    ).prefetch_related("lines__inventory_move__cost_layers").select_related(
+        "accounting_event__journal"
+    )
+    for receipt in receipts.iterator(chunk_size=200):
+        missing_lot = any(
+            not line.inventory_move_id or not line.inventory_move.cost_layers.exists()
+            for line in receipt.lines.all()
+        )
+        missing_journal = (
+            not receipt.accounting_event_id
+            or not receipt.accounting_event.journal_id
+        )
+        if missing_lot or missing_journal:
+            rows.append(_issue(
+                f"procurement:receipt:{receipt.id}",
+                "procurement", "approved_receipt_missing_lot_or_journal",
+                "رسید تاییدشده با زنجیره ناقص",
+                "رسید خرید تاییدشده فاقد لات موجودی یا سند حسابداری است.",
+                severity="critical", blocking=True,
+                refs={"goods_receipt_id": receipt.id},
+                details={"missing_lot": missing_lot, "missing_journal": missing_journal},
+            ))
+    return rows
+
+
+def _scan_mapping_and_reconciliation(config):
+    rows = []
+    from logic.dynamic_choices import posting_rules
+    from logic.feature_flags import rollout_status
+    from logic.ledger import LEGAL_LEDGER
+
+    enabled = rollout_status()
+    rule_flags = {
+        "material_receipt": enabled["procurement"],
+        "material_consumption": enabled["actual_cost_production"],
+        "material_consumption_reverse": enabled["actual_cost_production"],
+        "goods_sale_issue": enabled["unified_delivery"],
+        "goods_sale_issue_reverse": enabled["unified_delivery"],
+    }
+    for rule_name, active in rule_flags.items():
+        if not active:
+            continue
+        for rule in posting_rules(rule_name) or []:
+            role = rule.get("role") or rule.get("account_key") or rule.get("slug")
+            side = rule.get("side")
+            if role and side and not PostingAccountMapping.objects.filter(
+                ledger__code=LEGAL_LEDGER.id,
+                event_key=rule_name,
+                role=role,
+                side=side,
+                is_active=True,
+            ).exists():
+                rows.append(_issue(
+                    f"event:mapping:{rule_name}:{role}:{side}",
+                    "event", "posting_mapping_missing",
+                    "نگاشت حساب ثبت خودکار ناقص",
+                    f"برای {rule_name}/{role}/{side} نگاشت فعال تعریف نشده است.",
+                    severity="warning", blocking=True,
+                    refs={"rule_name": rule_name, "role": role, "side": side},
+                ))
+    if "reconciliation" in config["domains"]:
+        for item in ReconciliationQueue.objects.filter(
+            status=ReconciliationQueue.STATUS_OPEN
+        ).iterator(chunk_size=500):
+            rows.append(_issue(
+                f"reconciliation:{item.id}",
+                "reconciliation", "reconciliation_queue_open",
+                "مورد باز تطبیق مهاجرت",
+                item.reason,
+                severity="warning", blocking=True,
+                occurred_at=item.created_at,
+                refs={
+                    "reconciliation_id": item.id,
+                    "source_type": item.source_type,
+                    "source_key": item.source_key,
+                },
+                details=item.details,
+            ))
+    return rows
+
+
 def _scan_receivables(config):
     end_at = timezone.make_aware(datetime.combine(config["end"] + timedelta(days=1), time.min))
     sales = Sale.objects.filter(
@@ -570,7 +824,20 @@ def discrepancy_scan(params, *, paginate=True):
     if "inventory" in config["domains"]:
         domain_items, control = _scan_inventory(config)
         items.extend(domain_items)
+        items.extend(_scan_inventory_invariants(config))
         controls.append(control)
+    if "production" in config["domains"]:
+        items.extend(_scan_production_invariants(config))
+    if {"delivery", "procurement"} & config["domains"]:
+        items.extend(
+            item for item in _scan_delivery_procurement(config)
+            if item["domain"] in config["domains"]
+        )
+    if {"event", "reconciliation"} & config["domains"]:
+        items.extend(
+            item for item in _scan_mapping_and_reconciliation(config)
+            if item["domain"] in config["domains"]
+        )
     if "receivable" in config["domains"]:
         domain_items, control = _scan_receivables(config)
         items.extend(domain_items)

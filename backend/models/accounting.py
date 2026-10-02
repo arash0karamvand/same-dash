@@ -7,6 +7,7 @@ GenericForeignKey جنگو اینجا استفاده نشده؛ InnoDB برای 
 
 from contextlib import contextmanager
 from contextvars import ContextVar
+from datetime import date
 from decimal import Decimal
 
 from django.conf import settings
@@ -167,6 +168,126 @@ class AccountClosure(models.Model):
             models.CheckConstraint(condition=models.Q(depth__gte=0), name="ck_account_depth"),
         ]
         indexes = [models.Index(fields=["descendant", "depth"], name="ix_account_ancestor")]
+
+
+class PostingAccountMapping(models.Model):
+    """پیکربندی حساب مقصد برای یک نقش از قانون ثبت."""
+
+    SIDE_DEBIT = "debit"
+    SIDE_CREDIT = "credit"
+    SIDE_CHOICES = [(SIDE_DEBIT, "بدهکار"), (SIDE_CREDIT, "بستانکار")]
+
+    ledger = models.ForeignKey(Ledger, on_delete=models.PROTECT, related_name="posting_mappings")
+    event_key = models.SlugField(max_length=80)
+    role = models.SlugField(max_length=80)
+    side = models.CharField(max_length=10, choices=SIDE_CHOICES)
+    account = models.ForeignKey(Account, on_delete=models.PROTECT, related_name="posting_mappings")
+    branch = models.ForeignKey(
+        "backend.Branch",
+        to_field="code",
+        db_column="branch",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="posting_account_mappings",
+    )
+    warehouse = models.ForeignKey(
+        "backend.Warehouse",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="posting_account_mappings",
+    )
+    item_category = models.CharField(max_length=80, blank=True, default="")
+    context_key = models.CharField(max_length=220, editable=False, default="")
+    effective_from = models.DateField(default=timezone.localdate)
+    effective_to = models.DateField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    priority = models.SmallIntegerField(default=0)
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["event_key", "role", "-priority", "-effective_from", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["ledger", "event_key", "role", "side", "context_key", "effective_from"],
+                name="uq_post_map_context_date",
+            ),
+            models.CheckConstraint(
+                condition=models.Q(effective_to__isnull=True)
+                | models.Q(effective_to__gte=models.F("effective_from")),
+                name="ck_post_map_dates",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["ledger", "event_key", "role", "side", "is_active"],
+                name="ix_post_map_lookup",
+            ),
+        ]
+
+    def _make_context_key(self):
+        return "|".join(
+            [
+                str(self.branch_id or ""),
+                str(self.warehouse_id or ""),
+                (self.item_category or "").strip().lower(),
+            ]
+        )
+
+    def clean(self):
+        self.event_key = (self.event_key or "").strip()
+        self.role = (self.role or "").strip()
+        self.item_category = (self.item_category or "").strip().lower()
+        self.context_key = self._make_context_key()
+        errors = {}
+        if not self.event_key:
+            errors["event_key"] = "کلید رویداد الزامی است."
+        if not self.role:
+            errors["role"] = "نقش حساب الزامی است."
+        if self.effective_to and self.effective_to < self.effective_from:
+            errors["effective_to"] = "تاریخ پایان نمی‌تواند پیش از تاریخ شروع باشد."
+        if self.account_id:
+            if self.ledger_id and self.account.ledger_id != self.ledger_id:
+                errors["account"] = "حساب نگاشت باید متعلق به همان دفتر باشد."
+            if not self.account.is_active:
+                errors["account"] = "حساب غیرفعال قابل نگاشت نیست."
+            if not self.account.is_postable:
+                errors["account"] = "فقط حساب برگ قابل نگاشت است."
+        if (
+            self.ledger_id
+            and self.event_key
+            and self.role
+            and self.side
+            and self.effective_from
+        ):
+            overlaps = type(self).objects.filter(
+                ledger_id=self.ledger_id,
+                event_key=self.event_key,
+                role=self.role,
+                side=self.side,
+                context_key=self.context_key,
+                effective_from__lte=self.effective_to or date.max,
+            ).filter(
+                models.Q(effective_to__isnull=True)
+                | models.Q(effective_to__gte=self.effective_from)
+            )
+            if self.pk:
+                overlaps = overlaps.exclude(pk=self.pk)
+            if overlaps.exists():
+                errors["effective_from"] = "بازه زمانی این نگاشت با نگاشت دیگری هم‌پوشانی دارد."
+        if errors:
+            raise ValidationError(errors)
+
+    def save(self, *args, **kwargs):
+        self.context_key = self._make_context_key()
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.event_key}:{self.role}:{self.side} → {self.account_id}"
 
 
 class TransactionQuerySet(ReferenceQuerySet):
@@ -673,6 +794,52 @@ class AccountingOrigin(models.Model):
         return origin
 
 
+class AccountingSourceReference(models.Model):
+    """مرجع توسعه‌پذیر UUID برای دامنه‌هایی که هنوز FK واقعی ندارند."""
+
+    source_module = models.CharField(max_length=40)
+    source_type = models.CharField(max_length=80)
+    source_uuid = models.UUIDField()
+    metadata = models.JSONField(default=dict, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["source_module", "source_type", "source_uuid"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["source_type", "source_uuid"],
+                name="uq_account_source_type_uuid",
+            ),
+            models.CheckConstraint(
+                condition=~models.Q(source_module=""),
+                name="ck_account_source_module",
+            ),
+            models.CheckConstraint(
+                condition=~models.Q(source_type=""),
+                name="ck_account_source_type",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["source_module", "source_type"],
+                name="ix_account_source_kind",
+            ),
+        ]
+
+    def clean(self):
+        self.source_module = (self.source_module or "").strip().lower()
+        self.source_type = (self.source_type or "").strip().lower()
+        if not self.source_module or not self.source_type:
+            raise ValidationError("ماژول و نوع مرجع حسابداری الزامی است.")
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.source_type}:{self.source_uuid}"
+
+
 class TransactionSource(models.Model):
     """اتصال سرفصل سند به لنگر UUID. حذف سند مبدأ تا وقتی لینک هست ممنوع است."""
 
@@ -680,16 +847,38 @@ class TransactionSource(models.Model):
         JournalEntry, on_delete=models.CASCADE, related_name="sources"
     )
     origin = models.ForeignKey(
-        AccountingOrigin, on_delete=models.PROTECT, related_name="transaction_links"
+        AccountingOrigin,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="transaction_links",
+    )
+    source_reference = models.ForeignKey(
+        AccountingSourceReference,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="transaction_links",
     )
 
     class Meta:
         constraints = [
             models.UniqueConstraint(fields=["transaction", "origin"], name="uq_tx_source"),
+            models.UniqueConstraint(
+                fields=["transaction", "source_reference"],
+                name="uq_tx_source_reference",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    models.Q(origin__isnull=False, source_reference__isnull=True)
+                    | models.Q(origin__isnull=True, source_reference__isnull=False)
+                ),
+                name="ck_tx_source_one_reference",
+            ),
         ]
 
     def __str__(self):
-        return f"{self.transaction_id} → {self.origin_id}"
+        return f"{self.transaction_id} → {self.origin_id or self.source_reference_id}"
 
 
 class JournalOrderLink(models.Model):
@@ -891,6 +1080,13 @@ class FinancialEvent(models.Model):
         on_delete=models.PROTECT,
         related_name="financial_events",
     )
+    source_reference = models.ForeignKey(
+        AccountingSourceReference,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="financial_events",
+    )
     occurred_at = models.DateTimeField(default=timezone.now)
     error = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
@@ -976,6 +1172,57 @@ class LedgerMigrationAudit(models.Model):
 
     def __str__(self):
         return f"{self.batch_id}:{self.action}:{self.entity_type}:{self.entity_id}"
+
+
+class ReconciliationQueue(models.Model):
+    """Legacy facts that cannot be converted safely without human evidence."""
+
+    STATUS_OPEN = "open"
+    STATUS_RESOLVED = "resolved"
+    STATUS_IGNORED = "ignored"
+    STATUS_CHOICES = [
+        (STATUS_OPEN, "باز"),
+        (STATUS_RESOLVED, "رفع‌شده"),
+        (STATUS_IGNORED, "نادیده‌گرفته‌شده با دلیل"),
+    ]
+
+    domain = models.CharField(max_length=40, db_index=True)
+    source_type = models.CharField(max_length=80)
+    source_key = models.CharField(max_length=160)
+    reason = models.CharField(max_length=120)
+    details = models.JSONField(default=dict, blank=True)
+    status = models.CharField(
+        max_length=16, choices=STATUS_CHOICES, default=STATUS_OPEN, db_index=True
+    )
+    resolution_note = models.CharField(max_length=500, blank=True, default="")
+    resolved_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="resolved_reconciliation_items",
+    )
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["status", "domain", "id"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["domain", "source_type", "source_key", "reason"],
+                name="uq_reconciliation_source_reason",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["status", "domain", "created_at"],
+                name="ix_reconcile_status_domain",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.domain}:{self.source_type}:{self.source_key}:{self.reason}"
 
 
 class CostCenter(models.Model):

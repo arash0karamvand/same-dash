@@ -102,8 +102,24 @@ class PublicUUIDModel(models.Model):
         abstract = True
 
 
+class AppendOnlyQuerySet(models.QuerySet):
+    """Block bulk mutations that bypass model save/delete guards."""
+
+    def update(self, **kwargs):
+        raise ValueError(f"{self.model.__name__} rows are append-only")
+
+    def delete(self):
+        raise ValueError(f"{self.model.__name__} rows are append-only")
+
+
+class AppendOnlyManager(models.Manager.from_queryset(AppendOnlyQuerySet)):
+    pass
+
+
 class AppendOnlyModel(models.Model):
     """Application-level guard for immutable transaction ledgers."""
+
+    objects = AppendOnlyManager()
 
     class Meta:
         abstract = True

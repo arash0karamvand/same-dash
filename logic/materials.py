@@ -14,19 +14,45 @@ MATERIAL_APPROVAL_LABELS = {
     Material.APPROVAL_REJECTED: "رد شده",
 }
 
+COST_FIELD_NAMES = {
+    "unit_cost",
+    "inventory_value",
+    "line_cost",
+    "material_cost_total",
+    "actual_cost",
+    "total_cost",
+    "overhead_cost",
+    "actual_material_cost",
+    "total_actual_cogs",
+    "cost_breakdown",
+    "profit_margin",
+}
+
+
+def mask_cost_fields(value):
+    if isinstance(value, list):
+        return [mask_cost_fields(item) for item in value]
+    if isinstance(value, dict):
+        return {
+            key: mask_cost_fields(item)
+            for key, item in value.items()
+            if key not in COST_FIELD_NAMES
+        }
+    return value
+
 
 def approved_materials_filter(prefix=""):
     field = f"{prefix}approval_status" if prefix else "approval_status"
     return {field: Material.APPROVAL_APPROVED}
 
 
-def material_to_dict(m):
+def material_to_dict(m, *, include_cost=True):
     submitted_by = getattr(m, "submitted_by", None)
     approved_by = getattr(m, "approved_by", None)
     stock = m.stock
     unit_cost = int(m.unit_cost or 0)
     inventory_value = int(Decimal(stock) * Decimal(unit_cost)) if stock is not None else None
-    return {
+    data = {
         "id": m.id,
         "name": m.name,
         "usage_kind": getattr(m, "usage_kind", Material.USAGE_OTHER) or Material.USAGE_OTHER,
@@ -38,14 +64,12 @@ def material_to_dict(m):
         "color_hex": m.color_hex,
         "sku": m.sku or "",
         "unit": m.unit,
-        "unit_cost": unit_cost,
         "valuation_method": getattr(m, "valuation_method", Material.VALUATION_WEIGHTED),
         "reorder_point": float(m.reorder_point or 0),
         "below_reorder": bool(
             stock is not None and Decimal(m.reorder_point or 0) > 0 and Decimal(stock) < Decimal(m.reorder_point or 0)
         ),
         "stock": float(stock) if stock is not None else None,
-        "inventory_value": inventory_value,
         "description": m.description or "",
         "is_active": m.is_active,
         "approval_status": getattr(m, "approval_status", Material.APPROVAL_APPROVED),
@@ -60,34 +84,135 @@ def material_to_dict(m):
         "created_at": m.created_at.isoformat() if m.created_at else None,
         "updated_at": m.updated_at.isoformat() if getattr(m, "updated_at", None) else None,
     }
+    if include_cost:
+        data["unit_cost"] = unit_cost
+        data["inventory_value"] = inventory_value
+    return data
 
 
-def product_material_to_dict(pm):
+def product_material_to_dict(pm, *, include_cost=True):
     material = pm.material
     qty = Decimal(pm.quantity or 0)
     unit_cost = Decimal(material.unit_cost or 0)
     line_cost = qty * unit_cost
-    return {
+    data = {
         "id": f"{pm.product_id}:{pm.material_id}",
         "material_id": material.id,
-        "material": material_to_dict(material),
+        "material": material_to_dict(material, include_cost=include_cost),
         "quantity": float(qty),
         "normal_spoilage_rate": float(getattr(pm, "normal_spoilage_rate", 0) or 0),
-        "line_cost": int(line_cost),
         "sort_order": pm.sort_order,
     }
+    if include_cost:
+        data["line_cost"] = int(line_cost)
+    return data
 
 
 def compute_product_material_cost(product):
-    total = Decimal(0)
-    for pm in product.product_materials.select_related("material").filter(
-        material__is_deleted=False,
-        material__approval_status_ref_id=Material.APPROVAL_APPROVED,
-    ):
-        qty = Decimal(pm.quantity or 0)
-        unit_cost = Decimal(pm.material.unit_cost or 0)
-        total += qty * unit_cost
-    return total
+    return sum(
+        (Decimal(str(row.get("line_cost") or 0)) for row in resolve_material_requirements(
+            product=product, quantity=1
+        )),
+        Decimal(0),
+    )
+
+
+def resolve_material_requirements(
+    *, product=None, workset_config=None, quantity=1, include_unapproved=False
+):
+    """Single source for catalog, order-snapshot, fulfillment and costing material demand."""
+    from collections import defaultdict
+
+    from backend.models import Frame, ProductMaterial
+
+    try:
+        multiplier = Decimal(str(quantity or 0))
+    except (InvalidOperation, TypeError, ValueError):
+        raise ValueError("تعداد محصول نامعتبر است.")
+    if multiplier <= 0:
+        return []
+    if workset_config is None and product is not None:
+        from logic.workshop_recipes import build_workset_from_product
+
+        workset_config = build_workset_from_product(product)
+    config = workset_config if isinstance(workset_config, dict) else {}
+    totals = defaultdict(lambda: {"quantity": Decimal(0), "spoilage": Decimal(0), "sources": set()})
+
+    def add(material_id, amount, source, spoilage=0):
+        try:
+            material_id = int(material_id)
+            amount = Decimal(str(amount or 0))
+        except (TypeError, ValueError, InvalidOperation):
+            return
+        if amount <= 0:
+            return
+        totals[material_id]["quantity"] += amount * multiplier
+        totals[material_id]["spoilage"] = max(
+            totals[material_id]["spoilage"], Decimal(str(spoilage or 0))
+        )
+        totals[material_id]["sources"].add(source)
+
+    if product is not None:
+        product_rows = ProductMaterial.objects.filter(
+            product=product, material__is_deleted=False
+        ).select_related("material")
+        if not include_unapproved:
+            product_rows = product_rows.filter(
+                material__is_active=True,
+                material__approval_status_ref_id=Material.APPROVAL_APPROVED,
+            )
+        for row in product_rows:
+            add(row.material_id, row.quantity, "product", row.normal_spoilage_rate)
+
+    pieces = config.get("pieces") or []
+    units = pieces if pieces else [config]
+    for piece in units:
+        piece_factor = Decimal(int(piece.get("quantity") or 1)) if pieces else Decimal(1)
+        for kind in ("paint", "fabric", "foam", "cushion", "webbing"):
+            if kind == "paint" and piece.get("needs_paint", config.get("needs_paint", True)) is False:
+                continue
+            for row in (piece.get(kind) or {}).get("materials") or []:
+                add(row.get("material_id"), Decimal(str(row.get("quantity") or 0)) * piece_factor, kind)
+        frame_id = piece.get("frame_id") if pieces else config.get("frame_id")
+        if frame_id:
+            frame = Frame.objects.filter(
+                pk=frame_id, is_deleted=False, is_active=True
+            ).prefetch_related("models__wood_requirements").first()
+            model = frame.models.filter(is_active=True).order_by("sort_order", "id").first() if frame else None
+            if model:
+                for wood in model.wood_requirements.all():
+                    if wood.material_id:
+                        add(wood.material_id, Decimal(wood.quantity or 0) * piece_factor, "frame")
+
+    material_rows = Material.objects.filter(pk__in=totals, is_deleted=False)
+    if not include_unapproved:
+        material_rows = material_rows.filter(
+            is_active=True, approval_status_ref_id=Material.APPROVAL_APPROVED
+        )
+    materials = {
+        material.pk: material
+        for material in material_rows
+    }
+    result = []
+    for material_id, aggregate in sorted(totals.items()):
+        material = materials.get(material_id)
+        if not material:
+            continue
+        required = aggregate["quantity"]
+        result.append(
+            {
+                "material_id": material_id,
+                "material": material_to_dict(material),
+                "required_quantity": float(required),
+                "unit": material.unit,
+                "unit_cost": int(material.unit_cost or 0),
+                "line_cost": int(required * Decimal(material.unit_cost or 0)),
+                "source": "+".join(sorted(aggregate["sources"])),
+                "source_labels": sorted(aggregate["sources"]),
+                "normal_spoilage_rate": float(aggregate["spoilage"]),
+            }
+        )
+    return result
 
 
 def _parse_usage_kind(value, *, required=False):
@@ -424,14 +549,18 @@ def factory_queue_stages():
 def _add_workset_snapshot_demand(totals, workset, line_qty):
     if not isinstance(workset, dict) or line_qty <= 0:
         return
-    for kind in ("paint", "fabric", "foam", "cushion", "webbing"):
-        for row in (workset.get(kind) or {}).get("materials") or []:
-            material_id = row.get("material_id")
-            if not material_id:
-                continue
-            qty = Decimal(str(row.get("quantity") or 0)) * line_qty
-            if qty > 0:
-                totals[int(material_id)] += qty
+    pieces = workset.get("pieces") or []
+    units = pieces if pieces else [workset]
+    for unit in units:
+        factor = line_qty * Decimal(int(unit.get("quantity") or 1) if pieces else 1)
+        for kind in ("paint", "fabric", "foam", "cushion", "webbing"):
+            for row in (unit.get(kind) or {}).get("materials") or []:
+                material_id = row.get("material_id")
+                if not material_id:
+                    continue
+                qty = Decimal(str(row.get("quantity") or 0)) * factor
+                if qty > 0:
+                    totals[int(material_id)] += qty
 
 
 def committed_material_demand(exclude_sale_id=None):
@@ -497,62 +626,27 @@ def _apply_stock_and_queue(items, *, exclude_sale_id=None, queue_aware=True):
 
 
 def compute_factory_order_material_requirements(factory_order, *, queue_aware=True):
-    """محاسبه متریال مورد نیاز سفارش — تجمیع از ردیف‌های محصول، کلاف و دست‌کار."""
-    from collections import defaultdict
+    """محاسبه متریال مورد نیاز سفارش از resolver مشترک محصول/اسنپ‌شات."""
+    from logic.frame_materials import merge_material_requirements
 
-    from backend.models import ProductMaterial
-    from logic.frame_materials import compute_frame_line_requirements, merge_material_requirements
-    from logic.workshop_recipes import compute_workset_line_requirements
-
-    required = defaultdict(lambda: Decimal(0))
-    product_results = []
-    frame_results = []
-    workset_results = []
+    merged = []
     line_items = list(factory_order.line_items.all())
     for line in line_items:
-        if line.product_id:
-            product_qty = Decimal(line.quantity or 0)
-            if product_qty > 0:
-                product_materials = ProductMaterial.objects.filter(
-                    product_id=line.product_id,
-                    material__is_deleted=False,
-                    material__is_active=True,
-                    material__approval_status_ref_id=Material.APPROVAL_APPROVED,
-                ).select_related("material")
-                for pm in product_materials:
-                    required[pm.material_id] += product_qty * Decimal(pm.quantity or 0)
-
-        if line.frame_id:
-            frame_results.extend(compute_frame_line_requirements(line))
-        workset_results.extend(compute_workset_line_requirements(line))
-
-    for material_id, req_qty in required.items():
-        material = Material.objects.filter(pk=material_id, is_deleted=False).first()
-        if not material:
-            continue
-        stock = material.stock
-        stock_val = Decimal(stock) if stock is not None else None
-        sufficient = True
-        shortage = None
-        if stock_val is not None:
-            shortage = max(Decimal(0), req_qty - stock_val)
-            sufficient = stock_val >= req_qty
-        product_results.append(
-            {
-                "material_id": material.id,
-                "material": material_to_dict(material),
-                "required_quantity": float(req_qty),
-                "unit_cost": int(material.unit_cost or 0),
-                "line_cost": int(req_qty * Decimal(material.unit_cost or 0)),
-                "available_stock": float(stock_val) if stock_val is not None else None,
-                "shortage": float(shortage) if shortage is not None else None,
-                "sufficient": sufficient,
-                "unit": material.unit,
-                "source": "product",
-            }
+        rows = resolve_material_requirements(
+            product=line.product if line.product_id else None,
+            workset_config=line.workset_config or None,
+            quantity=line.quantity,
         )
-    merged = merge_material_requirements(product_results, frame_results)
-    merged = merge_material_requirements(merged, workset_results)
+        for row in rows:
+            stock = row["material"].get("stock")
+            stock_value = Decimal(str(stock)) if stock is not None else None
+            required = Decimal(str(row["required_quantity"]))
+            row["available_stock"] = float(stock_value) if stock_value is not None else None
+            row["shortage"] = (
+                float(max(Decimal(0), required - stock_value)) if stock_value is not None else None
+            )
+            row["sufficient"] = stock_value is None or stock_value >= required
+        merged = merge_material_requirements(merged, rows)
     return _apply_stock_and_queue(
         merged,
         exclude_sale_id=getattr(factory_order, "pk", None),
@@ -633,21 +727,21 @@ def deduct_materials_for_factory_order(factory_order):
     if shortages:
         raise ValueError("موجودی متریال کافی نیست — " + "؛ ".join(shortages))
 
-    from logic.inventory_costing import issue_cost
+    from logic.inventory_costing import consume_stock
 
     for item in tracked:
         material = locked[item["material_id"]]
         req_qty = Decimal(str(item["required_quantity"]))
-        cost = issue_cost(material, req_qty)
-        item["unit_cost"] = int(cost)
-        item["line_cost"] = int(req_qty * cost)
-        InventoryTransaction.objects.create(
-            material=material,
-            quantity=-req_qty,
-            unit_cost=cost,
+        consumed = consume_stock(
+            material,
+            req_qty,
             reason="production_consumption",
             reference=f"sale:{factory_order.pk}",
+            sale=factory_order,
         )
+        cost = consumed["unit_cost"]
+        item["unit_cost"] = int(cost)
+        item["line_cost"] = int(consumed["total_cost"])
 
     from logic.material_accounting import post_factory_material_consumption
 

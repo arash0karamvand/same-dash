@@ -3,6 +3,8 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
+from testing.sale_test_mixin import OfficeLedgerTestMixin
+
 from backend.models import (
     BetaAssemblyJob,
     BetaClearanceJob,
@@ -25,8 +27,9 @@ from logic.sales import record_sale
 from logic.workshop_recipes import apply_product_workset, create_recipe, fabric_named_ids
 
 
-class ReceiveKindsTests(TestCase):
+class ReceiveKindsTests(OfficeLedgerTestMixin, TestCase):
     def setUp(self):
+        self.seed_office_chart()
         User = get_user_model()
         self.user = User.objects.create_user(username="office_recv", password="secret123")
         Branch.objects.get_or_create(code="branch_1", defaults={"label": "کمرد", "is_active": True})

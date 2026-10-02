@@ -75,7 +75,7 @@ def line_item_to_dict(item, user=None):
     mask_prices = user and should_mask_prices_for_user(user)
     mask_amounts = user and should_mask_amounts_for_user(user)
     hide_money = mask_prices or mask_amounts
-    return {
+    data = {
         "id": item.id,
         "product_id": item.product_id,
         "variant_id": item.variant_id,
@@ -95,6 +95,12 @@ def line_item_to_dict(item, user=None):
         "line_total": None if hide_money else int(item.line_total),
         "prices_masked": hide_money,
     }
+    if hasattr(item, "fulfillment_plan"):
+        from logic.fulfillment import plan_to_dict
+        data["fulfillment_plan"] = plan_to_dict(item.fulfillment_plan)
+    else:
+        data["fulfillment_plan"] = None
+    return data
 
 
 def sale_to_dict(sale, include_installments=False, include_lines=False, user=None):
@@ -189,7 +195,7 @@ def office_line_item_to_dict(item, user=None):
     mask_prices = user and should_mask_prices_for_user(user)
     mask_amounts = user and should_mask_amounts_for_user(user)
     hide_money = mask_prices or mask_amounts
-    return {
+    data = {
         "id": item.id,
         "product_id": item.product_id,
         "variant_id": item.variant_id,
@@ -209,6 +215,12 @@ def office_line_item_to_dict(item, user=None):
         "line_total": None if hide_money else int(item.line_total),
         "prices_masked": hide_money,
     }
+    if hasattr(item, "fulfillment_plan"):
+        from logic.fulfillment import plan_to_dict
+        data["fulfillment_plan"] = plan_to_dict(item.fulfillment_plan)
+    else:
+        data["fulfillment_plan"] = None
+    return data
 
 
 def office_order_to_dict(order, include_installments=False, include_lines=False, user=None):
@@ -386,9 +398,11 @@ def factory_order_to_dict(order, include_lines=False, user=None):
         )
     if include_lines:
         data["line_items"] = [factory_line_item_to_dict(i) for i in order.line_items.all()]
-        from logic.materials import factory_order_materials_summary
+        from auth.permissions import can_view_costs
+        from logic.materials import factory_order_materials_summary, mask_cost_fields
 
-        data.update(factory_order_materials_summary(order))
+        summary = factory_order_materials_summary(order)
+        data.update(summary if user and can_view_costs(user) else mask_cost_fields(summary))
     spawned = getattr(order, "spawned_workshop_jobs", None)
     if spawned:
         data["spawned_workshop_jobs"] = spawned

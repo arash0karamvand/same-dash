@@ -14,7 +14,7 @@ from backend.models import InventoryCostLayer, InventoryTransaction, Material, T
 from logic.accounting_accounts import get_account, get_posting_account
 from logic.chart_of_accounts import ACCOUNT_SLUGS
 from logic.giant_books.money import money_int, rial
-from logic.inventory_costing import issue_cost, receive_stock
+from logic.inventory_costing import consume_stock, receive_stock
 from logic.ledger import OFFICE_LEDGER
 from logic.vat_engine import parse_rate, vat_on
 
@@ -312,30 +312,25 @@ def post_purchase_return(data, *, user=None):
 
 
 def _remove_purchase_qty(source, material, qty, invoice, user):
-    if material.valuation_method == Material.VALUATION_FIFO and source.inventory_move_id:
-        layer = InventoryCostLayer.objects.select_for_update().filter(
+    override = None
+    if source.inventory_move_id:
+        layer = InventoryCostLayer.objects.filter(
             source_transaction_id=source.inventory_move_id, qty_remaining__gt=0,
         ).first()
         if layer is None or Decimal(layer.qty_remaining) < qty:
             raise ValueError("از این رسید به اندازه برگشت در کارت حساب باقی نمانده است.")
-        unit = Decimal(layer.unit_cost or 0)
-        layer.qty_remaining = Decimal(layer.qty_remaining) - qty
-        layer.save(update_fields=["qty_remaining"])
-        from logic.inventory_costing import _refresh_fifo_unit_cost
-        _refresh_fifo_unit_cost(material)
-        total = _int(unit * qty)
-    else:
-        unit = issue_cost(material, qty)
-        total = _int(unit * qty)
-    move = InventoryTransaction.objects.create(
-        material=material,
-        quantity=-qty,
-        unit_cost=_int(unit),
+        if getattr(user, "is_authenticated", False):
+            override = [{"layer_id": layer.pk, "quantity": qty}]
+    result = consume_stock(
+        material,
+        qty,
         reason="purchase_return",
         reference=f"return:{invoice}",
-        recorded_by=user if getattr(user, "is_authenticated", False) else None,
+        user=user if getattr(user, "is_authenticated", False) else None,
+        override_layers=override,
+        override_reason=f"Return against purchase {source.pk}" if override else "",
     )
-    return total, move
+    return _int(result["total_cost"]), result["movement"]
 
 
 @transaction.atomic
@@ -356,16 +351,16 @@ def post_sale(data, *, user=None):
     vat = _int(Decimal(goods_net) * rate / Decimal(100))
     invoice, _receipt = _require_sources(data.get("invoice_number"), "", need_receipt=False)
     settlement = _settlement(data.get("settlement"))
-    unit = issue_cost(material, qty)
-    cogs = _int(Decimal(unit) * qty)
-    move = InventoryTransaction.objects.create(
-        material=material,
-        quantity=-qty,
-        unit_cost=_int(unit),
+    consumed = consume_stock(
+        material,
+        qty,
         reason="sale",
         reference=f"sale:{invoice}",
-        recorded_by=user if getattr(user, "is_authenticated", False) else None,
+        user=user if getattr(user, "is_authenticated", False) else None,
     )
+    unit = consumed["unit_cost"]
+    cogs = _int(consumed["total_cost"])
+    move = consumed["movement"]
     accounts = _accounts()
     debit = accounts["cash"] if settlement == TradeDocument.SETTLEMENT_CASH else accounts["receivable"]
     journal = _post(

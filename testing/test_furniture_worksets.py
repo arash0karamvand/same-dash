@@ -4,17 +4,20 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 
 from backend.models import Branch, Customer, Frame, Product, Sale
+from testing.sale_test_mixin import OfficeLedgerTestMixin
 from logic.furniture_worksets import (
     create_product_from_workset,
     create_workset,
     validate_piece_arm,
 )
 from logic.sales import record_sale
+from logic.products import update_product
 from logic.workshop_recipes import create_recipe, fabric_named_ids
 
 
-class FurnitureWorksetTests(TestCase):
+class FurnitureWorksetTests(OfficeLedgerTestMixin, TestCase):
     def setUp(self):
+        self.seed_office_chart()
         User = get_user_model()
         self.user = User.objects.create_user(username="suite_user", password="secret123")
         Branch.objects.get_or_create(code="branch_1", defaults={"label": "کمرد", "is_active": True})
@@ -95,7 +98,7 @@ class FurnitureWorksetTests(TestCase):
         self.assertEqual(sofa_cfg["fabric"]["name"], "مخمل کرم")
         self.assertEqual(chair_cfg["fabric"]["name"], "مخمل طوسی")
         self.assertEqual(chair_cfg["paint"]["name"], "گردویی")
-        self.assertEqual(int(product.default_price), 12000000 + 5000000 * 2)
+        self.assertEqual(int(product.default_price), 0)
         self.assertEqual(Product.objects.filter(furniture_workset=self.luna).count(), 1)
 
     def test_sale_sums_suite_products_from_two_worksets(self):
@@ -128,6 +131,18 @@ class FurnitureWorksetTests(TestCase):
                 },
             ],
         })
+        update_product(
+            luna,
+            {"profit_mode": "fixed", "target_profit_amount": 22000000},
+            allow_sales_price=True,
+            allow_cost_pricing=True,
+        )
+        update_product(
+            nova,
+            {"profit_mode": "fixed", "target_profit_amount": 2000000},
+            allow_sales_price=True,
+            allow_cost_pricing=True,
+        )
         sale = record_sale(
             self.customer,
             0,

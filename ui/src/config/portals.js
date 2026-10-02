@@ -46,6 +46,7 @@ export const PORTALS = [
     children: [
       { key: 'notifications', label: 'اعلان‌ها', icon: 'envelope', group: 'CRM' },
       { key: 'customers', label: 'مشتریان', icon: 'users', permission: 'view_customers', group: 'CRM' },
+      { key: 'crm-workbook', label: 'CRM 1405', icon: 'clipboard', permission: 'approve_sale_accounting', group: 'CRM' },
       { key: 'rfm', label: 'تحلیل RFM', icon: 'chart', anyPermission: ['view_rfm', 'view_loyalty', 'send_sms', 'view_sms_logs', 'manage_sms_club', 'manage_birthday_sms', 'manage_reminders'], group: 'CRM' },
       { key: 'office', label: 'تایید سفارش', icon: 'clipboard', permission: 'approve_sale_accounting', group: 'CRM' },
       { key: 'office-orders', label: 'سفارش‌ها', icon: 'package', anyPermission: ['approve_sale_accounting', 'view_sales'], group: 'CRM' },
@@ -58,6 +59,7 @@ export const PORTALS = [
       { key: 'accounting', label: 'حسابداری', icon: 'coins', anyPermission: ['view_accounting', 'view_factory_accounting'], group: 'مالی' },
       { key: 'checks', label: 'چک و اقساط', icon: 'receipt', permission: 'view_installments', group: 'مالی' },
       { key: 'materials', label: 'تایید متریال', icon: 'fabric', permission: 'approve_materials', group: 'مالی' },
+      { key: 'procurement', label: 'تدارکات و خرید', icon: 'package', permission: 'view_procurement', group: 'مالی' },
     ],
   },
   {
@@ -68,6 +70,7 @@ export const PORTALS = [
     children: [
       { key: 'notifications', label: 'اعلان‌ها', icon: 'envelope' },
       { key: 'factory', label: 'ساخت', icon: 'wrench', permission: 'view_factory_orders', group: 'خط ساخت' },
+      { key: 'production', label: 'کنترل تولید و بهای واقعی', icon: 'chart', permission: 'view_factory_orders', group: 'خط ساخت' },
       { key: 'factory-built', label: 'ساخته‌شده‌ها', icon: 'check', permission: 'view_factory_orders', group: 'خط ساخت' },
       { key: 'freight', label: 'باربری', icon: 'truck', anyPermission: ['view_freight_orders', 'manage_freight_orders'], group: 'خط ساخت' },
       { key: 'factory-frames', label: 'تولید کلاف', icon: 'package', anyPermission: ['view_frames', 'manage_frames'], group: 'کارگاه‌های تولید' },
@@ -80,6 +83,7 @@ export const PORTALS = [
       { key: 'factory-clearance', label: 'ترخیص', icon: 'package', anyPermission: ['view_beta_clearance', 'manage_beta_clearance'], group: 'کارگاه‌های تولید' },
       { key: 'products', label: 'محصولات', icon: 'package', permission: 'view_factory_products', group: 'کاتالوگ و مواد' },
       { key: 'materials', label: 'متریال', icon: 'fabric', permission: 'view_materials', group: 'کاتالوگ و مواد' },
+      { key: 'procurement', label: 'تدارکات و خرید', icon: 'package', permission: 'view_procurement', group: 'کاتالوگ و مواد' },
       { key: 'factory-paint-recipes', label: 'رنگ‌ها', icon: 'fabric', anyPermission: ['view_factory_products', 'view_materials'], group: 'کاتالوگ و مواد' },
       { key: 'factory-fabric-recipes', label: 'پارچه', icon: 'fabric', anyPermission: ['view_beta_fabric', 'manage_beta_fabric', 'view_factory_products', 'view_materials'], group: 'کاتالوگ و مواد' },
       { key: 'factory-foam-recipes', label: 'اسفنج', icon: 'package', anyPermission: ['view_beta_foam', 'manage_beta_foam', 'view_factory_products', 'view_materials'], group: 'کاتالوگ و مواد' },

@@ -309,6 +309,7 @@ def _parse_money(value):
 
 
 def normalize_suite_config(workset, raw_pieces=None):
+    from backend.models import Frame
     from logic.workshop_recipes import (
         KIND_TO_PRODUCT_FIELD,
         PIPELINE_END_ASSEMBLY,
@@ -354,6 +355,19 @@ def normalize_suite_config(workset, raw_pieces=None):
             "pipeline_end": pipeline_end,
             "unit_price": str(int(unit_price)),
         }
+        frame_id = _optional_int(item.get("frame_id"))
+        frame = Frame.objects.filter(
+            workset=workset,
+            piece_kind=row.piece_kind,
+            arm_style=row.arm_style,
+            is_deleted=False,
+            is_active=True,
+        )
+        if frame_id:
+            frame = frame.filter(pk=frame_id)
+        frame = frame.order_by("id").first()
+        piece["frame_id"] = frame.id if frame else None
+        piece["frame_name"] = frame.name if frame else ""
         for kind, field in KIND_TO_PRODUCT_FIELD.items():
             key = f"{field}_id"
             raw_id = item.get(key, item.get(f"{kind}_recipe_id"))
@@ -363,6 +377,20 @@ def normalize_suite_config(workset, raw_pieces=None):
             recipe = resolve_recipe(recipe_id, kind=kind) if recipe_id else None
             piece[key] = recipe.id if recipe else None
             piece[kind] = snapshot_recipe(recipe) if recipe else None
+            if kind in ("paint", "fabric"):
+                option_key = f"{field}_ids"
+                raw_options = item.get(option_key, item.get(f"allowed_{kind}_recipe_ids")) or []
+                if not isinstance(raw_options, (list, tuple)):
+                    raw_options = [raw_options]
+                option_ids = []
+                for raw_option in raw_options:
+                    option_id = _optional_int(raw_option)
+                    if not option_id or option_id in option_ids:
+                        continue
+                    option_ids.append(resolve_recipe(option_id, kind=kind).id)
+                if recipe and recipe.id not in option_ids:
+                    option_ids.insert(0, recipe.id)
+                piece[option_key] = option_ids
         result.append(piece)
     return result
 
@@ -418,7 +446,6 @@ def apply_suite_to_product(product, workset, pieces):
         product.fabric = fabric_name
     if not (product.product_model or "").strip() and workset:
         product.product_model = workset.name
-    product.default_price = suite_price(pieces)
     return product
 
 
@@ -439,7 +466,7 @@ def create_product_from_workset(workset, data):
         "fabric": (data.get("fabric") or "").strip() or fabric_name,
         "description": (data.get("description") or "").strip(),
         "unit": (data.get("unit") or "عدد").strip() or "عدد",
-        "default_price": data.get("default_price") if data.get("default_price") not in (None, "") else suite_price(pieces),
+        "default_price": 0,
         "is_active": data.get("is_active", True) is not False,
         "furniture_workset_id": workset.id,
         "suite_config": pieces,
@@ -452,7 +479,7 @@ def create_product_from_workset(workset, data):
     payload["pipeline_end"] = (
         "assembly" if any(piece.get("pipeline_end") == "assembly" for piece in pieces) else "upholstery"
     )
-    return create_product(payload, allow_sales_price=True, allow_materials=True)
+    return create_product(payload, allow_sales_price=False, allow_materials=True)
 
 
 @transaction.atomic
@@ -490,7 +517,7 @@ def create_product_from_frame(frame, data):
         "fabric": (data.get("fabric") or "").strip() or fabric_name,
         "description": (data.get("description") or "").strip(),
         "unit": (data.get("unit") or "عدد").strip() or "عدد",
-        "default_price": data.get("default_price") or 0,
+        "default_price": 0,
         "is_active": data.get("is_active", True) is not False,
         "frame_id": frame.id,
         "furniture_workset_id": frame.workset_id,
@@ -505,4 +532,4 @@ def create_product_from_frame(frame, data):
     }
     if data.get("needs_paint") is False:
         payload["paint_recipe_id"] = None
-    return create_product(payload, allow_sales_price=True, allow_materials=True)
+    return create_product(payload, allow_sales_price=False, allow_materials=True)
